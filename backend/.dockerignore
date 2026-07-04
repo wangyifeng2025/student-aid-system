@@ -1,0 +1,10 @@
+bin/
+uploads/
+.env
+.env.*
+!.env.example
+*.log
+.git
+.gitignore
+docs/
+**/*_test.go

@@ -1,0 +1,60 @@
+### 学生资助系统 API 手动测试
+### 用法：在 VS Code / Cursor 安装 REST Client 插件，点击各请求上方的 "Send Request"
+### 先执行 login，复制返回的 access_token 填到 @token 变量
+
+@baseUrl = http://localhost:8080
+@token = 粘贴登录返回的 access_token
+
+### 健康检查
+GET {{baseUrl}}/health
+
+### 登录（默认管理员，先执行 make seed 创建）
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 刷新令牌（把 refresh_token 填进去）
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "粘贴登录返回的 refresh_token"
+}
+
+### 当前用户信息
+GET {{baseUrl}}/api/v1/me
+Authorization: Bearer {{token}}
+
+### 修改密码
+PUT {{baseUrl}}/api/v1/auth/password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "old_password": "admin123",
+  "new_password": "admin1234"
+}
+
+### 找回密码（用户名 + 手机号）
+POST {{baseUrl}}/api/v1/auth/recover-password
+Content-Type: application/json
+
+{
+  "username": "student001",
+  "phone": "13800000000",
+  "new_password": "newpass1"
+}
+
+### 管理员重置用户密码（需 admin 令牌）
+POST {{baseUrl}}/api/v1/auth/admin/reset-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "user_id": 2,
+  "new_password": "reset123"
+}
