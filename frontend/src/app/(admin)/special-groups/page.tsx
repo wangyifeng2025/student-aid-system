@@ -18,9 +18,11 @@ import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { ImportDialog } from "@/components/student/import-dialog";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function SpecialGroupsPage() {
   const canWrite = useAuthStore((s) => s.user?.role === "admin");
@@ -28,6 +30,7 @@ export default function SpecialGroupsPage() {
   const [list, setList] = React.useState<SpecialGroup[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -47,6 +50,8 @@ export default function SpecialGroupsPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<SpecialGroup | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (s) => s.id);
 
   function emptyForm(): SpecialGroupInput {
     return {
@@ -79,19 +84,20 @@ export default function SpecialGroupsPage() {
     try {
       const res = await specialGroupApi.list({
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         type: filterType || undefined,
         year: filterYear ? Number(filterYear) : undefined,
       });
       setList(res.items);
       setTotal(res.total);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [page, keyword, filterType, filterYear]);
+  }, [page, pageSize, keyword, filterType, filterYear, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -102,6 +108,11 @@ export default function SpecialGroupsPage() {
     setKeyword(keywordInput.trim());
     setFilterYear(yearInput);
     resetToFirst();
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
   };
 
   const setField = <K extends keyof SpecialGroupInput>(
@@ -178,6 +189,9 @@ export default function SpecialGroupsPage() {
   };
 
   const columns: Column<SpecialGroup>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name || s.student_no || String(s.id))]
+      : []),
     { header: "姓名", width: "100px", cell: (s) => <span className="text-ink">{s.name || "—"}</span> },
     { header: "学号", cell: (s) => <span className="font-mono">{s.student_no || "—"}</span> },
     { header: "身份证号", cell: (s) => <span className="font-mono text-ink-soft">{s.id_card || "—"}</span> },
@@ -232,6 +246,14 @@ export default function SpecialGroupsPage() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => specialGroupApi.remove(id)}
+              onDone={load}
+              entityLabel="名单记录"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 条名单记录吗？删除后将重算关联学生的重点人群标记，此操作不可撤销。`}
+            />
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload size={16} />
               导入名单
@@ -255,7 +277,13 @@ export default function SpecialGroupsPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
 
       <Modal

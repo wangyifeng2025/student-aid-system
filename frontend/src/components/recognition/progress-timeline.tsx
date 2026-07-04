@@ -10,9 +10,8 @@ const STAGES: Stage[] = [
   { label: "提交申请", note: "学生提交困难认定申请" },
   { label: "班级评审", note: "班主任 / 辅导员审核" },
   { label: "教学系评审", note: "教学系经办人审核" },
-  { label: "院级评审", note: "资助中心审核" },
-  { label: "第四级确认", note: "学校审定" },
-  { label: "认定通过", note: "完成困难等级认定" },
+  { label: "院级评审", note: "资助中心审核（终审）" },
+  { label: "认定通过", note: "可发起助学金申请" },
 ];
 
 // 由状态推导“当前进行到的阶段下标”（STAGES 索引）。
@@ -25,11 +24,10 @@ function activeIndex(status: ApplicationStatus): number {
     case "pending_dept":
       return 2;
     case "pending_college":
+    case "pending_final": // 兼容历史数据，视同院级评审中
       return 3;
-    case "pending_final":
-      return 4;
     case "approved":
-      return 6; // 全部完成
+      return 4; // 全部完成
     case "rejected":
       return 0; // 退回到学生
     default:

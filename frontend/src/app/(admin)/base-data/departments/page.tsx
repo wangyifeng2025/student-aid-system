@@ -14,6 +14,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { OrgSpreadsheetActions } from "@/components/base-data/org-spreadsheet-actions";
 
 export default function DepartmentsPage() {
@@ -33,27 +35,30 @@ export default function DepartmentsPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<Department | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setList(await departmentApi.list());
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
-
   const filtered = list.filter(
     (d) =>
       d.name.includes(keyword) ||
       d.code.toLowerCase().includes(keyword.toLowerCase()),
   );
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(filtered, (d) => d.id);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setList(await departmentApi.list());
+      clearSelection();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [clearSelection]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   const openCreate = () => {
     setEditing(null);
@@ -109,6 +114,9 @@ export default function DepartmentsPage() {
   };
 
   const columns: Column<Department>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (d) => d.id, (d) => d.name)]
+      : []),
     { header: "ID", width: "80px", cell: (d) => <span className="text-ink-mute tabular-nums">{d.id}</span> },
     { header: "院系名称", cell: (d) => <span className="text-ink">{d.name}</span> },
     { header: "院系编码", cell: (d) => (d.code ? <span className="font-mono">{d.code}</span> : <span className="text-ink-mute">—</span>) },
@@ -139,6 +147,14 @@ export default function DepartmentsPage() {
         </div>
         {canWrite && (
           <>
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => departmentApi.remove(id)}
+              onDone={load}
+              entityLabel="院系"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 个院系吗？若其下存在专业或班级将无法删除，将自动跳过。此操作不可撤销。`}
+            />
             <OrgSpreadsheetActions
               kind="departments"
               importTitle="导入院系"

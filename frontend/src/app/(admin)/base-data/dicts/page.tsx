@@ -16,6 +16,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 
 export default function DictsPage() {
   const canWrite = useAuthStore((s) => s.user?.role === "admin");
@@ -35,6 +37,8 @@ export default function DictsPage() {
 
   const [deleteTarget, setDeleteTarget] = React.useState<DictItem | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(items, (it) => it.id);
 
   // 首屏加载所有类型
   React.useEffect(() => {
@@ -57,12 +61,13 @@ export default function DictsPage() {
     setError(null);
     try {
       setItems(await dictApi.listByType(type));
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载字典项失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearSelection]);
 
   React.useEffect(() => {
     if (selectedType) void loadItems(selectedType);
@@ -135,6 +140,9 @@ export default function DictsPage() {
   };
 
   const columns: Column<DictItem>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (it) => it.id, (it) => it.label)]
+      : []),
     { header: "排序", width: "80px", cell: (it) => <span className="text-ink-mute tabular-nums">{it.sort}</span> },
     { header: "编码 code", cell: (it) => <span className="font-mono">{it.code}</span> },
     { header: "显示文案 label", cell: (it) => <span className="text-ink">{it.label}</span> },
@@ -162,10 +170,24 @@ export default function DictsPage() {
           </Select>
         </div>
         {canWrite && selectedType && (
-          <Button size="sm" onClick={openCreate}>
-            <Plus size={16} />
-            新增字典项
-          </Button>
+          <div className="flex items-center gap-2">
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => {
+                const it = items.find((x) => x.id === id);
+                if (!it) return Promise.reject(new Error("字典项不存在"));
+                return dictApi.remove(selectedType, it.code);
+              }}
+              onDone={() => loadItems(selectedType)}
+              entityLabel="字典项"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 个字典项吗？此操作不可撤销。`}
+            />
+            <Button size="sm" onClick={openCreate}>
+              <Plus size={16} />
+              新增字典项
+            </Button>
+          </div>
         )}
       </Toolbar>
 

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
@@ -13,11 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// RecognitionPDFService 认定申请表 PDF 导出（仅认定通过后可导出）。
+// RecognitionPDFService 认定申请表导出（仅认定通过后可导出）。
+// 导出格式为 docx：基于 assets/templates/recognition_application.docx 模板填数。
 type RecognitionPDFService struct {
 	cfg      *config.Config
 	repo     *repository.RecognitionRepository
 	stuRepo  *repository.StudentRepository
+	orgRepo  *repository.OrgRepository
 	dictRepo *repository.DictRepository
 }
 
@@ -26,11 +27,12 @@ func NewRecognitionPDFService(db *gorm.DB, cfg *config.Config) *RecognitionPDFSe
 		cfg:      cfg,
 		repo:     repository.NewRecognitionRepository(db),
 		stuRepo:  repository.NewStudentRepository(db),
+		orgRepo:  repository.NewOrgRepository(db),
 		dictRepo: repository.NewDictRepository(db),
 	}
 }
 
-// Export 生成认定申请表 PDF，返回字节与建议文件名。
+// Export 基于 Word 模板填数，生成《家庭经济困难学生认定申请表》docx。
 func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, string, error) {
 	ok, err := s.repo.CanAccess(actor, id)
 	if err != nil {
@@ -47,70 +49,24 @@ func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, strin
 		return nil, "", err
 	}
 	if a.Status != model.StatusApproved {
-		return nil, "", NewValidationError("仅认定通过的申请可导出 PDF")
+		return nil, "", NewValidationError("仅认定通过的申请可导出申请表")
 	}
-	if strings.TrimSpace(s.cfg.Export.PDFFontPath) == "" {
-		return nil, "", NewValidationError("服务端未配置中文字体（export.pdf_font_path），无法导出 PDF，请联系管理员")
-	}
+
 	stu, _ := s.stuRepo.FindStudent(a.StudentID)
-
+	dept, major, grade, class := resolveStudentOrgNames(s.orgRepo, stu)
 	labels := s.loadLabelMaps()
-	pdf := fpdf.New("P", "mm", "A4", "")
-	const fontName = "zh"
-	pdf.AddUTF8Font(fontName, "", s.cfg.Export.PDFFontPath)
-	if pdf.Err() {
-		return nil, "", NewValidationError("加载中文字体失败，请检查 export.pdf_font_path 指向的 TTF 字体文件")
-	}
-	pdf.SetFont(fontName, "", 11)
-	pdf.AddPage()
+	replacements := buildRecognitionDocxReplacements(s.cfg, a, stu, dept, major, grade, class, labels)
 
-	writer := &pdfWriter{pdf: pdf, font: fontName}
-	writer.title(fmt.Sprintf("%d 年度家庭经济困难学生认定申请表", a.Year))
-
-	writer.section("一、基本情况")
-	studentNo, studentName := "", ""
-	if stu != nil {
-		studentNo, studentName = stu.StudentNo, stu.Name
-	}
-	writer.kv("姓名", studentName)
-	writer.kv("学号", studentNo)
-	writer.kv("民族", labels.label("nation", a.Nation))
-	writer.kv("籍贯", a.NativePlace)
-	writer.kv("身份证号", a.IDCard)
-	writer.kv("家庭人口", fmt.Sprintf("%d", a.FamilyPopulation))
-	writer.kv("本人手机号", a.Phone)
-	writer.kv("家长手机号", a.GuardianPhone)
-	writer.kv("通讯地址", a.Address)
-	writer.kv("邮政编码", a.PostalCode)
-
-	writer.section("二、家庭经济情况")
-	writer.kv("户口类型", householdLabel(a.HouseholdType))
-	writer.kv("家庭人均年收入", fmt.Sprintf("%.2f 元", a.PerCapitaAnnualIncome))
-	writer.kv("收入来源", labels.label("income_source", a.IncomeSource))
-	writer.kv("特殊群体", labels.joinSpecial(a.SpecialTypes))
-
-	writer.section("三、家庭成员")
-	writer.memberTable(a.FamilyMembers, labels)
-
-	writer.section("四、影响家庭经济状况有关信息")
-	writer.kv("自然灾害", orNone(a.NaturalDisaster))
-	writer.kv("突发意外", orNone(a.SuddenAccident))
-	writer.kv("劳动力弱", orNone(a.WeakLabor))
-	writer.kv("失业情况", orNone(a.Unemployment))
-	writer.kv("欠债情况", orNone(a.Debt))
-	writer.kv("其他情况", orNone(a.OtherInfo))
-
-	writer.section("五、认定结果")
-	writer.kv("困难等级", difficultyLabel(a.DifficultyLevel))
-	writer.kv("个人承诺", boolLabel(a.CommitmentAgreed))
-	writer.note("说明：本表个人承诺与签字须本人手写，请打印后线下签字归档。")
-
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
+	docxBytes, err := exportRecognitionDocx(s.cfg, replacements)
+	if err != nil {
 		return nil, "", err
 	}
-	filename := fmt.Sprintf("recognition_%d_%s.pdf", a.Year, studentNo)
-	return buf.Bytes(), filename, nil
+	studentNo := ""
+	if stu != nil {
+		studentNo = stu.StudentNo
+	}
+	filename := fmt.Sprintf("recognition_%d_%s.docx", a.Year, studentNo)
+	return docxBytes, filename, nil
 }
 
 // ===== 标签映射 =====
@@ -162,7 +118,7 @@ func (s *RecognitionPDFService) loadLabelMaps() labelMaps {
 	return labelMaps{maps: maps}
 }
 
-// ===== PDF 写入辅助 =====
+// ===== PDF 写入辅助（助学金表使用）=====
 
 type pdfWriter struct {
 	pdf  *fpdf.Fpdf
@@ -262,4 +218,15 @@ func boolLabel(b bool) string {
 		return "已确认"
 	}
 	return "未确认"
+}
+
+func genderLabel(g string) string {
+	switch g {
+	case "male", "M", "男":
+		return "男"
+	case "female", "F", "女":
+		return "女"
+	default:
+		return g
+	}
 }

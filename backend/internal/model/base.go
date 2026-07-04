@@ -28,6 +28,8 @@ func AllModels() []any {
 		&FamilyMember{},
 		&ReviewRecord{},
 		&GrantApplication{},
+		&GrantFamilyMember{},
+		&GrantReviewRecord{},
 		&Attachment{},
 		&Publicity{},
 		&Quota{},

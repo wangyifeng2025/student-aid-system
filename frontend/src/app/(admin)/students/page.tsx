@@ -27,9 +27,11 @@ import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { ImportDialog } from "@/components/student/import-dialog";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 type KeyFilter = "" | "true" | "false";
 
@@ -40,6 +42,7 @@ export default function StudentsPage() {
   const [list, setList] = React.useState<Student[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -67,6 +70,8 @@ export default function StudentsPage() {
   const [deleting, setDeleting] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (s) => s.id);
 
   function emptyForm(): StudentInput {
     return {
@@ -126,7 +131,7 @@ export default function StudentsPage() {
     try {
       const res = await studentApi.list({
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         dept_id: filterDept ? Number(filterDept) : undefined,
         class_id: filterClass ? Number(filterClass) : undefined,
@@ -134,12 +139,13 @@ export default function StudentsPage() {
       });
       setList(res.items);
       setTotal(res.total);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [page, keyword, filterDept, filterClass, filterKey]);
+  }, [page, pageSize, keyword, filterDept, filterClass, filterKey, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -151,6 +157,11 @@ export default function StudentsPage() {
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
     resetToFirst();
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
   };
 
   // 表单内专业/班级随院系联动
@@ -231,10 +242,16 @@ export default function StudentsPage() {
       };
       if (editing) {
         await studentApi.update(editing.id, body);
-        toast.success("已更新学生");
+        toast.success("已更新学生，关联登录账号已同步");
       } else {
-        await studentApi.create(body);
-        toast.success("已新增学生");
+        const created = await studentApi.create(body);
+        if (created.initial_password) {
+          toast.success(
+            `已新增学生并创建登录账号（用户名 ${created.student_no}，初始密码 ${created.initial_password}），请告知学生尽快登录修改密码`,
+          );
+        } else {
+          toast.success("已新增学生");
+        }
       }
       setFormOpen(false);
       await load();
@@ -278,6 +295,9 @@ export default function StudentsPage() {
   };
 
   const columns: Column<Student>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name)]
+      : []),
     { header: "学号", width: "130px", cell: (s) => <span className="font-mono text-ink">{s.student_no}</span> },
     { header: "姓名", cell: (s) => <span className="text-ink">{s.name}</span> },
     { header: "性别", width: "70px", cell: (s) => s.gender || "—" },
@@ -355,6 +375,14 @@ export default function StudentsPage() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => studentApi.remove(id)}
+              onDone={load}
+              entityLabel="学生"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 名学生吗？关联的登录账号将一并删除，此操作不可撤销。`}
+            />
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
               <Download size={16} />
               {exporting ? "导出中…" : "导出 Excel"}
@@ -382,7 +410,13 @@ export default function StudentsPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
 
       <Modal
@@ -402,6 +436,17 @@ export default function StudentsPage() {
         }
       >
         <div className="grid grid-cols-2 gap-4">
+          {!editing && (
+            <div
+              className="col-span-2 rounded-md px-3 py-2 text-xs"
+              style={{
+                background: "var(--color-primary-subtle)",
+                color: "var(--color-primary)",
+              }}
+            >
+              保存后将自动在「用户管理」创建学生登录账号：用户名=学号，初始密码=Stu＋身份证后 6 位。请告知学生登录后尽快修改密码。
+            </div>
+          )}
           <div>
             <Label htmlFor="stu-no">学号 *</Label>
             <Input id="stu-no" value={form.student_no} onChange={(e) => setField("student_no", e.target.value)} placeholder="如：2024010101" />
@@ -493,7 +538,7 @@ export default function StudentsPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除学生"
-        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？`}
+        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？关联的登录账号将一并删除。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
@@ -503,7 +548,7 @@ export default function StudentsPage() {
         open={importOpen}
         kind="students"
         title="导入录取/新生名单"
-        hint="按模板列填写：学号*、姓名*、性别*（男/女）、身份证号*、院系*、专业*、班级* 为必填；民族、政治面貌填写中文名称（如汉族、共青团员），可留空；其余可选。学号与身份证号均须唯一。已存在的学号将按学号更新（增量导入）。"
+        hint="按模板列填写：学号*、姓名*、性别*（男/女）、身份证号*、院系*、专业*、班级* 为必填；民族、政治面貌填写中文名称（如汉族、共青团员），可留空；其余可选。学号与身份证号均须唯一。已存在的学号将按学号更新（增量导入）。导入时会自动为每位学生创建登录账号（用户名=学号，初始密码=Stu＋身份证后 6 位）。"
         onClose={() => setImportOpen(false)}
         onImported={load}
       />

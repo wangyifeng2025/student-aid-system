@@ -321,9 +321,9 @@
 |------|------|------|
 | GET | `/api/v1/students` | 分页列出学生，支持过滤 |
 | GET | `/api/v1/students/:id` | 学生详情 |
-| POST | `/api/v1/students` | 新增 |
-| PUT | `/api/v1/students/:id` | 修改 |
-| DELETE | `/api/v1/students/:id` | 删除 |
+| POST | `/api/v1/students` | 新增（自动创建登录账号：用户名=学号，初始密码=Stu＋身份证后 6 位） |
+| PUT | `/api/v1/students/:id` | 修改（同步更新关联账号的姓名/手机/院系/班级/用户名） |
+| DELETE | `/api/v1/students/:id` | 删除（同时删除关联登录账号） |
 
 **列表查询参数**：`page`（默认 1）、`page_size`（默认 20，上限 100）、`dept_id`、`major_id`、`class_id`、`keyword`（姓名/学号/身份证模糊）、`is_key_group`（`true`/`false`）。
 
@@ -437,9 +437,11 @@
 
 所有登录角色均可访问，读写权限由后端按**角色 + 数据范围**控制：
 
-- **学生**：仅能对**本人**申请进行创建 / 修改 / 删除 / 提交；只能读本人申请。
+- **学生**：仅能对**本人**申请进行创建 / 修改 / 删除 / 提交 / 撤回；只能读本人申请。
 - **班主任**：只读本班；**教学系**：只读本系；**资助中心 / 管理员**：只读全校。
-- 逐级评审的通过 / 退回属模块 5；本模块的"提交"仅将状态由 `draft` 流转为 `pending_class`。
+- 逐级评审的通过 / 退回属模块 5；本模块的"提交"将状态由 `draft`/`rejected` 流转为 `pending_class`。
+- **删除**：仅未提交（`draft`/`rejected`）时可删除。
+- **撤回**：已提交且状态为 `pending_class`、且尚无班级评审记录时可撤回，恢复为 `draft`；班级审核后不可撤回或删除。
 
 | 方法 | 路径 | 说明 | 权限 |
 |------|------|------|------|
@@ -449,7 +451,8 @@
 | PUT | `/api/v1/recognitions/:id` | 修改（仅 `draft`/`rejected`；整体替换家庭成员） | 学生本人 |
 | DELETE | `/api/v1/recognitions/:id` | 删除（仅 `draft`/`rejected`） | 学生本人 |
 | POST | `/api/v1/recognitions/:id/submit` | 提交评审（完整校验 + 自动算人均收入 + 单亲/单薪提示） | 学生本人 |
-| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 PDF（仅 `approved`，需配置中文字体） | 登录（按范围） |
+| POST | `/api/v1/recognitions/:id/withdraw` | 撤回申请（仅 `pending_class` 且无班级评审记录，恢复为 `draft`） | 学生本人 |
+| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 docx（仅 `approved`；基于 Word 模板填数，需配置 `export.recognition_template_path`） | 登录（按范围） |
 | POST | `/api/v1/recognitions/:id/attachments` | 上传支撑材料（`multipart/form-data`，字段 `file`） | 学生本人 |
 | GET | `/api/v1/recognitions/:id/attachments` | 列出支撑材料 | 登录（按范围） |
 | GET | `/api/v1/attachments/:id/download` | 下载附件 | 登录（按范围） |
@@ -510,7 +513,7 @@
 
 ---
 
-## 四级评审与退回（模块 5）
+## 三级评审与退回（模块 5）
 
 仅评审角色与管理员可访问（`classadvisor` / `department` / `aidcenter` / `admin`）。每个角色只能处理**自己级别**且在**数据范围内**的申请；每次通过/退回都会写入一条评审流转记录（审计）。
 
@@ -520,21 +523,46 @@
 |------|------|----------|
 | 1 班级 | `pending_class` | `classadvisor`（通过时须**初定困难等级**） |
 | 2 教学系 | `pending_dept` | `department` |
-| 3 院级 | `pending_college` | `aidcenter` |
-| 4 第四级 | `pending_final` | `aidcenter`（通过即**认定通过** `approved`） |
+| 3 院级 | `pending_college` | `aidcenter`（通过即**认定通过** `approved`，学生可发起助学金申请） |
 
-> `admin` 可处理任意级别（全校范围）。
+> `admin` 可处理任意级别（全校范围）。`pending_final` 为历史遗留状态，院级通过逻辑同样适用。
 
 **端点**
 
 | 方法 | 路径 | 说明 | 权限 |
 |------|------|------|------|
 | GET | `/api/v1/reviews/todo` | 待办列表（按角色级别 + 数据范围）。查询：`page`、`page_size`、`year`、`status`、`keyword` | 评审角色 / admin |
-| GET | `/api/v1/reviews/records` | 认定记录列表（不含学生未提交草稿）。查询：`tab`（`todo`/`done`/`all`，默认 `all`）、`page`、`page_size`、`year`、`status`、`keyword` | 评审角色 / admin |
+| GET | `/api/v1/reviews/records` | 认定记录列表（不含学生未提交草稿）。`tab=todo`：本级待办或下级正在审核；`tab=done`：当前用户已评审过的申请；`tab=all`（默认）：数据范围内全部已提交申请。查询：`page`、`page_size`、`year`、`status`、`keyword` | 评审角色 / admin |
 | GET | `/api/v1/reviews/:id` | 评审详情（含家庭成员与 `reviews` 流转记录） | 评审角色 / admin（按范围） |
 | POST | `/api/v1/reviews/:id/pass` | 通过，流转到下一级；可初定/调整困难等级 | 对应级别 / admin |
 | POST | `/api/v1/reviews/:id/reject` | 退回到指定级别（附退回意见） | 对应级别 / admin |
+| POST | `/api/v1/reviews/:id/withdraw` | 撤回本人最近一次评审意见（须为最后一条评审记录且下级尚未审核） | 评审角色 / admin |
 | POST | `/api/v1/reviews/batch` | 批量评审（快速定档 / 批量退回） | 评审角色 / admin |
+
+### 助学金申请（模块 6）
+
+**规则**：须先通过困难认定（`recognition` 状态为 `approved`）；数据从认定表自动预填；三级评审（班级 → 教学系 → 院级）与认定流程一致。
+
+| 方法 | 路径 | 说明 | 权限 |
+|------|------|------|------|
+| GET | `/api/v1/grants` | 助学金申请列表 | 学生本人 / 评审角色 / admin |
+| POST | `/api/v1/grants` | 基于认定 ID 创建草稿（预填）`{ "recognition_id": 1 }` | 学生本人 |
+| GET | `/api/v1/grants/:id` | 申请详情 | 按数据范围 |
+| PUT | `/api/v1/grants/:id` | 修改草稿/被退回申请 | 学生本人 |
+| DELETE | `/api/v1/grants/:id` | 删除草稿/被退回申请 | 学生本人 |
+| POST | `/api/v1/grants/:id/submit` | 提交进入班级评审 | 学生本人 |
+| GET | `/api/v1/grants/:id/export` | 导出《国家助学金申请表》PDF（仅 `approved`） | 按数据范围 |
+
+**助学金评审**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/grant-reviews/todo` | 待办列表 |
+| GET | `/api/v1/grant-reviews/records` | 认定记录式列表（`tab=todo/done/all`） |
+| GET | `/api/v1/grant-reviews/:id` | 审核详情 |
+| POST | `/api/v1/grant-reviews/:id/pass` | 通过 |
+| POST | `/api/v1/grant-reviews/:id/reject` | 退回 |
+| POST | `/api/v1/grant-reviews/:id/withdraw` | 撤回本人审核意见 |
 
 **通过请求体** `POST /reviews/:id/pass`
 ```json
@@ -568,7 +596,7 @@
   "reject_to_level": 0, "created_at": "2026-06-28T21:00:00Z" }
 ```
 
-> 完整状态机：`pending_class` →(pass)→ `pending_dept` →(pass)→ `pending_college` →(pass)→ `pending_final` →(pass)→ `approved`；任一级 reject 到 `0` 变 `rejected`（学生改后重提），reject 到更低级别则回到对应 `pending_*`。
+> 完整状态机：`pending_class` →(pass)→ `pending_dept` →(pass)→ `pending_college` →(pass)→ `approved`；任一级 reject 到 `0` 变 `rejected`（学生改后重提），reject 到更低级别则回到对应 `pending_*`。
 
 ---
 

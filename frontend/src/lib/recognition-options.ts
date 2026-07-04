@@ -122,7 +122,7 @@ export const STATUS_META: Record<
   pending_class: { label: "待班级评审", tone: "info" },
   pending_dept: { label: "待教学系评审", tone: "warning" },
   pending_college: { label: "待院级评审", tone: "warning" },
-  pending_final: { label: "待第四级确认", tone: "warning" },
+  pending_final: { label: "待院级评审（历史）", tone: "warning" },
   approved: { label: "认定通过", tone: "success" },
   rejected: { label: "已退回", tone: "error" },
 };
@@ -149,7 +149,7 @@ export function difficultyTone(v: DifficultyLevel | string): Tone {
 }
 
 // 评审流程级别（current_level）→ 名称。
-export const LEVEL_NAMES = ["—", "班级评审", "教学系评审", "院级评审", "第四级确认"];
+export const LEVEL_NAMES = ["—", "班级评审", "教学系评审", "院级评审"];
 
 export function levelName(level: number): string {
   return LEVEL_NAMES[level] ?? "—";
@@ -175,7 +175,7 @@ export function canReview(role: Role | undefined, status: ApplicationStatus): bo
   }
 }
 
-// 角色待办状态筛选项（与后端 todoStatusesForRole 对齐）。
+// 角色待办状态筛选项（与后端 todoStatusesForRole 对齐，用于待办审核页）。
 export function todoStatusOptionsForRole(role: Role | undefined): { value: ApplicationStatus; label: string }[] {
   switch (role) {
     case "classadvisor":
@@ -183,18 +183,35 @@ export function todoStatusOptionsForRole(role: Role | undefined): { value: Appli
     case "department":
       return [{ value: "pending_dept", label: STATUS_META.pending_dept.label }];
     case "aidcenter":
-      return [
-        { value: "pending_college", label: STATUS_META.pending_college.label },
-        { value: "pending_final", label: STATUS_META.pending_final.label },
-      ];
+      return [{ value: "pending_college", label: STATUS_META.pending_college.label }];
     case "admin":
       return (
         [
           "pending_class",
           "pending_dept",
           "pending_college",
-          "pending_final",
         ] as ApplicationStatus[]
+      ).map((v) => ({ value: v, label: STATUS_META[v].label }));
+    default:
+      return [];
+  }
+}
+
+/** 认定记录「待审核」标签状态筛选项（本级 + 下级待审，与后端 recordsTodoStatusesForRole 对齐）。 */
+export function recordsTodoStatusOptionsForRole(
+  role: Role | undefined
+): { value: ApplicationStatus; label: string }[] {
+  switch (role) {
+    case "classadvisor":
+      return [{ value: "pending_class", label: STATUS_META.pending_class.label }];
+    case "department":
+      return (
+        ["pending_class", "pending_dept"] as ApplicationStatus[]
+      ).map((v) => ({ value: v, label: STATUS_META[v].label }));
+    case "aidcenter":
+    case "admin":
+      return (
+        ["pending_class", "pending_dept", "pending_college"] as ApplicationStatus[]
       ).map((v) => ({ value: v, label: STATUS_META[v].label }));
     default:
       return [];
@@ -208,7 +225,7 @@ export const RECORDS_STATUS_OPTIONS = (
   .filter((s) => s !== "draft")
   .map((value) => ({ value, label: STATUS_META[value].label }));
 
-// 当前状态对应的评审级别（1~4），非待审状态返回 0。
+// 当前状态对应的评审级别（1~3），非待审状态返回 0；pending_final 兼容历史数据。
 export function actingLevel(status: ApplicationStatus): number {
   switch (status) {
     case "pending_class":
@@ -216,9 +233,8 @@ export function actingLevel(status: ApplicationStatus): number {
     case "pending_dept":
       return 2;
     case "pending_college":
-      return 3;
     case "pending_final":
-      return 4;
+      return 3;
     default:
       return 0;
   }
@@ -255,5 +271,45 @@ export function rejectTargetLabel(level: number): string {
       return "院级";
     default:
       return "—";
+  }
+}
+
+// ===== 学生端：删除 / 撤回 =====
+
+/** 未提交（草稿/退回）时可删除 */
+export function canDeleteRecognition(status: ApplicationStatus): boolean {
+  return status === "draft" || status === "rejected";
+}
+
+/** 已提交且班级尚未审核时可撤回（详情页可结合 reviews 精确判断） */
+export function canWithdrawRecognition(
+  status: ApplicationStatus,
+  reviews?: { level: number }[],
+): boolean {
+  if (status !== "pending_class") return false;
+  if (!reviews?.length) return true;
+  return !reviews.some((r) => r.level === 1);
+}
+
+/** 评审人撤回本人最近一次审核意见（须为最后一条评审且下级尚未审核） */
+export function canWithdrawReview(
+  role: Role | undefined,
+  userId: number | undefined,
+  reviews?: { level: number; reviewer_id: number }[],
+): boolean {
+  if (!role || role === "student" || !userId || !reviews?.length) return false;
+  const last = reviews[reviews.length - 1];
+  if (last.reviewer_id !== userId) return false;
+  switch (role) {
+    case "classadvisor":
+      return last.level === 1;
+    case "department":
+      return last.level === 2;
+    case "aidcenter":
+      return last.level === 3 || last.level === 4;
+    case "admin":
+      return last.level >= 1 && last.level <= 4;
+    default:
+      return false;
   }
 }

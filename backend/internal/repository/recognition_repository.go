@@ -124,18 +124,15 @@ func (r *RecognitionRepository) ListByStatuses(actor rbac.Actor, statuses []stri
 	return items, total, nil
 }
 
-// ListDoneForReviewer 列出数据范围内「已审核」申请：已提交且不在当前角色待办状态，或含该审核人的评审记录。
-func (r *RecognitionRepository) ListDoneForReviewer(actor rbac.Actor, todoStatuses []string, f RecognitionFilter) ([]model.RecognitionApplication, int64, error) {
+// ListReviewedByActor 列出数据范围内当前用户已评审过的申请（不含草稿）。
+func (r *RecognitionRepository) ListReviewedByActor(actor rbac.Actor, f RecognitionFilter) ([]model.RecognitionApplication, int64, error) {
 	f.ExcludeStatuses = append(f.ExcludeStatuses, string(model.StatusDraft))
 	base := func() *gorm.DB {
-		q := applyRecognitionFilter(r.scoped(actor), f)
-		if len(todoStatuses) == 0 {
-			return q
-		}
-		return q.Where(
-			r.db.Where("recognition_applications.status NOT IN ?", todoStatuses).
-				Or("EXISTS (SELECT 1 FROM review_records WHERE review_records.application_id = recognition_applications.id AND review_records.reviewer_id = ? AND review_records.deleted_at IS NULL)", actor.UserID),
-		)
+		return applyRecognitionFilter(r.scoped(actor), f).
+			Where(
+				"EXISTS (SELECT 1 FROM review_records WHERE review_records.application_id = recognition_applications.id AND review_records.reviewer_id = ? AND review_records.deleted_at IS NULL)",
+				actor.UserID,
+			)
 	}
 	var total int64
 	if err := base().Count(&total).Error; err != nil {
@@ -169,6 +166,18 @@ func (r *RecognitionRepository) ListSubmitted(actor rbac.Actor, f RecognitionFil
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// RevertReview 撤回一条评审记录并回滚申请流程字段（同事务）。
+func (r *RecognitionRepository) RevertReview(a *model.RecognitionApplication, reviewID uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(a).Select(
+			"status", "current_level", "difficulty_level", "reject_reason",
+		).Updates(a).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.ReviewRecord{}, reviewID).Error
+	})
 }
 
 // Transition 在同一事务内更新申请流程字段并写入一条评审流转记录。

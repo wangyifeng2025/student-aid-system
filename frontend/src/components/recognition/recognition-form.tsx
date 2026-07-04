@@ -13,7 +13,7 @@ import {
   Info,
   Send,
 } from "lucide-react";
-import { recognitionApi, ApiError } from "@/lib/api";
+import { recognitionApi, studentApi, ApiError } from "@/lib/api";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -164,6 +164,33 @@ export function RecognitionForm({ mode, initial }: Props) {
   );
   const [saving, setSaving] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [profileLoading, setProfileLoading] = React.useState(true);
+
+  // 身份证号从学籍档案自动读取，学生不可手填。
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stu = await studentApi.me();
+        if (cancelled) return;
+        setForm((prev) => ({
+          ...prev,
+          id_card: stu.id_card,
+          nation: prev.nation || stu.nation,
+          phone: prev.phone || stu.phone,
+        }));
+      } catch (e) {
+        if (!cancelled) {
+          toast.error(e instanceof ApiError ? e.message : "加载学籍信息失败");
+        }
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const set = <K extends keyof RecognitionInput>(key: K, value: RecognitionInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -395,9 +422,14 @@ export function RecognitionForm({ mode, initial }: Props) {
               <Label>身份证号</Label>
               <Input
                 value={form.id_card}
-                onChange={(e) => set("id_card", e.target.value)}
-                placeholder="18 位居民身份证"
+                readOnly
+                disabled={profileLoading}
+                placeholder={profileLoading ? "正在加载学籍信息…" : "18 位居民身份证"}
+                className="bg-page text-ink-soft"
               />
+              <p className="mt-1 text-xs text-ink-mute">
+                身份证号从学籍档案自动读取，不可修改；如有误请联系管理员在学生管理中更正。
+              </p>
             </div>
             <div>
               <Label>手机号</Label>

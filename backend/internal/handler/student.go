@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
+	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/internal/repository"
 	"github.com/wangyifeng2025/student-aid-system/pkg/response"
 )
@@ -34,6 +35,24 @@ func (h *Handler) GetStudent(c *gin.Context) {
 		return
 	}
 	res, err := h.Student.Get(id)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
+// GetMyStudent 学生本人获取关联学籍档案（用于认定填报等场景）。
+func (h *Handler) GetMyStudent(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	if actor.Role != model.RoleStudent {
+		response.Forbidden(c, "仅学生可访问本人学籍信息")
+		return
+	}
+	res, err := h.Student.GetByUserID(actor.UserID)
 	if err != nil {
 		mapCommonError(c, err)
 		return

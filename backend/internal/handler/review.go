@@ -115,6 +115,24 @@ func (h *Handler) RejectReview(c *gin.Context) {
 	response.OK(c, res)
 }
 
+// WithdrawReview 撤回本人最近一次评审意见（下级尚未审核时可撤销）。
+func (h *Handler) WithdrawReview(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	res, err := h.Review.Withdraw(actor, id)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
 // BatchReview 批量评审（快速定档/批量退回）。
 func (h *Handler) BatchReview(c *gin.Context) {
 	actor, ok := currentActor(c)

@@ -91,7 +91,7 @@ func (h *Handler) UpdateRecognition(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// DeleteRecognition 学生本人删除草稿/被退回的申请。
+// DeleteRecognition 学生本人删除未提交的申请（草稿/被退回）。
 func (h *Handler) DeleteRecognition(c *gin.Context) {
 	actor, ok := currentActor(c)
 	if !ok {
@@ -126,8 +126,26 @@ func (h *Handler) SubmitRecognition(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// ExportRecognitionPDF 导出认定申请表 PDF（仅认定通过后）。
-func (h *Handler) ExportRecognitionPDF(c *gin.Context) {
+// WithdrawRecognition 学生本人撤回已提交但尚未经班级审核的申请。
+func (h *Handler) WithdrawRecognition(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	res, err := h.Recognition.Withdraw(actor, id)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
+// ExportRecognitionDocx 导出认定申请表 docx（仅认定通过后）。
+func (h *Handler) ExportRecognitionDocx(c *gin.Context) {
 	actor, ok := currentActor(c)
 	if !ok {
 		return
@@ -141,6 +159,9 @@ func (h *Handler) ExportRecognitionPDF(c *gin.Context) {
 		mapCommonError(c, err)
 		return
 	}
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, "application/pdf", data)
+	c.Header("Content-Disposition",
+		`attachment; filename="`+filename+`"; filename*=UTF-8''`+filename)
+	c.Data(http.StatusOK,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		data)
 }

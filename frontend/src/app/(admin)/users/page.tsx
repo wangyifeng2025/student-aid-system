@@ -18,8 +18,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
+import { useAuthStore } from "@/store/auth";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [Role, string][];
 
@@ -51,11 +54,16 @@ const emptyForm: FormState = {
 };
 
 export default function UsersPage() {
+  const canWrite = useAuthStore((s) => s.user?.role === "admin");
+
   const [list, setList] = React.useState<User[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (u) => u.id);
 
   const [keywordInput, setKeywordInput] = React.useState("");
   const [keyword, setKeyword] = React.useState("");
@@ -83,19 +91,20 @@ export default function UsersPage() {
     try {
       const res = await userApi.list({
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         role: filterRole || undefined,
         status: filterStatus === "" ? undefined : Number(filterStatus),
       });
       setList(res.items);
       setTotal(res.total);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [page, keyword, filterRole, filterStatus]);
+  }, [page, pageSize, keyword, filterRole, filterStatus, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -124,6 +133,11 @@ export default function UsersPage() {
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
     setPage(1);
   };
 
@@ -252,6 +266,9 @@ export default function UsersPage() {
   };
 
   const columns: Column<User>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (u) => u.id, (u) => u.real_name || u.username)]
+      : []),
     {
       header: "用户名",
       cell: (u) => <span className="font-mono text-ink">{u.username}</span>,
@@ -369,11 +386,30 @@ export default function UsersPage() {
             查询
           </Button>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus size={16} />
-          新增用户
-        </Button>
+        <div className="flex items-center gap-2">
+          <BatchDeleteButton
+            selectedIds={selected}
+            deleteOne={(id) => userApi.remove(id)}
+            onDone={load}
+            entityLabel="用户"
+            canWrite={canWrite}
+          />
+          <Button size="sm" onClick={openCreate}>
+            <Plus size={16} />
+            新增用户
+          </Button>
+        </div>
       </Toolbar>
+
+      <div
+        className="mb-3 rounded-md px-3 py-2 text-xs"
+        style={{
+          background: "var(--color-primary-subtle)",
+          color: "var(--color-primary)",
+        }}
+      >
+        提示：学生登录账号无需在此手动创建。新增或导入学生时系统会自动创建账号（用户名=学号，初始密码=Stu＋身份证后 6 位），并随学生信息同步更新；删除学生时账号一并删除。此处主要用于管理班主任、教学系、资助中心、管理员等审核角色账号。
+      </div>
 
       <DataTable
         columns={columns}
@@ -386,7 +422,13 @@ export default function UsersPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
 
       <Modal

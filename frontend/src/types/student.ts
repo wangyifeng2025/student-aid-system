@@ -26,6 +26,8 @@ export interface Student {
   major_id: number;
   class_id: number;
   is_key_group: boolean;
+  // 仅新建时返回，用于提示初始密码；其余场景为空
+  initial_password?: string;
 }
 
 export interface StudentInput {

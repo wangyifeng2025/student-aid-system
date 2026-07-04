@@ -21,6 +21,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { OrgSpreadsheetActions } from "@/components/base-data/org-spreadsheet-actions";
 
 export default function ClassesPage() {
@@ -60,6 +62,14 @@ export default function ClassesPage() {
     [grades],
   );
 
+  const filtered = list.filter((c) => {
+    const matchKeyword = c.name.includes(keyword);
+    const matchDept = !filterDept || c.dept_id === Number(filterDept);
+    return matchKeyword && matchDept;
+  });
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(filtered, (c) => c.id);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -74,22 +84,17 @@ export default function ClassesPage() {
       setDepts(departments);
       setMajors(allMajors);
       setGrades(allGrades);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearSelection]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
-
-  const filtered = list.filter((c) => {
-    const matchKeyword = c.name.includes(keyword);
-    const matchDept = !filterDept || c.dept_id === Number(filterDept);
-    return matchKeyword && matchDept;
-  });
 
   // 表单内专业按所选院系联动
   const formMajors = deptId
@@ -166,6 +171,9 @@ export default function ClassesPage() {
   };
 
   const columns: Column<Class>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (c) => c.id, (c) => c.name)]
+      : []),
     { header: "ID", width: "80px", cell: (c) => <span className="text-ink-mute tabular-nums">{c.id}</span> },
     { header: "班级名称", cell: (c) => <span className="text-ink">{c.name}</span> },
     { header: "院系", cell: (c) => deptName(c.dept_id) },
@@ -202,6 +210,14 @@ export default function ClassesPage() {
         </div>
         {canWrite && (
           <>
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => classApi.remove(id)}
+              onDone={load}
+              entityLabel="班级"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 个班级吗？若其下存在学生将无法删除，将自动跳过。此操作不可撤销。`}
+            />
             <OrgSpreadsheetActions
               kind="classes"
               importTitle="导入班级"

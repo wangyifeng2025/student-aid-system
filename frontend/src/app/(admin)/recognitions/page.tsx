@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Search, Eye, Pencil, Trash2, Download } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2, Download, Undo2 } from "lucide-react";
 import { recognitionApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
@@ -14,19 +14,19 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import {
   STATUS_META,
   difficultyLabel,
   difficultyTone,
+  canDeleteRecognition,
+  canWithdrawRecognition,
 } from "@/lib/recognition-options";
 import type { RecognitionListItem } from "@/types/recognition";
 
-const PAGE_SIZE = 20;
-
-function isEditable(status: string): boolean {
-  return status === "draft" || status === "rejected";
-}
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function RecognitionsPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -35,6 +35,7 @@ export default function RecognitionsPage() {
   const [list, setList] = React.useState<RecognitionListItem[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -46,6 +47,13 @@ export default function RecognitionsPage() {
 
   const [deleteTarget, setDeleteTarget] = React.useState<RecognitionListItem | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [withdrawTarget, setWithdrawTarget] = React.useState<RecognitionListItem | null>(null);
+  const [withdrawing, setWithdrawing] = React.useState(false);
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(
+    list.filter((r) => canDeleteRecognition(r.status)),
+    (r) => r.id,
+  );
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -53,19 +61,20 @@ export default function RecognitionsPage() {
     try {
       const res = await recognitionApi.list({
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         year: filterYear ? Number(filterYear) : undefined,
       });
       setList(res.items);
       setTotal(res.total);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [page, keyword, filterStatus, filterYear]);
+  }, [page, pageSize, keyword, filterStatus, filterYear, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -74,6 +83,11 @@ export default function RecognitionsPage() {
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
     setFilterYear(yearInput);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
     setPage(1);
   };
 
@@ -92,15 +106,43 @@ export default function RecognitionsPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!withdrawTarget) return;
+    setWithdrawing(true);
+    try {
+      await recognitionApi.withdraw(withdrawTarget.id);
+      toast.success("已撤回申请，可继续编辑后重新提交");
+      setWithdrawTarget(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "撤回失败");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   const handleExport = async (id: number) => {
     try {
-      await recognitionApi.exportPdf(id);
+      await recognitionApi.exportDocx(id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     }
   };
 
   const columns: Column<RecognitionListItem>[] = [
+    ...(isStudent
+      ? [
+          checkboxColumn(
+            selected,
+            allSelected,
+            toggleAll,
+            toggleRow,
+            (r) => r.id,
+            (r) => r.student_name || String(r.id),
+            (r) => canDeleteRecognition(r.status),
+          ),
+        ]
+      : []),
     {
       header: "姓名",
       width: "96px",
@@ -160,7 +202,7 @@ export default function RecognitionsPage() {
             <Eye size={14} />
             查看
           </Link>
-          {isStudent && isEditable(r.status) && (
+          {isStudent && canDeleteRecognition(r.status) && (
             <>
               <Link
                 href={`/recognitions/${r.id}/edit`}
@@ -180,6 +222,16 @@ export default function RecognitionsPage() {
               </button>
             </>
           )}
+          {isStudent && canWithdrawRecognition(r.status) && (
+            <button
+              type="button"
+              onClick={() => setWithdrawTarget(r)}
+              className="inline-flex items-center gap-1 text-link hover:underline"
+            >
+              <Undo2 size={14} />
+              撤回
+            </button>
+          )}
           {r.status === "approved" && (
             <button
               type="button"
@@ -187,7 +239,7 @@ export default function RecognitionsPage() {
               className="inline-flex items-center gap-1 text-link hover:underline"
             >
               <Download size={14} />
-              PDF
+              Word
             </button>
           )}
         </div>
@@ -237,12 +289,22 @@ export default function RecognitionsPage() {
           </Button>
         </div>
         {isStudent && (
-          <Link href="/recognitions/new">
-            <Button size="sm">
-              <Plus size={16} />
-              填报新申请
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => recognitionApi.remove(id)}
+              onDone={load}
+              entityLabel="认定申请"
+              canWrite={isStudent}
+              hint={`确定删除选中的 ${selected.size} 条认定申请吗？仅未提交的草稿或被退回申请可删除，已提交或审核中的将自动跳过。此操作不可撤销。`}
+            />
+            <Link href="/recognitions/new">
+              <Button size="sm">
+                <Plus size={16} />
+                填报新申请
+              </Button>
+            </Link>
+          </div>
         )}
       </Toolbar>
 
@@ -259,16 +321,31 @@ export default function RecognitionsPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
 
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除认定申请"
-        description={`确定删除 ${deleteTarget?.year} 年度的认定申请吗？该操作不可撤销。`}
+        description={`确定删除 ${deleteTarget?.year} 年度的认定申请吗？仅未提交的申请可删除，该操作不可撤销。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+      <ConfirmDialog
+        open={withdrawTarget !== null}
+        title="撤回认定申请"
+        description={`确定撤回 ${withdrawTarget?.year} 年度的认定申请吗？撤回后将恢复为草稿，可继续编辑后重新提交。班级已审核后不可撤回。`}
+        confirmText="确认撤回"
+        loading={withdrawing}
+        onConfirm={handleWithdraw}
+        onCancel={() => setWithdrawTarget(null)}
       />
     </div>
   );

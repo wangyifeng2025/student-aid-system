@@ -53,6 +53,8 @@ type StudentResponse struct {
 	MajorID         uint   `json:"major_id"`
 	ClassID         uint   `json:"class_id"`
 	IsKeyGroup      bool   `json:"is_key_group"`
+	// InitialPassword 仅在新建学生时返回，用于提示管理员初始密码；其余场景为空。
+	InitialPassword string `json:"initial_password,omitempty"`
 }
 
 func fmtDate(t *time.Time) string {

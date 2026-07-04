@@ -34,6 +34,7 @@ WORKDIR /app
 
 COPY --from=builder /out/server /out/seed /app/
 COPY config/config.yaml /app/config/
+COPY assets/ /app/assets/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN chmod +x /app/docker-entrypoint.sh \

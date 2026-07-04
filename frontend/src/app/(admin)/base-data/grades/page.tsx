@@ -14,6 +14,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { OrgSpreadsheetActions } from "@/components/base-data/org-spreadsheet-actions";
 
 export default function GradesPage() {
@@ -33,25 +35,28 @@ export default function GradesPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<Grade | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
+  const filtered = list.filter(
+    (g) => g.name.includes(keyword) || String(g.year).includes(keyword),
+  );
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(filtered, (g) => g.id);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setList(await gradeApi.list());
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearSelection]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
-
-  const filtered = list.filter(
-    (g) => g.name.includes(keyword) || String(g.year).includes(keyword),
-  );
 
   const openCreate = () => {
     setEditing(null);
@@ -112,6 +117,9 @@ export default function GradesPage() {
   };
 
   const columns: Column<Grade>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (g) => g.id, (g) => g.name)]
+      : []),
     { header: "ID", width: "80px", cell: (g) => <span className="text-ink-mute tabular-nums">{g.id}</span> },
     { header: "年级名称", cell: (g) => <span className="text-ink">{g.name}</span> },
     { header: "年份", cell: (g) => <span className="tabular-nums">{g.year}</span> },
@@ -138,6 +146,14 @@ export default function GradesPage() {
         </div>
         {canWrite && (
           <>
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => gradeApi.remove(id)}
+              onDone={load}
+              entityLabel="年级"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 个年级吗？若其下存在班级将无法删除，将自动跳过。此操作不可撤销。`}
+            />
             <OrgSpreadsheetActions
               kind="grades"
               importTitle="导入年级"

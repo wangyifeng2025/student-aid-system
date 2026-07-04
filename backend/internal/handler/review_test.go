@@ -68,6 +68,7 @@ func setupReviewRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	reviews.GET("/:id", h.GetReviewDetail)
 	reviews.POST("/:id/pass", h.PassReview)
 	reviews.POST("/:id/reject", h.RejectReview)
+	reviews.POST("/:id/withdraw", h.WithdrawReview)
 
 	return r, db
 }
@@ -203,22 +204,11 @@ func TestReviewWorkflowFullPass(t *testing.T) {
 		t.Fatalf("expect pending_college, got %s", resp.Data.Status)
 	}
 
-	// 院级通过 → pending_final
+	// 院级通过 → approved（院级为终审）
 	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), aidToken,
-		dto.ReviewActionRequest{Opinion: "复核通过"})
+		dto.ReviewActionRequest{Opinion: "复核通过，认定完成"})
 	if w.Code != http.StatusOK {
 		t.Fatalf("college pass status %d, body %s", w.Code, w.Body.String())
-	}
-	decodeRecognition(t, &resp, w.Body.Bytes())
-	if resp.Data.Status != string(model.StatusPendingFinal) {
-		t.Fatalf("expect pending_final, got %s", resp.Data.Status)
-	}
-
-	// 第四级确认 → approved，困难等级保留为一般困难
-	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), aidToken,
-		dto.ReviewActionRequest{Opinion: "审定通过"})
-	if w.Code != http.StatusOK {
-		t.Fatalf("final pass status %d, body %s", w.Code, w.Body.String())
 	}
 	decodeRecognition(t, &resp, w.Body.Bytes())
 	if resp.Data.Status != string(model.StatusApproved) {
@@ -227,8 +217,8 @@ func TestReviewWorkflowFullPass(t *testing.T) {
 	if resp.Data.DifficultyLevel != "general" {
 		t.Fatalf("expect difficulty general, got %s", resp.Data.DifficultyLevel)
 	}
-	if len(resp.Data.Reviews) != 4 {
-		t.Fatalf("expect 4 review records, got %d", len(resp.Data.Reviews))
+	if len(resp.Data.Reviews) != 3 {
+		t.Fatalf("expect 3 review records, got %d", len(resp.Data.Reviews))
 	}
 }
 
@@ -406,3 +396,219 @@ func TestReviewRecordsAndDraftHidden(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewRecordsTodoDoneByRole(t *testing.T) {
+	r, db := setupReviewRouter(t)
+	seedRecognitionDicts(db)
+
+	base := uint(time.Now().UnixNano() % 1000000)
+	classID, deptID := base+41, base+42
+
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	seedScopedStudent(t, db, stuUser.ID, classID, deptID)
+	stuToken := loginToken(t, r, stuUser.Username, "pass123")
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, classID, deptID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+	deptUser := seedReviewer(t, db, model.RoleDepartment, 0, deptID)
+	deptToken := loginToken(t, r, deptUser.Username, "pass123")
+
+	year := int(time.Now().UnixNano() % 100000)
+	submittedID := submitDraft(t, r, stuToken, year)
+
+	containsID := func(items []dto.RecognitionListItem, id uint) bool {
+		for _, item := range items {
+			if item.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	var listResp struct {
+		Data dto.PageResult[dto.RecognitionListItem] `json:"data"`
+	}
+
+	// 待班级审核：教学系应在「待审核」可见（下级正在审核），不在「已审核」
+	w := doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=todo", deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept records todo (pending_class) status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if !containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("pending_class should appear in dept records/todo")
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=done", deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept records done (pending_class) status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("pending_class should not appear in dept records/done before dept review")
+	}
+
+	// 班级通过后：班主任进入「已审核」，教学系仍在「待审核」（本级待办）
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", submittedID), advisorToken,
+		dto.ReviewActionRequest{DifficultyLevel: "general"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("class pass status %d, body %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=done", advisorToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("advisor records done after pass status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if !containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("advisor should see class-reviewed application in records/done")
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=todo", deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept records todo (pending_dept) status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if !containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("pending_dept should appear in dept records/todo")
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=done", deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept records done (pending_dept) status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("pending_dept should not appear in dept records/done before dept review")
+	}
+
+	// 教学系通过后：教学系进入「已审核」
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", submittedID), deptToken,
+		dto.ReviewActionRequest{Opinion: "同意"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept pass status %d, body %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/reviews/records?tab=done", deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept records done after pass status %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	if !containsID(listResp.Data.Items, submittedID) {
+		t.Fatalf("dept should see dept-reviewed application in records/done")
+	}
+}
+
+func TestReviewWithdrawPass(t *testing.T) {
+	r, db := setupReviewRouter(t)
+	seedRecognitionDicts(db)
+
+	base := uint(time.Now().UnixNano() % 1000000)
+	classID, deptID := base+51, base+52
+
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	seedScopedStudent(t, db, stuUser.ID, classID, deptID)
+	stuToken := loginToken(t, r, stuUser.Username, "pass123")
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, classID, deptID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+	deptUser := seedReviewer(t, db, model.RoleDepartment, 0, deptID)
+	deptToken := loginToken(t, r, deptUser.Username, "pass123")
+
+	year := int(time.Now().UnixNano() % 100000)
+	id := submitDraft(t, r, stuToken, year)
+
+	// 班级通过后撤回 → 恢复待班级评审
+	w := doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), advisorToken,
+		dto.ReviewActionRequest{DifficultyLevel: "general"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("class pass status %d, body %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/withdraw", id), advisorToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("class withdraw status %d, body %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	decodeRecognition(t, &resp, w.Body.Bytes())
+	if resp.Data.Status != string(model.StatusPendingClass) {
+		t.Fatalf("expect pending_class after withdraw, got %s", resp.Data.Status)
+	}
+	if resp.Data.DifficultyLevel != "" {
+		t.Fatalf("expect empty difficulty after class withdraw, got %s", resp.Data.DifficultyLevel)
+	}
+	if len(resp.Data.Reviews) != 0 {
+		t.Fatalf("expect no review records after withdraw, got %d", len(resp.Data.Reviews))
+	}
+
+	// 教学系通过后，班主任不可再撤回
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), advisorToken,
+		dto.ReviewActionRequest{DifficultyLevel: "general"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("class pass again status %d", w.Code)
+	}
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), deptToken,
+		dto.ReviewActionRequest{Opinion: "同意"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept pass status %d", w.Code)
+	}
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/withdraw", id), advisorToken, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("class withdraw after dept pass expect 400, got %d, body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReviewWithdrawReject(t *testing.T) {
+	r, db := setupReviewRouter(t)
+	seedRecognitionDicts(db)
+
+	base := uint(time.Now().UnixNano() % 1000000)
+	classID, deptID := base+61, base+62
+
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	seedScopedStudent(t, db, stuUser.ID, classID, deptID)
+	stuToken := loginToken(t, r, stuUser.Username, "pass123")
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, classID, deptID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+	deptUser := seedReviewer(t, db, model.RoleDepartment, 0, deptID)
+	deptToken := loginToken(t, r, deptUser.Username, "pass123")
+
+	year := int(time.Now().UnixNano() % 100000)
+	id := submitDraft(t, r, stuToken, year)
+
+	w := doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/pass", id), advisorToken,
+		dto.ReviewActionRequest{DifficultyLevel: "general"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("class pass status %d", w.Code)
+	}
+
+	// 教学系退回班级后撤回 → 恢复待教学系评审
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/reject", id), deptToken,
+		dto.ReviewActionRequest{RejectToLevel: ptrInt(1), Opinion: "材料需补充"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept reject status %d, body %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/reviews/%d/withdraw", id), deptToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("dept withdraw reject status %d, body %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	decodeRecognition(t, &resp, w.Body.Bytes())
+	if resp.Data.Status != string(model.StatusPendingDept) {
+		t.Fatalf("expect pending_dept after withdraw reject, got %s", resp.Data.Status)
+	}
+	if resp.Data.RejectReason != "" {
+		t.Fatalf("expect empty reject_reason after withdraw, got %s", resp.Data.RejectReason)
+	}
+	if len(resp.Data.Reviews) != 1 {
+		t.Fatalf("expect 1 review record (class pass) after dept withdraw, got %d", len(resp.Data.Reviews))
+	}
+}
+
+func ptrInt(v int) *int { return &v }

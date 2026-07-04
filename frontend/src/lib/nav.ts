@@ -16,6 +16,7 @@ import {
   Megaphone,
   Settings,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 
 export interface NavLeaf {
@@ -120,6 +121,13 @@ export const ADMIN_NAV: NavItem[] = [
   },
   {
     type: "leaf",
+    key: "grants",
+    label: "助学金申请",
+    href: "/grants",
+    icon: Wallet,
+  },
+  {
+    type: "leaf",
     key: "review",
     label: "待办审核",
     href: "/reviews",
@@ -127,9 +135,23 @@ export const ADMIN_NAV: NavItem[] = [
   },
   {
     type: "leaf",
+    key: "grant-review",
+    label: "助学金待办",
+    href: "/grant-reviews",
+    icon: Wallet,
+  },
+  {
+    type: "leaf",
     key: "review-records",
     label: "认定记录",
     href: "/reviews/records",
+    icon: List,
+  },
+  {
+    type: "leaf",
+    key: "grant-review-records",
+    label: "助学金记录",
+    href: "/grant-reviews/records",
     icon: List,
   },
   {
@@ -197,6 +219,29 @@ export function resolvePageMeta(pathname: string): PageMeta {
       return { title: "认定申请审核", breadcrumb: ["首页", "审核管理", "审核详情"] };
     }
     return { title: "待办审核", breadcrumb: ["首页", "审核管理", "待办审核"] };
+  }
+
+  if (pathname.startsWith("/grants")) {
+    if (pathname === "/grants/new") {
+      return { title: "助学金申请填报", breadcrumb: ["首页", "助学金申请", "填报"] };
+    }
+    if (pathname.endsWith("/edit")) {
+      return { title: "编辑助学金申请", breadcrumb: ["首页", "助学金申请", "编辑"] };
+    }
+    if (pathname !== "/grants") {
+      return { title: "助学金申请详情", breadcrumb: ["首页", "助学金申请", "详情"] };
+    }
+    return { title: "助学金申请", breadcrumb: ["首页", "助学金申请"] };
+  }
+
+  if (pathname.startsWith("/grant-reviews")) {
+    if (pathname === "/grant-reviews/records") {
+      return { title: "助学金记录", breadcrumb: ["首页", "审核管理", "助学金记录"] };
+    }
+    if (pathname !== "/grant-reviews") {
+      return { title: "助学金审核", breadcrumb: ["首页", "审核管理", "助学金审核"] };
+    }
+    return { title: "助学金待办", breadcrumb: ["首页", "审核管理", "助学金待办"] };
   }
 
   for (const item of ADMIN_NAV) {

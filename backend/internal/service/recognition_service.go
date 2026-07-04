@@ -147,6 +147,7 @@ func (s *RecognitionService) Create(actor rbac.Actor, req *dto.RecognitionReques
 	if exists {
 		return nil, ErrDuplicate
 	}
+	applyStudentIDCard(req, stu)
 	if err := s.validateFormat(req); err != nil {
 		return nil, err
 	}
@@ -179,6 +180,7 @@ func (s *RecognitionService) Update(actor rbac.Actor, id uint, req *dto.Recognit
 			return nil, ErrDuplicate
 		}
 	}
+	applyStudentIDCard(req, stu)
 	if err := s.validateFormat(req); err != nil {
 		return nil, err
 	}
@@ -198,16 +200,36 @@ func (s *RecognitionService) Update(actor rbac.Actor, id uint, req *dto.Recognit
 	return &resp, nil
 }
 
-// Delete 学生本人删除草稿/被退回的申请。
+// Delete 学生本人删除未提交的申请（草稿/被退回）。
 func (s *RecognitionService) Delete(actor rbac.Actor, id uint) error {
 	a, _, err := s.loadOwned(actor, id)
 	if err != nil {
 		return err
 	}
-	if !isEditable(a.Status) {
-		return NewValidationError("当前状态不可删除（仅草稿或被退回的申请可删除）")
+	if !isDeletable(a.Status) {
+		return NewValidationError("当前状态不可删除（仅未提交的草稿或被退回的申请可删除）")
 	}
 	return s.repo.Delete(id)
+}
+
+// Withdraw 学生本人撤回已提交但尚未经班级审核的申请，恢复为草稿。
+func (s *RecognitionService) Withdraw(actor rbac.Actor, id uint) (*dto.RecognitionResponse, error) {
+	a, stu, err := s.loadOwned(actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if !isWithdrawable(a) {
+		return nil, NewValidationError("当前状态不可撤回（仅待班级评审且班主任尚未审核时可撤回）")
+	}
+	a.Status = model.StatusDraft
+	a.CurrentLevel = 0
+	a.DifficultyLevel = ""
+	a.RejectReason = ""
+	if err := s.repo.UpdateStatusFields(a); err != nil {
+		return nil, err
+	}
+	resp := dto.ToRecognitionResponse(a, stu.StudentNo, stu.Name)
+	return &resp, nil
 }
 
 // Submit 提交评审：完整校验 + 自动计算人均收入 + 单亲/单薪提示。
@@ -333,6 +355,11 @@ func (s *RecognitionService) requireDict(dictType, code, label string) error {
 	return nil
 }
 
+// applyStudentIDCard 认定申请身份证号一律取自学籍档案，忽略前端传入值。
+func applyStudentIDCard(req *dto.RecognitionRequest, stu *model.Student) {
+	req.IDCard = stu.IDCard
+}
+
 // applyRecognition 将请求写入模型主体（不含家庭成员、流程字段）。
 func applyRecognition(a *model.RecognitionApplication, req *dto.RecognitionRequest) {
 	a.Year = req.Year
@@ -374,9 +401,27 @@ func buildMembers(items []dto.FamilyMemberInput) []model.FamilyMember {
 	return out
 }
 
-// isEditable 草稿或被退回时可编辑/删除/提交。
+// isEditable 草稿或被退回时可编辑/提交。
 func isEditable(status model.ApplicationStatus) bool {
 	return status == model.StatusDraft || status == model.StatusRejected
+}
+
+// isDeletable 未提交（草稿/退回）时可删除。
+func isDeletable(status model.ApplicationStatus) bool {
+	return isEditable(status)
+}
+
+// isWithdrawable 已提交且班级尚未审核时可撤回。
+func isWithdrawable(a *model.RecognitionApplication) bool {
+	if a.Status != model.StatusPendingClass {
+		return false
+	}
+	for _, rec := range a.Reviews {
+		if rec.Level == model.LevelClass {
+			return false
+		}
+	}
+	return true
 }
 
 // validateForSubmit 提交前的完整性与逻辑校验。

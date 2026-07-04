@@ -22,6 +22,9 @@ type Handler struct {
 	RecognitionPDF *service.RecognitionPDFService
 	Attachment     *service.AttachmentService
 	Review         *service.ReviewService
+	Grant          *service.GrantService
+	GrantReview    *service.GrantReviewService
+	GrantPDF       *service.GrantPDFService
 	User           *service.UserService
 }
 
@@ -40,6 +43,9 @@ func New(db *gorm.DB, cfg *config.Config, jwtMgr *jwt.Manager) *Handler {
 		RecognitionPDF: service.NewRecognitionPDFService(db, cfg),
 		Attachment:     service.NewAttachmentService(db, cfg),
 		Review:         service.NewReviewService(db),
+		Grant:          service.NewGrantService(db),
+		GrantReview:    service.NewGrantReviewService(db),
+		GrantPDF:       service.NewGrantPDFService(db, cfg),
 		User:           service.NewUserService(db),
 	}
 }

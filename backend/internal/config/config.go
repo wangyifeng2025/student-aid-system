@@ -51,10 +51,16 @@ type UploadConfig struct {
 	AllowedExts string `mapstructure:"allowed_exts"`
 }
 
-// ExportConfig 导出相关配置。PDFFontPath 指向一个支持中文的 TTF 字体文件，
-// 用于认定申请表 PDF 导出（未配置时导出接口会返回明确的提示）。
+// ExportConfig 导出相关配置。
 type ExportConfig struct {
+	// PDFFontPath 指向一个支持中文的 TTF 字体文件，用于助学金申请表等 fpdf 导出
+	// （未配置时该类导出接口会返回明确的提示）。
 	PDFFontPath string `mapstructure:"pdf_font_path"`
+	// SchoolName 认定表表头学校名称（可按本校修改）。
+	SchoolName string `mapstructure:"school_name"`
+	// RecognitionTemplatePath 认定申请表 Word 模板（docx，含 {占位符}），
+	// 认定通过后导出 docx 时使用。
+	RecognitionTemplatePath string `mapstructure:"recognition_template_path"`
 }
 
 // Load 从 config/config.yaml 及环境变量加载配置。
@@ -146,4 +152,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("upload.allowed_exts", ".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx")
 
 	v.SetDefault("export.pdf_font_path", "")
+	v.SetDefault("export.school_name", "黔西南民族职业技术学院")
+	v.SetDefault("export.recognition_template_path", "./assets/templates/recognition_application.docx")
 }

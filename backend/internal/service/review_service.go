@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// ReviewService 模块 5：四级评审与退回流程引擎。
-// 流转：草稿 → 待班级 → 待教学系 → 待院级 → 待第四级 → 认定通过；
+// ReviewService 模块 5：三级评审与退回流程引擎。
+// 流转：草稿 → 待班级 → 待教学系 → 待院级 → 认定通过（院级通过即完成认定，学生可发起助学金申请）；
 // 任一级可退回到学生或更低级别（附退回意见）。每次动作写入评审流转记录（审计）。
 type ReviewService struct {
 	repo     *repository.RecognitionRepository
@@ -42,8 +42,8 @@ var statusLevel = map[model.ApplicationStatus]model.ReviewLevel{
 var passNextStatus = map[model.ApplicationStatus]model.ApplicationStatus{
 	model.StatusPendingClass:   model.StatusPendingDept,
 	model.StatusPendingDept:    model.StatusPendingCollege,
-	model.StatusPendingCollege: model.StatusPendingFinal,
-	model.StatusPendingFinal:   model.StatusApproved,
+	model.StatusPendingCollege: model.StatusApproved,
+	model.StatusPendingFinal:   model.StatusApproved, // 兼容历史 pending_final 数据
 }
 
 // levelStatus 退回目标级别 → 对应待审状态（0 表示退回学生重填）。
@@ -70,7 +70,36 @@ func roleCanActLevel(role model.Role, level model.ReviewLevel) bool {
 	}
 }
 
-// todoStatusesForRole 返回角色待办应包含的状态集合。
+// recordsTodoStatusesForRole 认定记录「待审核」标签：本级待办 + 下级正在审核的状态。
+func recordsTodoStatusesForRole(role model.Role) []string {
+	switch role {
+	case model.RoleClassAdvisor:
+		return []string{string(model.StatusPendingClass)}
+	case model.RoleDepartment:
+		return []string{
+			string(model.StatusPendingClass),
+			string(model.StatusPendingDept),
+		}
+	case model.RoleAidCenter:
+		return []string{
+			string(model.StatusPendingClass),
+			string(model.StatusPendingDept),
+			string(model.StatusPendingCollege),
+			string(model.StatusPendingFinal),
+		}
+	case model.RoleAdmin:
+		return []string{
+			string(model.StatusPendingClass),
+			string(model.StatusPendingDept),
+			string(model.StatusPendingCollege),
+			string(model.StatusPendingFinal),
+		}
+	default:
+		return nil
+	}
+}
+
+// todoStatusesForRole 返回角色待办应包含的状态集合（仅本级，用于 /reviews/todo）。
 func todoStatusesForRole(role model.Role) []string {
 	switch role {
 	case model.RoleClassAdvisor:
@@ -78,6 +107,7 @@ func todoStatusesForRole(role model.Role) []string {
 	case model.RoleDepartment:
 		return []string{string(model.StatusPendingDept)}
 	case model.RoleAidCenter:
+		// 院级为终审；pending_final 仅兼容历史数据。
 		return []string{string(model.StatusPendingCollege), string(model.StatusPendingFinal)}
 	case model.RoleAdmin:
 		return []string{
@@ -87,6 +117,35 @@ func todoStatusesForRole(role model.Role) []string {
 	default:
 		return nil
 	}
+}
+
+// recordsTodo 认定记录「待审核」：本级待办或下级正在审核的申请。
+func (s *ReviewService) recordsTodo(actor rbac.Actor, f repository.RecognitionFilter) (*dto.PageResult[dto.RecognitionListItem], error) {
+	statuses := recordsTodoStatusesForRole(actor.Role)
+	if len(statuses) == 0 {
+		return nil, ErrForbidden
+	}
+	if f.Status != "" {
+		if !containsString(statuses, f.Status) {
+			return nil, NewValidationError("无权查看该状态的认定记录")
+		}
+		statuses = []string{f.Status}
+		f.Status = ""
+	}
+	items, total, err := s.repo.ListByStatuses(actor, statuses, f)
+	if err != nil {
+		return nil, err
+	}
+	list, err := s.buildRecognitionListItems(items)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PageResult[dto.RecognitionListItem]{
+		Items:    list,
+		Total:    total,
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}, nil
 }
 
 // Todo 按角色 + 数据范围列出待办（本级待审申请）。
@@ -139,16 +198,9 @@ func (s *ReviewService) Records(actor rbac.Actor, tab string, f repository.Recog
 			Items: list, Total: total, Page: f.Page, PageSize: f.PageSize,
 		}, nil
 	case "todo":
-		return s.Todo(actor, f)
+		return s.recordsTodo(actor, f)
 	case "done":
-		todoStatuses := todoStatusesForRole(actor.Role)
-		if actor.Role == model.RoleAdmin {
-			todoStatuses = []string{
-				string(model.StatusPendingClass), string(model.StatusPendingDept),
-				string(model.StatusPendingCollege), string(model.StatusPendingFinal),
-			}
-		}
-		items, total, err := s.repo.ListDoneForReviewer(actor, todoStatuses, f)
+		items, total, err := s.repo.ListReviewedByActor(actor, f)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +261,7 @@ func isReviewerRole(role model.Role) bool {
 	}
 }
 
-// Pass 通过：流转到下一级；可初定/调整困难等级；第四级通过即认定通过。
+// Pass 通过：流转到下一级；可初定/调整困难等级；院级通过即认定通过。
 func (s *ReviewService) Pass(actor rbac.Actor, id uint, req *dto.ReviewActionRequest) (*dto.RecognitionResponse, error) {
 	a, level, err := s.loadActionable(actor, id)
 	if err != nil {
@@ -233,7 +285,7 @@ func (s *ReviewService) Pass(actor rbac.Actor, id uint, req *dto.ReviewActionReq
 	}
 	a.Status = next
 	if next == model.StatusApproved {
-		a.CurrentLevel = model.LevelFinal
+		a.CurrentLevel = model.LevelCollege
 	} else {
 		a.CurrentLevel = statusLevel[next]
 	}
@@ -292,6 +344,51 @@ func (s *ReviewService) Reject(actor rbac.Actor, id uint, req *dto.ReviewActionR
 		RejectToLevel: target,
 	}
 	if err := s.repo.Transition(a, rec); err != nil {
+		return nil, err
+	}
+	return s.buildResponse(a.ID)
+}
+
+// Withdraw 撤回本人最近一次评审意见（下级尚未审核时可撤销误操作）。
+func (s *ReviewService) Withdraw(actor rbac.Actor, id uint) (*dto.RecognitionResponse, error) {
+	if !isReviewerRole(actor.Role) && actor.Role != model.RoleAdmin {
+		return nil, ErrForbidden
+	}
+	ok, err := s.repo.CanAccess(actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrNotFound
+	}
+	a, err := s.repo.FindByID(id)
+	if repository.IsNotFound(err) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(a.Reviews) == 0 {
+		return nil, NewValidationError("无可撤回的评审记录")
+	}
+	last := a.Reviews[len(a.Reviews)-1]
+	if last.ReviewerID != actor.UserID {
+		return nil, NewValidationError("仅可撤回本人最近一次评审意见")
+	}
+	if !roleCanActLevel(actor.Role, last.Level) {
+		return nil, ErrForbidden
+	}
+
+	pending, ok := levelStatus[last.Level]
+	if !ok {
+		return nil, NewValidationError("当前评审记录不可撤回")
+	}
+	a.Status = pending
+	a.CurrentLevel = last.Level
+	a.RejectReason = ""
+	a.DifficultyLevel = difficultyAfterRemovingReview(a.Reviews, last.ID)
+
+	if err := s.repo.RevertReview(a, last.ID); err != nil {
 		return nil, err
 	}
 	return s.buildResponse(a.ID)
@@ -407,6 +504,20 @@ func containsString(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// difficultyAfterRemovingReview 移除指定评审记录后，取仍保留的最近一次通过所定困难等级。
+func difficultyAfterRemovingReview(reviews []model.ReviewRecord, removeID uint) model.DifficultyLevel {
+	for i := len(reviews) - 1; i >= 0; i-- {
+		r := reviews[i]
+		if r.ID == removeID {
+			continue
+		}
+		if r.Action == model.ActionPass && r.DifficultyLevel != "" {
+			return r.DifficultyLevel
+		}
+	}
+	return ""
 }
 
 // errMessage 将业务错误转为可展示给用户的简短信息（用于批量结果）。

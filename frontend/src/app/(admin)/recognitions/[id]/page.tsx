@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Trash2, Download, Send } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Download, Send, Undo2, Wallet } from "lucide-react";
 import { recognitionApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
@@ -26,6 +26,8 @@ import {
   difficultyLabel,
   difficultyTone,
   levelName,
+  canDeleteRecognition,
+  canWithdrawRecognition,
 } from "@/lib/recognition-options";
 import type { Recognition } from "@/types/recognition";
 
@@ -74,7 +76,9 @@ export default function RecognitionDetailPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [confirmSubmit, setConfirmSubmit] = React.useState(false);
+  const [confirmWithdraw, setConfirmWithdraw] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [withdrawing, setWithdrawing] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -92,7 +96,8 @@ export default function RecognitionDetailPage() {
     void load();
   }, [load]);
 
-  const editable = !!data && (data.status === "draft" || data.status === "rejected");
+  const editable = !!data && canDeleteRecognition(data.status);
+  const withdrawable = !!data && isStudent && canWithdrawRecognition(data.status, data.reviews);
   const canManage = isStudent && editable;
 
   const handleSubmit = async () => {
@@ -123,9 +128,23 @@ export default function RecognitionDetailPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    setConfirmWithdraw(false);
+    setWithdrawing(true);
+    try {
+      await recognitionApi.withdraw(id);
+      toast.success("已撤回申请，可继续编辑后重新提交");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "撤回失败");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   const handleExport = async () => {
     try {
-      await recognitionApi.exportPdf(id);
+      await recognitionApi.exportDocx(id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     }
@@ -293,7 +312,7 @@ export default function RecognitionDetailPage() {
               </div>
             </Card>
 
-            {(canManage || data.status === "approved") && (
+            {(canManage || withdrawable || data.status === "approved") && (
               <Card title="操作">
                 <div className="flex flex-col gap-3">
                   {canManage && (
@@ -314,11 +333,39 @@ export default function RecognitionDetailPage() {
                       </Button>
                     </>
                   )}
-                  {data.status === "approved" && (
-                    <Button variant="outline" onClick={handleExport} className="w-full">
-                      <Download size={16} />
-                      导出认定表 PDF
+                  {withdrawable && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setConfirmWithdraw(true)}
+                      disabled={withdrawing}
+                      className="w-full"
+                    >
+                      <Undo2 size={16} />
+                      {withdrawing ? "撤回中…" : "撤回申请"}
                     </Button>
+                  )}
+                  {data.status === "approved" && (
+                    <>
+                      <div
+                        className="rounded-md px-3 py-2 text-xs"
+                        style={{
+                          background: "var(--state-success-bg)",
+                          color: "var(--state-success)",
+                        }}
+                      >
+                        困难等级认定已通过，您可发起国家助学金申请。
+                      </div>
+                      <Link href={`/grants/new?recognition_id=${data.id}`} className="block">
+                        <Button className="w-full">
+                          <Wallet size={16} />
+                          申请国家助学金
+                        </Button>
+                      </Link>
+                      <Button variant="outline" onClick={handleExport} className="w-full">
+                        <Download size={16} />
+                        下载认定申请表（Word）
+                      </Button>
+                    </>
                   )}
                 </div>
               </Card>
@@ -340,7 +387,7 @@ export default function RecognitionDetailPage() {
       <ConfirmDialog
         open={confirmSubmit}
         title="提交认定申请"
-        description="提交后将进入班级评审，期间不可修改。确定提交吗？"
+        description="提交后将进入班级评审。在班主任审核前可撤回并继续修改，班级审核后将不可撤回或删除。确定提交吗？"
         confirmText="确认提交"
         loading={submitting}
         onConfirm={handleSubmit}
@@ -349,10 +396,19 @@ export default function RecognitionDetailPage() {
       <ConfirmDialog
         open={confirmDelete}
         title="删除认定申请"
-        description={`确定删除 ${data.year} 年度的认定申请吗？该操作不可撤销。`}
+        description={`确定删除 ${data.year} 年度的认定申请吗？仅未提交的申请可删除，该操作不可撤销。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmWithdraw}
+        title="撤回认定申请"
+        description={`确定撤回 ${data.year} 年度的认定申请吗？撤回后将恢复为草稿，可继续编辑后重新提交。`}
+        confirmText="确认撤回"
+        loading={withdrawing}
+        onConfirm={handleWithdraw}
+        onCancel={() => setConfirmWithdraw(false)}
       />
     </div>
   );

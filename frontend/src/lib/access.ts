@@ -3,6 +3,7 @@ import {
   FileText,
   ClipboardCheck,
   List,
+  Wallet,
 } from "lucide-react";
 import type { Role } from "@/types/auth";
 import type { NavItem } from "@/lib/nav";
@@ -54,6 +55,13 @@ export function getNavForRole(role?: Role): NavItem[] {
         href: "/recognitions",
         icon: FileText,
       },
+      {
+        type: "leaf",
+        key: "grants",
+        label: "助学金申请",
+        href: "/grants",
+        icon: Wallet,
+      },
     ];
   }
   if (isReviewer(role)) {
@@ -68,15 +76,29 @@ export function getNavForRole(role?: Role): NavItem[] {
       {
         type: "leaf",
         key: "review",
-        label: "待办审核",
+        label: "认定待办",
         href: "/reviews",
         icon: ClipboardCheck,
+      },
+      {
+        type: "leaf",
+        key: "grant-review",
+        label: "助学金待办",
+        href: "/grant-reviews",
+        icon: Wallet,
       },
       {
         type: "leaf",
         key: "review-records",
         label: "认定记录",
         href: "/reviews/records",
+        icon: List,
+      },
+      {
+        type: "leaf",
+        key: "grant-review-records",
+        label: "助学金记录",
+        href: "/grant-reviews/records",
         icon: List,
       },
     ];
@@ -102,6 +124,19 @@ export function canAccessPath(role: Role | undefined, pathname: string): boolean
 
   // 待办审核：评审角色与管理员。
   if (path.startsWith("/reviews")) {
+    return isReviewer(role) || isAdmin(role);
+  }
+
+  // 助学金申请：学生填报；评审/管理员只读。
+  if (path.startsWith("/grants")) {
+    if (path === "/grants/new" || /\/edit$/.test(path)) {
+      return isStudent(role);
+    }
+    return isStudent(role) || isReviewer(role) || isAdmin(role);
+  }
+
+  // 助学金审核：评审角色与管理员。
+  if (path.startsWith("/grant-reviews")) {
     return isReviewer(role) || isAdmin(role);
   }
 

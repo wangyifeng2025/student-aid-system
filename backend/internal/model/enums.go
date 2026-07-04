@@ -7,7 +7,7 @@ const (
 	RoleStudent      Role = "student"      // 学生
 	RoleClassAdvisor Role = "classadvisor" // 班主任/辅导员（班级评审）
 	RoleDepartment   Role = "department"   // 教学系经办人（系评审）
-	RoleAidCenter    Role = "aidcenter"    // 资助中心（院级 + 第四级）
+	RoleAidCenter    Role = "aidcenter"    // 资助中心（院级终审）
 	RoleAdmin        Role = "admin"        // 系统管理员
 )
 
@@ -26,14 +26,14 @@ func IsValidRole(s string) bool {
 	return false
 }
 
-// ReviewLevel 评审级别（四级评审）
+// ReviewLevel 评审级别（三级评审；LevelFinal 仅兼容历史数据）
 type ReviewLevel int
 
 const (
 	LevelClass      ReviewLevel = 1 // 班级评审
 	LevelDepartment ReviewLevel = 2 // 教学系评审
-	LevelCollege    ReviewLevel = 3 // 院级评审（资助中心）
-	LevelFinal      ReviewLevel = 4 // 第四级流程确认
+	LevelCollege    ReviewLevel = 3 // 院级评审（资助中心，终审）
+	LevelFinal      ReviewLevel = 4 // 已废弃，仅兼容历史 pending_final 数据
 )
 
 // ApplicationStatus 认定申请状态
@@ -44,7 +44,7 @@ const (
 	StatusPendingClass   ApplicationStatus = "pending_class"   // 待班级评审
 	StatusPendingDept    ApplicationStatus = "pending_dept"    // 待教学系评审
 	StatusPendingCollege ApplicationStatus = "pending_college" // 待院级评审
-	StatusPendingFinal   ApplicationStatus = "pending_final"   // 待第四级确认
+	StatusPendingFinal   ApplicationStatus = "pending_final"   // 已废弃，仅兼容历史数据
 	StatusApproved       ApplicationStatus = "approved"        // 认定通过
 	StatusRejected       ApplicationStatus = "rejected"        // 已退回
 )
@@ -124,12 +124,14 @@ const (
 	GrantVeteran       GrantType = "veteran"        // 退役士兵资助
 )
 
-// GrantStatus 资助申请状态
+// GrantStatus 资助申请状态（三级评审，与认定流程对齐）
 type GrantStatus string
 
 const (
-	GrantStatusDraft    GrantStatus = "draft"
-	GrantStatusPending  GrantStatus = "pending"
-	GrantStatusApproved GrantStatus = "approved"
-	GrantStatusRejected GrantStatus = "rejected"
+	GrantStatusDraft          GrantStatus = "draft"
+	GrantStatusPendingClass   GrantStatus = "pending_class"
+	GrantStatusPendingDept    GrantStatus = "pending_dept"
+	GrantStatusPendingCollege GrantStatus = "pending_college"
+	GrantStatusApproved       GrantStatus = "approved"
+	GrantStatusRejected       GrantStatus = "rejected"
 )

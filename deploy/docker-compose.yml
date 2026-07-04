@@ -42,6 +42,7 @@ services:
       SAS_UPLOAD_DIR: /app/uploads
       SAS_UPLOAD_MAX_SIZE_MB: "20"
       SAS_EXPORT_PDF_FONT_PATH: ${SAS_EXPORT_PDF_FONT_PATH:-}
+      SAS_EXPORT_RECOGNITION_TEMPLATE_PATH: /app/assets/templates/recognition_application.docx
     volumes:
       - uploads:/app/uploads
     depends_on:

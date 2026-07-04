@@ -58,7 +58,8 @@ func setupRecognitionRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	recs.PUT("/:id", h.UpdateRecognition)
 	recs.DELETE("/:id", h.DeleteRecognition)
 	recs.POST("/:id/submit", h.SubmitRecognition)
-	recs.GET("/:id/export", h.ExportRecognitionPDF)
+	recs.POST("/:id/withdraw", h.WithdrawRecognition)
+	recs.GET("/:id/export", h.ExportRecognitionDocx)
 
 	return r, db
 }
@@ -66,12 +67,11 @@ func setupRecognitionRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 func seedStudentFor(t *testing.T, db *gorm.DB, userID uint) *model.Student {
 	t.Helper()
 	uid := userID
-	idCard := fmt.Sprintf("%018d", time.Now().UnixNano()%1000000000000000000)
 	s := &model.Student{
 		UserID:    &uid,
 		StudentNo: fmt.Sprintf("R%d", time.Now().UnixNano()),
 		Name:      "测试学生",
-		IDCard:    idCard,
+		IDCard:    uniqueValidIDCard(),
 	}
 	if err := db.Create(s).Error; err != nil {
 		t.Fatalf("create student: %v", err)
@@ -230,5 +230,69 @@ func TestRecognitionSelfScopeIsolation(t *testing.T) {
 	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/recognitions/%d", resp.Data.ID), tokenB, nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("B access A's app expect 404, got %d", w.Code)
+	}
+}
+
+func TestRecognitionWithdraw(t *testing.T) {
+	r, db := setupRecognitionRouter(t)
+	seedRecognitionDicts(db)
+	user := seedUser(t, db, "pass123", model.RoleStudent)
+	seedStudentFor(t, db, user.ID)
+	token := loginToken(t, r, user.Username, "pass123")
+	year := int(time.Now().UnixNano() % 100000)
+
+	req := validRecognitionReq(year)
+	w := doJSON(t, r, http.MethodPost, "/api/v1/recognitions", token, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create draft status %d, body %s", w.Code, w.Body.String())
+	}
+	var createResp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &createResp)
+	id := createResp.Data.ID
+
+	// 提交后待班级评审 → 可撤回
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/recognitions/%d/submit", id), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("submit status %d, body %s", w.Code, w.Body.String())
+	}
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/recognitions/%d/withdraw", id), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("withdraw status %d, body %s", w.Code, w.Body.String())
+	}
+	var withdrawResp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &withdrawResp)
+	if withdrawResp.Data.Status != "draft" {
+		t.Fatalf("expect draft after withdraw, got %s", withdrawResp.Data.Status)
+	}
+
+	// 再次提交后模拟班级审核完成 → 不可撤回
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/recognitions/%d/submit", id), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("resubmit status %d, body %s", w.Code, w.Body.String())
+	}
+	advisor := seedUser(t, db, "pass123", model.RoleClassAdvisor)
+	if err := db.Create(&model.ReviewRecord{
+		ApplicationID:   id,
+		Level:           model.LevelClass,
+		ReviewerID:      advisor.ID,
+		Action:          model.ActionPass,
+		DifficultyLevel: model.DifficultyGeneral,
+	}).Error; err != nil {
+		t.Fatalf("seed class review: %v", err)
+	}
+	if err := db.Model(&model.RecognitionApplication{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":           model.StatusPendingDept,
+		"current_level":    model.LevelDepartment,
+		"difficulty_level": model.DifficultyGeneral,
+	}).Error; err != nil {
+		t.Fatalf("update status after class review: %v", err)
+	}
+	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/recognitions/%d/withdraw", id), token, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("withdraw after class review expect 400, got %d, body %s", w.Code, w.Body.String())
 	}
 }

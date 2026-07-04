@@ -44,6 +44,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		secured.Use(middleware.JWTAuth(jwtMgr), middleware.LoadCurrentUser(db))
 		{
 			secured.GET("/me", h.Me)
+			secured.GET("/students/me", h.GetMyStudent)
 
 			authSecured := secured.Group("/auth")
 			{
@@ -72,7 +73,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			// 具体读写权限由 service 按角色 + 数据范围（本人/本班/本系/全校）控制。
 			registerRecognitionRoutes(secured, h)
 
-			// 模块 5：四级评审与退回。仅评审角色与管理员，
+			// 模块 5：三级评审与退回。仅评审角色与管理员，
 			// 具体级别/数据范围由 service 控制。
 			reviewerOnly := secured.Group("")
 			reviewerOnly.Use(middleware.RequireRoles(
@@ -82,13 +83,37 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 				model.RoleAdmin,
 			))
 			registerReviewRoutes(reviewerOnly, h)
-
-			// TODO: 后续按模块挂载路由
-			// grants, export ...
+			registerGrantRoutes(secured, h)
+			registerGrantReviewRoutes(reviewerOnly, h)
 		}
 	}
 
 	return r
+}
+
+func registerGrantRoutes(g *gin.RouterGroup, h *handler.Handler) {
+	grants := g.Group("/grants")
+	{
+		grants.GET("", h.ListGrants)
+		grants.POST("", h.CreateGrant)
+		grants.GET("/:id", h.GetGrant)
+		grants.PUT("/:id", h.UpdateGrant)
+		grants.DELETE("/:id", h.DeleteGrant)
+		grants.POST("/:id/submit", h.SubmitGrant)
+		grants.GET("/:id/export", h.ExportGrantPDF)
+	}
+}
+
+func registerGrantReviewRoutes(g *gin.RouterGroup, h *handler.Handler) {
+	reviews := g.Group("/grant-reviews")
+	{
+		reviews.GET("/todo", h.ListGrantReviewTodo)
+		reviews.GET("/records", h.ListGrantReviewRecords)
+		reviews.GET("/:id", h.GetGrantReviewDetail)
+		reviews.POST("/:id/pass", h.PassGrantReview)
+		reviews.POST("/:id/reject", h.RejectGrantReview)
+		reviews.POST("/:id/withdraw", h.WithdrawGrantReview)
+	}
 }
 
 // registerOrgRoutes 挂载组织机构路由：read 组全员可读，write 组仅管理员。
@@ -166,7 +191,8 @@ func registerRecognitionRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		recs.PUT("/:id", h.UpdateRecognition)
 		recs.DELETE("/:id", h.DeleteRecognition)
 		recs.POST("/:id/submit", h.SubmitRecognition)
-		recs.GET("/:id/export", h.ExportRecognitionPDF)
+		recs.POST("/:id/withdraw", h.WithdrawRecognition)
+		recs.GET("/:id/export", h.ExportRecognitionDocx)
 		recs.POST("/:id/attachments", h.UploadRecognitionAttachment)
 		recs.GET("/:id/attachments", h.ListRecognitionAttachments)
 	}
@@ -191,7 +217,7 @@ func registerUserRoutes(g *gin.RouterGroup, h *handler.Handler) {
 	}
 }
 
-// registerReviewRoutes 挂载四级评审与退回路由（评审角色与管理员）。
+// registerReviewRoutes 挂载三级评审与退回路由（评审角色与管理员）。
 func registerReviewRoutes(g *gin.RouterGroup, h *handler.Handler) {
 	reviews := g.Group("/reviews")
 	{
@@ -201,6 +227,7 @@ func registerReviewRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		reviews.GET("/:id", h.GetReviewDetail)
 		reviews.POST("/:id/pass", h.PassReview)
 		reviews.POST("/:id/reject", h.RejectReview)
+		reviews.POST("/:id/withdraw", h.WithdrawReview)
 	}
 }
 

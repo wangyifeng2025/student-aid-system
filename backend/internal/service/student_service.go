@@ -7,20 +7,27 @@ import (
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/internal/repository"
+	"github.com/wangyifeng2025/student-aid-system/pkg/password"
 	"github.com/wangyifeng2025/student-aid-system/pkg/validate"
 	"gorm.io/gorm"
 )
 
 // StudentService 学生信息业务逻辑（含重点人群自动匹配）。
+// 新增/导入学生时会自动创建登录账号（用户名=学号，角色=student，初始密码=Stu+身份证后6位），
+// 并将 student.user_id 关联到该账号；更新时同步账号姓名/手机/院系/班级/用户名；删除时一并清理账号。
 type StudentService struct {
-	repo   *repository.StudentRepository
-	sgRepo *repository.SpecialGroupRepository
+	db       *gorm.DB
+	repo     *repository.StudentRepository
+	sgRepo   *repository.SpecialGroupRepository
+	userRepo *repository.UserRepository
 }
 
 func NewStudentService(db *gorm.DB) *StudentService {
 	return &StudentService{
-		repo:   repository.NewStudentRepository(db),
-		sgRepo: repository.NewSpecialGroupRepository(db),
+		db:       db,
+		repo:     repository.NewStudentRepository(db),
+		sgRepo:   repository.NewSpecialGroupRepository(db),
+		userRepo: repository.NewUserRepository(db),
 	}
 }
 
@@ -49,18 +56,43 @@ func (s *StudentService) Get(id uint) (*dto.StudentResponse, error) {
 	return &resp, nil
 }
 
-func (s *StudentService) Create(req *dto.StudentRequest) (*dto.StudentResponse, error) {
-	st := &model.Student{}
-	if err := s.apply(st, req, 0); err != nil {
-		return nil, err
+// GetByUserID 学生本人按登录用户 ID 获取档案。
+func (s *StudentService) GetByUserID(userID uint) (*dto.StudentResponse, error) {
+	st, err := s.repo.FindByUserID(userID)
+	if repository.IsNotFound(err) {
+		return nil, ErrNotFound
 	}
-	if err := s.repo.CreateStudent(st); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	resp := dto.ToStudentResponse(st)
 	return &resp, nil
 }
 
+// Create 新增学生：在事务中创建登录账号与学生档案，返回带初始密码的响应。
+func (s *StudentService) Create(req *dto.StudentRequest) (*dto.StudentResponse, error) {
+	st := &model.Student{}
+	if err := s.apply(st, req, 0); err != nil {
+		return nil, err
+	}
+	var initialPwd string
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		initialPwd, err = s.ensureUserForStudent(tx, st, true)
+		if err != nil {
+			return err
+		}
+		return repository.NewStudentRepository(tx).CreateStudent(st)
+	})
+	if err != nil {
+		return nil, err
+	}
+	resp := dto.ToStudentResponse(st)
+	resp.InitialPassword = initialPwd
+	return &resp, nil
+}
+
+// Update 修改学生：同步关联账号的姓名/手机/院系/班级/用户名；若历史学生未建账号则补建。
 func (s *StudentService) Update(id uint, req *dto.StudentRequest) (*dto.StudentResponse, error) {
 	st, err := s.repo.FindStudent(id)
 	if repository.IsNotFound(err) {
@@ -72,7 +104,14 @@ func (s *StudentService) Update(id uint, req *dto.StudentRequest) (*dto.StudentR
 	if err := s.apply(st, req, id); err != nil {
 		return nil, err
 	}
-	if err := s.repo.SaveStudent(st); err != nil {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := repository.NewStudentRepository(tx).SaveStudent(st); err != nil {
+			return err
+		}
+		_, err := s.ensureUserForStudent(tx, st, false)
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
 	resp := dto.ToStudentResponse(st)
@@ -93,14 +132,24 @@ func (s *StudentService) Upsert(req *dto.StudentRequest) (created bool, err erro
 	return true, cerr
 }
 
+// Delete 删除学生：同时软删除关联登录账号。
 func (s *StudentService) Delete(id uint) error {
-	if _, err := s.repo.FindStudent(id); err != nil {
+	st, err := s.repo.FindStudent(id)
+	if err != nil {
 		if repository.IsNotFound(err) {
 			return ErrNotFound
 		}
 		return err
 	}
-	return s.repo.DeleteStudent(id)
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := repository.NewStudentRepository(tx).DeleteStudent(id); err != nil {
+			return err
+		}
+		if st.UserID != nil && *st.UserID > 0 {
+			return tx.Delete(&model.User{}, *st.UserID).Error
+		}
+		return nil
+	})
 }
 
 // ExportList 导出用：按筛选条件返回全部学生（不分页）。
@@ -108,6 +157,65 @@ func (s *StudentService) ExportList(f repository.StudentFilter) ([]model.Student
 	f.PageSize = 0
 	items, _, err := s.repo.ListStudents(f)
 	return items, err
+}
+
+// ensureUserForStudent 在事务中维护学生关联的登录账号：
+//   - 无关联账号：创建（用户名=学号，角色=student，初始密码=Stu+身份证后6位），返回初始密码
+//   - 已有关联账号：同步姓名/手机/院系/班级/用户名（学号变更时同步用户名），返回空密码
+func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student, isCreate bool) (string, error) {
+	if st.UserID != nil && *st.UserID > 0 {
+		// 更新已有账号
+		updates := map[string]any{
+			"real_name": st.Name,
+			"phone":     st.Phone,
+			"dept_id":   st.DeptID,
+			"class_id":  st.ClassID,
+			"username":  st.StudentNo,
+		}
+		if err := tx.Model(&model.User{}).Where("id = ?", *st.UserID).Updates(updates).Error; err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+
+	// 创建新账号：学号作为用户名，须唯一
+	var count int64
+	if err := tx.Model(&model.User{}).Where("username = ?", st.StudentNo).Count(&count).Error; err != nil {
+		return "", err
+	}
+	if count > 0 {
+		return "", NewValidationError("登录账号「" + st.StudentNo + "」已存在，无法为学生自动创建账号")
+	}
+	pwd := defaultStudentPassword(st.IDCard)
+	hash, err := password.Hash(pwd)
+	if err != nil {
+		return "", err
+	}
+	deptID := st.DeptID
+	classID := st.ClassID
+	u := &model.User{
+		Username:     st.StudentNo,
+		PasswordHash: hash,
+		RealName:     st.Name,
+		Role:         model.RoleStudent,
+		Phone:        st.Phone,
+		DeptID:       &deptID,
+		ClassID:      &classID,
+		Status:       1,
+	}
+	if err := tx.Create(u).Error; err != nil {
+		return "", err
+	}
+	st.UserID = &u.ID
+	return pwd, nil
+}
+
+// defaultStudentPassword 生成初始密码：Stu + 身份证后 6 位；长度不足时回退固定值。
+func defaultStudentPassword(idCard string) string {
+	if len(idCard) >= 6 {
+		return "Stu" + idCard[len(idCard)-6:]
+	}
+	return "Stu@12345"
 }
 
 // apply 校验请求并写入学生模型；excludeID>0 表示更新（学号查重排除自身）。

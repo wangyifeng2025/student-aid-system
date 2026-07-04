@@ -26,6 +26,10 @@ upload:
   allowed_exts: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx"
 
 export:
-  # 认定申请表 PDF 导出所用的中文字体（TTF）。需指向一个支持中文的 .ttf 文件，
-  # 例如 Noto Sans SC / 思源黑体；留空则导出接口会返回明确的未配置提示。
-  pdf_font_path: ""
+  # 助学金申请表等 fpdf 导出所用的中文字体（TTF）。需指向一个支持中文的 .ttf 文件，
+  # 例如 Noto Sans SC / 思源黑体；留空则该类导出接口会返回明确的未配置提示。
+  pdf_font_path: "./assets/fonts/NotoSansSC-Regular.ttf"
+  # 认定表表头「学校」名称（可按本校修改）
+  school_name: "黔西南民族职业技术学院"
+  # 认定申请表 Word 模板（docx，含 {占位符}），认定通过后导出 docx 时使用
+  recognition_template_path: "./assets/templates/recognition_application.docx"

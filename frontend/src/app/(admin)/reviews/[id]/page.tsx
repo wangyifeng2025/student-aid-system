@@ -3,12 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Check, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, Undo2, RotateCcw } from "lucide-react";
 import { reviewApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoadingState, ErrorState } from "@/components/ui/states";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
@@ -26,6 +27,7 @@ import {
   difficultyTone,
   levelName,
   canReview,
+  canWithdrawReview,
   actingLevel,
 } from "@/lib/recognition-options";
 import type {
@@ -70,12 +72,15 @@ export default function ReviewDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const role = useAuthStore((s) => s.user?.role);
+  const userId = useAuthStore((s) => s.user?.id);
 
   const [data, setData] = React.useState<Recognition | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [dialog, setDialog] = React.useState<ReviewActionType | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false);
+  const [withdrawing, setWithdrawing] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -94,7 +99,22 @@ export default function ReviewDetailPage() {
   }, [load]);
 
   const reviewable = !!data && canReview(role, data.status);
+  const withdrawable = !!data && canWithdrawReview(role, userId, data.reviews);
   const level = data ? actingLevel(data.status) : 0;
+
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    try {
+      await reviewApi.withdraw(id);
+      toast.success("已撤回审核意见，可重新评审");
+      setWithdrawOpen(false);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "撤回失败");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   const handleAction = async (input: ReviewActionInput) => {
     if (!dialog) return;
@@ -291,6 +311,16 @@ export default function ReviewDetailPage() {
                   </Button>
                 </div>
               </Card>
+            ) : withdrawable ? (
+              <Card title="评审操作">
+                <p className="mb-3 text-sm text-ink-mute">
+                  您已提交审核意见。上级尚未审核前可撤回并重新操作。
+                </p>
+                <Button variant="outline" onClick={() => setWithdrawOpen(true)} className="w-full">
+                  <RotateCcw size={16} />
+                  撤回审核意见
+                </Button>
+              </Card>
             ) : (
               <Card title="评审操作">
                 <p className="text-sm text-ink-mute">
@@ -327,6 +357,16 @@ export default function ReviewDetailPage() {
         loading={submitting}
         onConfirm={handleAction}
         onCancel={() => setDialog(null)}
+      />
+
+      <ConfirmDialog
+        open={withdrawOpen}
+        title="撤回审核意见"
+        description="确定撤回您最近一次审核意见吗？撤回后申请将回到您审核前的待审状态，可重新通过或退回。下级已审核后不可撤回。"
+        confirmText="确认撤回"
+        loading={withdrawing}
+        onConfirm={handleWithdraw}
+        onCancel={() => setWithdrawOpen(false)}
       />
     </div>
   );

@@ -15,6 +15,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { OrgSpreadsheetActions } from "@/components/base-data/org-spreadsheet-actions";
 
 export default function MajorsPage() {
@@ -42,6 +44,16 @@ export default function MajorsPage() {
     [depts],
   );
 
+  const filtered = list.filter((m) => {
+    const matchKeyword =
+      m.name.includes(keyword) ||
+      m.code.toLowerCase().includes(keyword.toLowerCase());
+    const matchDept = !filterDept || m.dept_id === Number(filterDept);
+    return matchKeyword && matchDept;
+  });
+
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(filtered, (m) => m.id);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -52,24 +64,17 @@ export default function MajorsPage() {
       ]);
       setList(majors);
       setDepts(departments);
+      clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearSelection]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
-
-  const filtered = list.filter((m) => {
-    const matchKeyword =
-      m.name.includes(keyword) ||
-      m.code.toLowerCase().includes(keyword.toLowerCase());
-    const matchDept = !filterDept || m.dept_id === Number(filterDept);
-    return matchKeyword && matchDept;
-  });
 
   const openCreate = () => {
     setEditing(null);
@@ -131,6 +136,9 @@ export default function MajorsPage() {
   };
 
   const columns: Column<Major>[] = [
+    ...(canWrite
+      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (m) => m.id, (m) => m.name)]
+      : []),
     { header: "ID", width: "80px", cell: (m) => <span className="text-ink-mute tabular-nums">{m.id}</span> },
     { header: "专业名称", cell: (m) => <span className="text-ink">{m.name}</span> },
     { header: "所属院系", cell: (m) => deptName(m.dept_id) },
@@ -166,6 +174,14 @@ export default function MajorsPage() {
         </div>
         {canWrite && (
           <>
+            <BatchDeleteButton
+              selectedIds={selected}
+              deleteOne={(id) => majorApi.remove(id)}
+              onDone={load}
+              entityLabel="专业"
+              canWrite={canWrite}
+              hint={`确定删除选中的 ${selected.size} 个专业吗？若其下存在班级将无法删除，将自动跳过。此操作不可撤销。`}
+            />
             <OrgSpreadsheetActions
               kind="majors"
               importTitle="导入专业"

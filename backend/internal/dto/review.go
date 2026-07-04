@@ -6,7 +6,7 @@ import (
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 )
 
-// ===== 模块 5：四级评审与退回 =====
+// ===== 模块 5：三级评审与退回 =====
 
 // ReviewActionRequest 单条评审动作请求（通过/退回共用）。
 type ReviewActionRequest struct {

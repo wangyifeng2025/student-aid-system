@@ -37,6 +37,13 @@ import type {
   SubmitResult,
 } from "@/types/recognition";
 import type {
+  Grant,
+  GrantFilter,
+  GrantInput,
+  GrantListItem,
+  CreateGrantInput,
+} from "@/types/grant";
+import type {
   ResetPasswordInput,
   User,
   UserCreateInput,
@@ -49,7 +56,13 @@ import { clearSession, loadSession, updateSession } from "@/lib/token-storage";
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (configured) return configured.replace(/\/$/, "");
-  if (typeof window !== "undefined") return window.location.origin;
+  // 生产构建且未配置 env：走 Nginx 同源反代 /api → backend
+  if (
+    process.env.NODE_ENV === "production" &&
+    typeof window !== "undefined"
+  ) {
+    return window.location.origin;
+  }
   return "http://localhost:8080";
 }
 
@@ -351,6 +364,8 @@ export const studentApi = {
         is_key_group: filter?.is_key_group,
       })}`,
     ),
+  /** 学生本人获取关联学籍档案 */
+  me: () => apiFetch<Student>("/students/me"),
   get: (id: number) => apiFetch<Student>(`/students/${id}`),
   create: (body: StudentInput) =>
     apiFetch<Student>("/students", { method: "POST", body }),
@@ -471,7 +486,9 @@ export const recognitionApi = {
     apiFetch<{ message: string }>(`/recognitions/${id}`, { method: "DELETE" }),
   submit: (id: number) =>
     apiFetch<SubmitResult>(`/recognitions/${id}/submit`, { method: "POST" }),
-  exportPdf: (id: number, fallbackName = `recognition_${id}.pdf`) =>
+  withdraw: (id: number) =>
+    apiFetch<Recognition>(`/recognitions/${id}/withdraw`, { method: "POST" }),
+  exportDocx: (id: number, fallbackName = `recognition_${id}.docx`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
   // 附件
   listAttachments: (id: number) =>
@@ -508,7 +525,7 @@ export const userApi = {
     }),
 };
 
-// ===== 四级评审与退回 Review（模块 5）=====
+// ===== 三级评审与退回 Review（模块 5）=====
 
 export const reviewApi = {
   todo: (filter?: RecognitionFilter) =>
@@ -537,8 +554,68 @@ export const reviewApi = {
     apiFetch<Recognition>(`/reviews/${id}/pass`, { method: "POST", body }),
   reject: (id: number, body: ReviewActionInput) =>
     apiFetch<Recognition>(`/reviews/${id}/reject`, { method: "POST", body }),
+  withdraw: (id: number) =>
+    apiFetch<Recognition>(`/reviews/${id}/withdraw`, { method: "POST" }),
   batch: (body: BatchReviewInput) =>
     apiFetch<BatchReviewResult>("/reviews/batch", { method: "POST", body }),
+};
+
+// ===== 助学金申请 Grant（模块 6）=====
+
+export const grantApi = {
+  list: (filter?: GrantFilter) =>
+    apiFetch<PageResult<GrantListItem>>(
+      `/grants${buildParams({
+        page: filter?.page,
+        page_size: filter?.page_size,
+        year: filter?.year,
+        status: filter?.status,
+        grant_type: filter?.grant_type,
+        keyword: filter?.keyword,
+      })}`,
+    ),
+  get: (id: number) => apiFetch<Grant>(`/grants/${id}`),
+  create: (body: CreateGrantInput) =>
+    apiFetch<Grant>("/grants", { method: "POST", body }),
+  update: (id: number, body: GrantInput) =>
+    apiFetch<Grant>(`/grants/${id}`, { method: "PUT", body }),
+  remove: (id: number) =>
+    apiFetch<{ message: string }>(`/grants/${id}`, { method: "DELETE" }),
+  submit: (id: number) =>
+    apiFetch<Grant>(`/grants/${id}/submit`, { method: "POST" }),
+  exportPdf: (id: number, fallbackName = `grant_${id}.pdf`) =>
+    downloadFile(`/grants/${id}/export`, fallbackName),
+};
+
+export const grantReviewApi = {
+  todo: (filter?: GrantFilter) =>
+    apiFetch<PageResult<GrantListItem>>(
+      `/grant-reviews/todo${buildParams({
+        page: filter?.page,
+        page_size: filter?.page_size,
+        year: filter?.year,
+        status: filter?.status,
+        keyword: filter?.keyword,
+      })}`,
+    ),
+  records: (filter?: GrantFilter) =>
+    apiFetch<PageResult<GrantListItem>>(
+      `/grant-reviews/records${buildParams({
+        tab: filter?.tab,
+        page: filter?.page,
+        page_size: filter?.page_size,
+        year: filter?.year,
+        status: filter?.status,
+        keyword: filter?.keyword,
+      })}`,
+    ),
+  get: (id: number) => apiFetch<Grant>(`/grant-reviews/${id}`),
+  pass: (id: number, body: ReviewActionInput = {}) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/pass`, { method: "POST", body }),
+  reject: (id: number, body: ReviewActionInput) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/reject`, { method: "POST", body }),
+  withdraw: (id: number) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/withdraw`, { method: "POST" }),
 };
 
 // ===== 附件下载 / 删除 =====

@@ -17,7 +17,9 @@ import {
   difficultyLabel,
   difficultyTone,
   levelName,
+  todoStatusOptionsForRole,
 } from "@/lib/recognition-options";
+import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import type {
   RecognitionListItem,
@@ -25,20 +27,18 @@ import type {
   ReviewActionType,
 } from "@/types/recognition";
 
-const PAGE_SIZE = 20;
-
-// 待办状态筛选项（评审角色仅能查看待审状态）。
-const TODO_STATUS_OPTIONS = [
-  { value: "pending_class", label: "待班级评审" },
-  { value: "pending_dept", label: "待教学系评审" },
-  { value: "pending_college", label: "待院级评审" },
-  { value: "pending_final", label: "待第四级确认" },
-];
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function ReviewsPage() {
+  const role = useAuthStore((s) => s.user?.role);
+  const statusOptions = React.useMemo(
+    () => todoStatusOptionsForRole(role),
+    [role],
+  );
   const [list, setList] = React.useState<RecognitionListItem[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -58,7 +58,7 @@ export default function ReviewsPage() {
     try {
       const res = await reviewApi.todo({
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         year: filterYear ? Number(filterYear) : undefined,
@@ -71,7 +71,7 @@ export default function ReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, keyword, filterStatus, filterYear]);
+  }, [page, pageSize, keyword, filterStatus, filterYear]);
 
   React.useEffect(() => {
     void load();
@@ -80,6 +80,11 @@ export default function ReviewsPage() {
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
     setFilterYear(yearInput);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
     setPage(1);
   };
 
@@ -232,7 +237,7 @@ export default function ReviewsPage() {
             }}
           >
             <option value="">全部待办</option>
-            {TODO_STATUS_OPTIONS.map((o) => (
+            {statusOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -284,7 +289,13 @@ export default function ReviewsPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
 
       <ReviewActionDialog

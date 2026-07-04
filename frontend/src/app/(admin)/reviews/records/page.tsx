@@ -14,23 +14,24 @@ import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { StatusBadge } from "@/components/recognition/status-badge";
+import { StatTabBar } from "@/components/review/stat-tab-bar";
 import {
   difficultyLabel,
   difficultyTone,
   levelName,
   RECORDS_STATUS_OPTIONS,
-  todoStatusOptionsForRole,
+  recordsTodoStatusOptionsForRole,
 } from "@/lib/recognition-options";
 import type { RecognitionListItem } from "@/types/recognition";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 type RecordsTab = "all" | "todo" | "done";
 
-const TAB_ITEMS: { value: RecordsTab; label: string; hint: string }[] = [
-  { value: "all", label: "全部", hint: "数据范围内所有已提交的认定申请（不含学生草稿）" },
-  { value: "todo", label: "待审核", hint: "当前轮到您处理的申请" },
-  { value: "done", label: "已审核", hint: "您已处理过或已流转至下一环节的申请" },
+const TAB_ITEMS: { value: RecordsTab; label: string; hint: string; accentColor: string }[] = [
+  { value: "all", label: "全部", hint: "数据范围内所有已提交的认定申请（不含学生草稿）", accentColor: "var(--color-primary)" },
+  { value: "todo", label: "待审核", hint: "需您本人审核，或下级部门正在审核的申请", accentColor: "var(--state-info)" },
+  { value: "done", label: "已审核", hint: "您本人已审核过的申请", accentColor: "var(--state-success)" },
 ];
 
 function parseTab(v: string | null): RecordsTab {
@@ -48,6 +49,7 @@ export default function ReviewRecordsPage() {
   const [list, setList] = React.useState<RecognitionListItem[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -56,6 +58,13 @@ export default function ReviewRecordsPage() {
   const [filterStatus, setFilterStatus] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
+
+  const [tabCounts, setTabCounts] = React.useState<Record<RecordsTab, number>>({
+    all: 0,
+    todo: 0,
+    done: 0,
+  });
+  const [countsLoading, setCountsLoading] = React.useState(true);
 
   const setTab = (next: RecordsTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -72,7 +81,7 @@ export default function ReviewRecordsPage() {
       const res = await reviewApi.records({
         tab,
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         year: filterYear ? Number(filterYear) : undefined,
@@ -84,11 +93,47 @@ export default function ReviewRecordsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, page, keyword, filterStatus, filterYear]);
+  }, [tab, page, pageSize, keyword, filterStatus, filterYear]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  // 并行拉取三个标签的数量（与当前筛选条件一致，不含分页）
+  React.useEffect(() => {
+    let cancelled = false;
+    setCountsLoading(true);
+    const base = {
+      page: 1,
+      page_size: 1,
+      keyword: keyword || undefined,
+      status: filterStatus || undefined,
+      year: filterYear ? Number(filterYear) : undefined,
+    };
+    (async () => {
+      try {
+        const [allRes, todoRes, doneRes] = await Promise.all([
+          reviewApi.records({ ...base, tab: "all" }),
+          reviewApi.records({ ...base, tab: "todo" }),
+          reviewApi.records({ ...base, tab: "done" }),
+        ]);
+        if (!cancelled) {
+          setTabCounts({
+            all: allRes.total,
+            todo: todoRes.total,
+            done: doneRes.total,
+          });
+        }
+      } catch {
+        if (!cancelled) setTabCounts({ all: 0, todo: 0, done: 0 });
+      } finally {
+        if (!cancelled) setCountsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [keyword, filterStatus, filterYear]);
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
@@ -96,8 +141,13 @@ export default function ReviewRecordsPage() {
     setPage(1);
   };
 
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
+
   const statusOptions =
-    tab === "todo" ? todoStatusOptionsForRole(role) : RECORDS_STATUS_OPTIONS;
+    tab === "todo" ? recordsTodoStatusOptionsForRole(role) : RECORDS_STATUS_OPTIONS;
 
   const activeTabHint = TAB_ITEMS.find((t) => t.value === tab)?.hint ?? "";
 
@@ -161,26 +211,6 @@ export default function ReviewRecordsPage() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-ink-soft">{activeTabHint}</p>
-
-      <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-3">
-        {TAB_ITEMS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setTab(item.value)}
-            className="rounded-md px-3 py-1.5 text-sm transition-colors"
-            style={{
-              backgroundColor: tab === item.value ? "var(--color-primary-subtle)" : "transparent",
-              color: tab === item.value ? "var(--color-primary)" : "var(--color-ink-soft)",
-              fontWeight: tab === item.value ? 600 : 400,
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       <Toolbar>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <div className="relative min-w-0" style={{ width: 240 }}>
@@ -223,6 +253,22 @@ export default function ReviewRecordsPage() {
         </div>
       </Toolbar>
 
+      <StatTabBar
+        items={TAB_ITEMS.map((item) => ({
+          value: item.value,
+          label: item.label,
+          count: tabCounts[item.value],
+          accentColor: item.accentColor,
+        }))}
+        active={tab}
+        onChange={(v) => setTab(v as RecordsTab)}
+        loading={countsLoading}
+      />
+
+      {activeTabHint && (
+        <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>
+      )}
+
       <DataTable
         columns={columns}
         data={list}
@@ -240,7 +286,13 @@ export default function ReviewRecordsPage() {
       />
 
       {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
     </div>
   );
