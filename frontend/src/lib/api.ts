@@ -583,7 +583,7 @@ export const grantApi = {
     apiFetch<{ message: string }>(`/grants/${id}`, { method: "DELETE" }),
   submit: (id: number) =>
     apiFetch<Grant>(`/grants/${id}/submit`, { method: "POST" }),
-  exportPdf: (id: number, fallbackName = `grant_${id}.pdf`) =>
+  exportDocx: (id: number, fallbackName = `grant_${id}.docx`) =>
     downloadFile(`/grants/${id}/export`, fallbackName),
 };
 
@@ -623,6 +623,21 @@ export const grantReviewApi = {
 export const attachmentApi = {
   download: (id: number, fileName: string) =>
     downloadFile(`/attachments/${id}/download`, fileName),
+  /** 以 Blob 读取附件（用于手写签字回填预览，不触发浏览器下载）。 */
+  fetchBlob: async (id: number): Promise<Blob> => {
+    const headers: Record<string, string> = {};
+    const session = loadSession();
+    if (session?.accessToken) {
+      headers.Authorization = `Bearer ${session.accessToken}`;
+    }
+    const res = await fetch(`${getApiBase()}${API_PREFIX}/attachments/${id}/download`, {
+      headers,
+    });
+    if (!res.ok) {
+      throw new ApiError("读取附件失败", -1, res.status);
+    }
+    return res.blob();
+  },
   remove: (id: number) =>
     apiFetch<{ message: string }>(`/attachments/${id}`, { method: "DELETE" }),
 };

@@ -32,7 +32,7 @@ type RecognitionApplication struct {
 	Debt            string `gorm:"size:512" json:"debt"`             // 欠债情况
 	OtherInfo       string `gorm:"size:1024" json:"other_info"`      // 其他情况
 
-	// 个人承诺（线上勾选记录，签字线下手写）
+	// 个人承诺：线上勾选 + 手写承诺/签字图（附件 commitment_handwriting.png / student_signature.png）
 	CommitmentAgreed bool `gorm:"default:false" json:"commitment_agreed"`
 
 	// 流程与结果

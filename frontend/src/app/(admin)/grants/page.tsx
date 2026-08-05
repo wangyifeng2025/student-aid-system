@@ -94,9 +94,9 @@ export default function GrantsPage() {
             <button
               type="button"
               className="text-xs text-link hover:underline"
-              onClick={() => grantApi.exportPdf(r.id)}
+              onClick={() => grantApi.exportDocx(r.id)}
             >
-              <Download size={14} className="inline" /> PDF
+              <Download size={14} className="inline" /> Word
             </button>
           )}
           {isStudent && canEditGrant(r.status) && (

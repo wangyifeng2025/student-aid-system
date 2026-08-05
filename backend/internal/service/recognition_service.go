@@ -20,6 +20,7 @@ type RecognitionService struct {
 	orgRepo  *repository.OrgRepository
 	dictRepo *repository.DictRepository
 	userRepo *repository.UserRepository
+	attRepo  *repository.AttachmentRepository
 }
 
 func NewRecognitionService(db *gorm.DB) *RecognitionService {
@@ -29,8 +30,15 @@ func NewRecognitionService(db *gorm.DB) *RecognitionService {
 		orgRepo:  repository.NewOrgRepository(db),
 		dictRepo: repository.NewDictRepository(db),
 		userRepo: repository.NewUserRepository(db),
+		attRepo:  repository.NewAttachmentRepository(db),
 	}
 }
+
+// 与前端约定一致的手写承诺 / 签字附件文件名。
+const (
+	commitmentHandwritingFile = "commitment_handwriting.png"
+	studentSignatureFile      = "student_signature.png"
+)
 
 // List 按数据范围分页列出认定申请。
 func (s *RecognitionService) List(actor rbac.Actor, f repository.RecognitionFilter) (*dto.PageResult[dto.RecognitionListItem], error) {
@@ -242,6 +250,9 @@ func (s *RecognitionService) Submit(actor rbac.Actor, id uint) (*dto.SubmitResul
 		return nil, NewValidationError("当前状态不可提交（仅草稿或被退回的申请可提交）")
 	}
 	if err := validateForSubmit(a); err != nil {
+		return nil, err
+	}
+	if err := s.requireSignatureAttachments(id); err != nil {
 		return nil, err
 	}
 
@@ -465,6 +476,30 @@ func validateForSubmit(a *model.RecognitionApplication) error {
 	}
 	if !a.CommitmentAgreed {
 		return NewValidationError("请先勾选个人承诺")
+	}
+	return nil
+}
+
+// requireSignatureAttachments 提交前须已上传手写承诺内容与学生签字两张图。
+func (s *RecognitionService) requireSignatureAttachments(appID uint) error {
+	items, err := s.attRepo.ListByOwner(OwnerTypeRecognition, appID)
+	if err != nil {
+		return err
+	}
+	hasCommitment, hasSignature := false, false
+	for i := range items {
+		switch items[i].FileName {
+		case commitmentHandwritingFile:
+			hasCommitment = true
+		case studentSignatureFile:
+			hasSignature = true
+		}
+	}
+	if !hasCommitment {
+		return NewValidationError("请手写承诺内容并保存后再提交")
+	}
+	if !hasSignature {
+		return NewValidationError("请完成学生本人（或监护人）签字后再提交")
 	}
 	return nil
 }

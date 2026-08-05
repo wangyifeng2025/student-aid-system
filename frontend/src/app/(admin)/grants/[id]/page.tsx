@@ -43,7 +43,7 @@ export default function GrantDetailPage() {
 
   const handleExport = async () => {
     try {
-      await grantApi.exportPdf(id);
+      await grantApi.exportDocx(id);
       toast.success("PDF 已开始下载");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
@@ -67,7 +67,7 @@ export default function GrantDetailPage() {
             </Link>
           )}
           {data.status === "approved" && (
-            <Button size="sm" onClick={handleExport}><Download size={16} /> 导出 PDF</Button>
+            <Button size="sm" onClick={handleExport}><Download size={16} /> 导出 Word</Button>
           )}
         </div>
       </div>

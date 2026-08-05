@@ -61,6 +61,9 @@ type ExportConfig struct {
 	// RecognitionTemplatePath 认定申请表 Word 模板（docx，含 {占位符}），
 	// 认定通过后导出 docx 时使用。
 	RecognitionTemplatePath string `mapstructure:"recognition_template_path"`
+	// GrantTemplatePath 助学金申请表 Word 模板（docx，含 {占位符}），
+	// 审批通过后导出 docx 时使用。
+	GrantTemplatePath string `mapstructure:"grant_template_path"`
 }
 
 // Load 从 config/config.yaml 及环境变量加载配置。
@@ -154,4 +157,5 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("export.pdf_font_path", "")
 	v.SetDefault("export.school_name", "黔西南民族职业技术学院")
 	v.SetDefault("export.recognition_template_path", "./assets/templates/recognition_application.docx")
+	v.SetDefault("export.grant_template_path", "./assets/templates/grant_national_aid.docx")
 }

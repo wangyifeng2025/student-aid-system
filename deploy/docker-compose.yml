@@ -43,6 +43,7 @@ services:
       SAS_UPLOAD_MAX_SIZE_MB: "20"
       SAS_EXPORT_PDF_FONT_PATH: ${SAS_EXPORT_PDF_FONT_PATH:-}
       SAS_EXPORT_RECOGNITION_TEMPLATE_PATH: /app/assets/templates/recognition_application.docx
+      SAS_EXPORT_GRANT_TEMPLATE_PATH: /app/assets/templates/grant_national_aid.docx
     volumes:
       - uploads:/app/uploads
     depends_on:

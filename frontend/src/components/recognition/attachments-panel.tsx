@@ -3,6 +3,7 @@
 import * as React from "react";
 import { FileText, Image as ImageIcon, Upload, Trash2, Download } from "lucide-react";
 import { recognitionApi, attachmentApi, ApiError } from "@/lib/api";
+import { isSignatureAttachment } from "@/lib/signature";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/states";
@@ -37,7 +38,8 @@ export function AttachmentsPanel({ recognitionId, editable }: Props) {
     setLoading(true);
     try {
       const res = await recognitionApi.listAttachments(recognitionId);
-      setItems(res);
+      // 手写承诺/签字图由专用签字区管理，不混入支撑材料列表。
+      setItems(res.filter((a) => !isSignatureAttachment(a.file_name)));
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "加载附件失败");
     } finally {

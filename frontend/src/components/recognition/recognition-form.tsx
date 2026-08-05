@@ -30,6 +30,11 @@ import {
   emptyMember,
 } from "@/components/recognition/family-members-editor";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
+import { CommitmentSignatureBlock } from "@/components/recognition/commitment-signature-block";
+import {
+  loadSignatureDataUrls,
+  syncSignatureAttachments,
+} from "@/lib/signature-upload";
 import type { Recognition, RecognitionInput } from "@/types/recognition";
 
 // ===== 校验工具（与后端 pkg/validate 对齐）=====
@@ -165,6 +170,29 @@ export function RecognitionForm({ mode, initial }: Props) {
   const [saving, setSaving] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [profileLoading, setProfileLoading] = React.useState(true);
+  const [commitmentDataUrl, setCommitmentDataUrl] = React.useState("");
+  const [signatureDataUrl, setSignatureDataUrl] = React.useState("");
+  const [signatureDirty, setSignatureDirty] = React.useState(false);
+
+  // 编辑已有草稿时回填手写承诺 / 签字图。
+  React.useEffect(() => {
+    if (!savedId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const imgs = await loadSignatureDataUrls(savedId);
+        if (cancelled) return;
+        setCommitmentDataUrl(imgs.commitment);
+        setSignatureDataUrl(imgs.signature);
+        setSignatureDirty(false);
+      } catch {
+        // 附件缺失时不阻断填报。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [savedId]);
 
   // 身份证号从学籍档案自动读取，学生不可手填。
   React.useEffect(() => {
@@ -237,28 +265,73 @@ export function RecognitionForm({ mode, initial }: Props) {
     return null;
   }
 
-  // 提交前的完整校验（镜像后端 validateForSubmit）。
-  function checkForSubmit(): string | null {
+  /** 第 0 步「基本信息」全部必填，未填完不可进入下一步。 */
+  function checkStep0(): string | null {
+    if (!form.year || form.year < 2000) return "请填写有效的认定年度";
     if (!form.nation.trim()) return "请选择民族";
     if (!form.native_place.trim()) return "请填写籍贯";
     if (!form.id_card || !isIdCard(form.id_card)) return "请填写有效的 18 位身份证号";
     if (!form.phone || !isPhone(form.phone)) return "请填写有效的手机号";
-    if (!form.address.trim()) return "请填写详细通讯地址";
+    if (!form.guardian_phone.trim()) return "请填写家长手机号";
+    if (!isPhone(form.guardian_phone)) return "家长手机号格式不正确";
+    if (form.family_population < 1) return "请填写家庭人口（至少为 1）";
     if (form.household_type !== "urban" && form.household_type !== "rural")
       return "请选择户口类型（城镇/农村）";
-    if (form.family_population < 1) return "家庭人口至少为 1";
+    if (!form.income_source.trim()) return "请选择主要收入来源";
+    if (!form.postal_code.trim()) return "请填写邮政编码";
+    if (!/^\d{6}$/.test(form.postal_code.trim())) return "邮政编码须为 6 位数字";
+    if (!form.address.trim()) return "请填写详细通讯地址";
+    return null;
+  }
+
+  /** 第 1 步「家庭成员」人数与姓名必填。 */
+  function checkStep1(): string | null {
     if (form.family_members.length !== expectedMembers)
       return `家庭成员人数应为 ${expectedMembers} 人（家庭人口 ${form.family_population} 减去本人），当前 ${form.family_members.length} 人`;
     for (const m of form.family_members) {
       if (!m.name.trim()) return "请填写每位家庭成员的姓名";
+      if (!m.relation.trim()) return "请选择每位家庭成员与学生的关系";
     }
+    return null;
+  }
+
+  // 提交前的完整校验（镜像后端 validateForSubmit，并含分步必填项）。
+  function checkForSubmit(): string | null {
+    const step0Err = checkStep0();
+    if (step0Err) return step0Err;
+    const step1Err = checkStep1();
+    if (step1Err) return step1Err;
     const hasDisabled = form.family_members.some((m) => m.health === "disabled");
     if (hasDisabled && !form.other_info.trim())
       return "家庭成员存在残疾，请在「其他情况说明」中补充说明";
     if (form.special_types.length === 0 && !form.other_info.trim())
       return "未勾选特殊群体类型时，请在「其他情况说明」中说明家庭经济困难原因";
     if (!form.commitment_agreed) return "请先勾选个人承诺";
+    if (!commitmentDataUrl) return "请手写承诺内容";
+    if (!signatureDataUrl) return "请完成学生本人（或监护人）签字";
     return null;
+  }
+
+  function handleNext() {
+    if (step === 0) {
+      const err = checkStep0();
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    } else if (step === 1) {
+      const err = checkStep1();
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    }
+    setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  }
+
+  function handleSelectStep(next: number) {
+    // 仅允许回退到已完成步骤，禁止跳过未校验步骤。
+    if (next <= step) setStep(next);
   }
 
   // 保存（create 或 update），返回申请 id。
@@ -289,6 +362,16 @@ export function RecognitionForm({ mode, initial }: Props) {
     }
     setSaving(true);
     const id = await persist();
+    if (id && signatureDirty) {
+      try {
+        await syncSignatureAttachments(id, commitmentDataUrl, signatureDataUrl);
+        setSignatureDirty(false);
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : "手写签字上传失败");
+        setSaving(false);
+        return;
+      }
+    }
     setSaving(false);
     if (id) toast.success("已保存草稿");
   };
@@ -306,6 +389,8 @@ export function RecognitionForm({ mode, initial }: Props) {
       return;
     }
     try {
+      await syncSignatureAttachments(id, commitmentDataUrl, signatureDataUrl);
+      setSignatureDirty(false);
       const res = await recognitionApi.submit(id);
       toast.success("申请已提交，进入班级评审");
       for (const w of res.warnings ?? []) toast.info(w);
@@ -346,7 +431,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               )}
               <button
                 type="button"
-                onClick={() => setStep(i)}
+                onClick={() => handleSelectStep(i)}
                 className="flex min-w-[80px] flex-col items-center"
               >
                 <span
@@ -403,7 +488,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div>
-              <Label>民族</Label>
+              <Label>民族 *</Label>
               <Select className="h-10 w-full" value={form.nation} onChange={(e) => set("nation", e.target.value)}>
                 {NATION_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -411,7 +496,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               </Select>
             </div>
             <div>
-              <Label>籍贯</Label>
+              <Label>籍贯 *</Label>
               <Input
                 value={form.native_place}
                 onChange={(e) => set("native_place", e.target.value)}
@@ -419,7 +504,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div>
-              <Label>身份证号</Label>
+              <Label>身份证号 *</Label>
               <Input
                 value={form.id_card}
                 readOnly
@@ -432,7 +517,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               </p>
             </div>
             <div>
-              <Label>手机号</Label>
+              <Label>手机号 *</Label>
               <Input
                 value={form.phone}
                 onChange={(e) => set("phone", e.target.value)}
@@ -440,7 +525,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div>
-              <Label>家长手机号</Label>
+              <Label>家长手机号 *</Label>
               <Input
                 value={form.guardian_phone}
                 onChange={(e) => set("guardian_phone", e.target.value)}
@@ -448,7 +533,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div>
-              <Label>家庭人口</Label>
+              <Label>家庭人口 *</Label>
               <Input
                 inputMode="numeric"
                 value={form.family_population || ""}
@@ -459,7 +544,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div>
-              <Label>户口类型</Label>
+              <Label>户口类型 *</Label>
               <Select
                 className="h-10 w-full"
                 value={form.household_type}
@@ -471,7 +556,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               </Select>
             </div>
             <div>
-              <Label>主要收入来源</Label>
+              <Label>主要收入来源 *</Label>
               <Select
                 className="h-10 w-full"
                 value={form.income_source}
@@ -483,7 +568,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               </Select>
             </div>
             <div>
-              <Label>邮政编码</Label>
+              <Label>邮政编码 *</Label>
               <Input
                 value={form.postal_code}
                 onChange={(e) => set("postal_code", e.target.value)}
@@ -491,7 +576,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               />
             </div>
             <div className="md:col-span-2">
-              <Label>详细通讯地址</Label>
+              <Label>详细通讯地址 *</Label>
               <Input
                 value={form.address}
                 onChange={(e) => set("address", e.target.value)}
@@ -665,6 +750,25 @@ export function RecognitionForm({ mode, initial }: Props) {
             </label>
           </SectionCard>
 
+          <SectionCard title="个人承诺与签字">
+            <p className="mb-3 text-xs text-ink-mute">
+              对照纸质申请表「个人承诺」栏：左侧手写承诺原文，右侧本人或监护人签字。提交前两项均须完成。
+            </p>
+            <CommitmentSignatureBlock
+              commitmentDataUrl={commitmentDataUrl}
+              signatureDataUrl={signatureDataUrl}
+              onCommitmentChange={(v) => {
+                setCommitmentDataUrl(v);
+                setSignatureDirty(true);
+              }}
+              onSignatureChange={(v) => {
+                setSignatureDataUrl(v);
+                setSignatureDirty(true);
+              }}
+              disabled={busy}
+            />
+          </SectionCard>
+
           <SectionCard title="附件材料">
             {savedId ? (
               <AttachmentsPanel recognitionId={savedId} editable />
@@ -691,7 +795,7 @@ export function RecognitionForm({ mode, initial }: Props) {
             上一步
           </Button>
           {step < STEPS.length - 1 ? (
-            <Button onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))} disabled={busy}>
+            <Button onClick={handleNext} disabled={busy}>
               下一步
               <ArrowRight size={16} />
             </Button>

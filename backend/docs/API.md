@@ -551,7 +551,7 @@
 | PUT | `/api/v1/grants/:id` | 修改草稿/被退回申请 | 学生本人 |
 | DELETE | `/api/v1/grants/:id` | 删除草稿/被退回申请 | 学生本人 |
 | POST | `/api/v1/grants/:id/submit` | 提交进入班级评审 | 学生本人 |
-| GET | `/api/v1/grants/:id/export` | 导出《国家助学金申请表》PDF（仅 `approved`） | 按数据范围 |
+| GET | `/api/v1/grants/:id/export` | 导出《国家助学金申请表》docx（仅 `approved`；基于 Word 模板填数，需配置 `export.grant_template_path`） | 按数据范围 |
 
 **助学金评审**
 

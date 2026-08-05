@@ -135,6 +135,9 @@ func (h *Handler) ExportGrantPDF(c *gin.Context) {
 		mapCommonError(c, err)
 		return
 	}
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, "application/pdf", data)
+	c.Header("Content-Disposition",
+		`attachment; filename="`+filename+`"; filename*=UTF-8''`+filename)
+	c.Data(http.StatusOK,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		data)
 }
