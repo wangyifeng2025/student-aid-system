@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -25,6 +28,8 @@ type Props = {
   visible: boolean;
   mode: ReviewActionMode;
   currentLevel: number;
+  /** 默认：班级级通过时强制选困难等级；助学金审核传 false。 */
+  requireDifficulty?: boolean;
   submitting?: boolean;
   onClose: () => void;
   onConfirm: (payload: ConfirmPayload) => void;
@@ -34,6 +39,7 @@ export function ReviewActionModal({
   visible,
   mode,
   currentLevel,
+  requireDifficulty: requireDifficultyProp,
   submitting,
   onClose,
   onConfirm,
@@ -42,8 +48,11 @@ export function ReviewActionModal({
   const [opinion, setOpinion] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [rejectTarget, setRejectTarget] = useState<string>('0');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const requireDifficulty = mode === 'pass' && currentLevel === 1;
+  const requireDifficulty =
+    requireDifficultyProp ?? (mode === 'pass' && currentLevel === 1);
+  const showDifficulty = mode === 'pass' && requireDifficultyProp !== false;
   const targetOptions = rejectTargetOptions(currentLevel);
 
   useEffect(() => {
@@ -51,13 +60,32 @@ export function ReviewActionModal({
       setOpinion('');
       setDifficulty('');
       setRejectTarget(targetOptions[0]?.value ?? '0');
+      setKeyboardHeight(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, mode]);
 
+  // Modal 内 KeyboardAvoidingView 在 iOS 上不稳定，直接监听键盘高度上移底部弹层。
+  useEffect(() => {
+    if (!visible) return;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [visible]);
+
   function handleConfirm() {
     if (mode === 'reject' && !opinion.trim()) return;
     if (requireDifficulty && !difficulty) return;
+    Keyboard.dismiss();
     onConfirm({
       opinion: opinion.trim(),
       difficulty_level: mode === 'pass' ? difficulty || undefined : undefined,
@@ -68,86 +96,115 @@ export function ReviewActionModal({
   const confirmDisabled =
     submitting || (mode === 'reject' && !opinion.trim()) || (requireDifficulty && !difficulty);
 
+  const sheetBottomPad = keyboardHeight > 0 ? 12 : 16 + insets.bottom;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
-        <Text style={styles.title}>{mode === 'pass' ? '通过评审' : '退回评审'}</Text>
+      <View style={styles.container}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingBottom: sheetBottomPad,
+              marginBottom: keyboardHeight,
+            },
+          ]}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sheetContent}>
+            <Text style={styles.title}>{mode === 'pass' ? '通过评审' : '退回评审'}</Text>
 
-        {mode === 'pass' && (
-          <View style={styles.field}>
-            <Text style={styles.label}>
-              困难等级{requireDifficulty ? <Text style={styles.required}> *</Text> : '（可调整）'}
-            </Text>
-            <View style={styles.chipRow}>
-              {DIFFICULTY_OPTIONS.map((o) => {
-                const active = difficulty === o.value;
-                return (
-                  <Pressable
-                    key={o.value}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setDifficulty(o.value)}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {mode === 'reject' && targetOptions.length > 0 && (
-          <View style={styles.field}>
-            <Text style={styles.label}>退回至</Text>
-            <View style={styles.chipRow}>
-              {targetOptions.map((o) => {
-                const active = rejectTarget === o.value;
-                return (
-                  <Pressable
-                    key={o.value}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setRejectTarget(o.value)}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        <View style={styles.field}>
-          <Text style={styles.label}>
-            评审意见{mode === 'reject' ? <Text style={styles.required}> *</Text> : ''}
-          </Text>
-          <TextInput
-            style={styles.textarea}
-            value={opinion}
-            onChangeText={setOpinion}
-            placeholder={mode === 'reject' ? '请填写退回原因' : '可填写审核意见（选填）'}
-            placeholderTextColor={Brand.mutedForeground}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable style={styles.cancelBtn} onPress={onClose}>
-            <Text style={styles.cancelText}>取消</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.confirmBtn,
-              mode === 'reject' && styles.confirmBtnReject,
-              confirmDisabled && styles.confirmBtnDisabled,
-            ]}
-            disabled={confirmDisabled}
-            onPress={handleConfirm}>
-            {submitting ? (
-              <ActivityIndicator color={Brand.primaryForeground} />
-            ) : (
-              <Text style={styles.confirmText}>{mode === 'pass' ? '确认通过' : '确认退回'}</Text>
+            {mode === 'pass' && showDifficulty && (
+              <View style={styles.field}>
+                <Text style={styles.label}>
+                  困难等级
+                  {requireDifficulty ? <Text style={styles.required}> *</Text> : '（可调整）'}
+                </Text>
+                <View style={styles.chipRow}>
+                  {DIFFICULTY_OPTIONS.map((o) => {
+                    const active = difficulty === o.value;
+                    return (
+                      <Pressable
+                        key={o.value}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setDifficulty(o.value)}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {o.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             )}
-          </Pressable>
+
+            {mode === 'reject' && targetOptions.length > 0 && (
+              <View style={styles.field}>
+                <Text style={styles.label}>退回至</Text>
+                <View style={styles.chipRow}>
+                  {targetOptions.map((o) => {
+                    const active = rejectTarget === o.value;
+                    return (
+                      <Pressable
+                        key={o.value}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setRejectTarget(o.value)}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {o.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                评审意见{mode === 'reject' ? <Text style={styles.required}> *</Text> : ''}
+              </Text>
+              <TextInput
+                style={styles.textarea}
+                value={opinion}
+                onChangeText={setOpinion}
+                placeholder={mode === 'reject' ? '请填写退回原因' : '可填写审核意见（选填）'}
+                placeholderTextColor={Brand.mutedForeground}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.actions}>
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onClose();
+                }}>
+                <Text style={styles.cancelText}>取消</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.confirmBtn,
+                  mode === 'reject' && styles.confirmBtnReject,
+                  confirmDisabled && styles.confirmBtnDisabled,
+                ]}
+                disabled={confirmDisabled}
+                onPress={handleConfirm}>
+                {submitting ? (
+                  <ActivityIndicator color={Brand.primaryForeground} />
+                ) : (
+                  <Text style={styles.confirmText}>
+                    {mode === 'pass' ? '确认通过' : '确认退回'}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -155,14 +212,21 @@ export function ReviewActionModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  container: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.32)',
   },
   sheet: {
     backgroundColor: Brand.card,
     borderTopLeftRadius: Brand.radius,
     borderTopRightRadius: Brand.radius,
+    maxHeight: '85%',
+  },
+  sheetContent: {
     padding: 20,
     gap: 14,
   },

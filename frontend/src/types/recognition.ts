@@ -169,5 +169,7 @@ export interface RecognitionFilter {
   year?: number;
   status?: string;
   keyword?: string;
+  dept_id?: number;
+  class_id?: number;
   tab?: "todo" | "done" | "all";
 }

@@ -14,31 +14,31 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FormHeader } from '@/components/recognition-form/form-header';
 import { SectionCard } from '@/components/recognition-form/section-card';
 import { DetailRow } from '@/components/reviews/detail-row';
-import { FamilyMemberView } from '@/components/reviews/family-member-view';
 import { ReviewActionModal, type ReviewActionMode } from '@/components/reviews/review-action-modal';
 import { ReviewTimeline } from '@/components/reviews/review-timeline';
-import { SignaturePreview } from '@/components/reviews/signature-preview';
 import { StatusBadge } from '@/components/reviews/status-badge';
 import { Brand } from '@/constants/brand';
+import { canReviewGrant, grantTypeLabel } from '@/constants/grant-options';
 import {
   householdLabel,
   incomeSourceLabel,
   nationLabel,
-  specialGroupLabel,
+  relationLabel,
 } from '@/constants/recognition-options';
-import { actingLevel, canReview, canWithdrawReview } from '@/constants/review-options';
-import { ApiError, reviewApi } from '@/lib/api';
+import { actingLevel, canWithdrawReview } from '@/constants/review-options';
+import { ApiError, grantReviewApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/validators';
 import { useAuthStore } from '@/store/auth';
-import type { RecognitionDetail } from '@/types/recognition';
+import type { Grant } from '@/types/grant';
+import type { ApplicationStatus } from '@/types/recognition';
 
-export default function ReviewDetailScreen() {
+export default function GrantReviewDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const role = useAuthStore((s) => s.user?.role);
   const userId = useAuthStore((s) => s.user?.id);
 
-  const [detail, setDetail] = useState<RecognitionDetail | null>(null);
+  const [detail, setDetail] = useState<Grant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMode, setActionMode] = useState<ReviewActionMode | null>(null);
@@ -51,7 +51,7 @@ export default function ReviewDetailScreen() {
     setLoading(true);
     setError(null);
     try {
-      const res = await reviewApi.get(numericId);
+      const res = await grantReviewApi.get(numericId);
       setDetail(res);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '加载失败，请稍后重试');
@@ -74,11 +74,8 @@ export default function ReviewDetailScreen() {
     try {
       const res =
         actionMode === 'pass'
-          ? await reviewApi.pass(detail.id, {
-              opinion: payload.opinion,
-              difficulty_level: payload.difficulty_level,
-            })
-          : await reviewApi.reject(detail.id, {
+          ? await grantReviewApi.pass(detail.id, { opinion: payload.opinion })
+          : await grantReviewApi.reject(detail.id, {
               opinion: payload.opinion,
               reject_to_level: payload.reject_to_level,
             });
@@ -95,7 +92,7 @@ export default function ReviewDetailScreen() {
     if (!detail) return;
     Alert.alert(
       '撤回审核意见',
-      '确定撤回您最近一次审核意见吗？撤回后申请将回到待班级评审状态，可重新通过或退回。教学系已审核后不可撤回。',
+      '确定撤回您最近一次助学金审核意见吗？撤回后可重新通过或退回。教学系已审核后不可撤回。',
       [
         { text: '取消', style: 'cancel' },
         {
@@ -105,7 +102,7 @@ export default function ReviewDetailScreen() {
             setWithdrawing(true);
             setError(null);
             try {
-              const res = await reviewApi.withdraw(detail.id);
+              const res = await grantReviewApi.withdraw(detail.id);
               setDetail(res);
             } catch (e) {
               setError(e instanceof ApiError ? e.message : '撤回失败，请稍后重试');
@@ -118,13 +115,13 @@ export default function ReviewDetailScreen() {
     );
   }
 
-  const canAct = detail ? canReview(role, detail.status) : false;
+  const canAct = detail ? canReviewGrant(role, detail.status) : false;
   const withdrawable = detail ? canWithdrawReview(role, userId, detail.reviews) : false;
-  const currentLevel = detail ? actingLevel(detail.status) : 0;
+  const currentLevel = detail ? actingLevel(detail.status as ApplicationStatus) : 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <FormHeader title="认定审核详情" />
+      <FormHeader title="助学金审核详情" />
 
       {loading ? (
         <View style={styles.centerBox}>
@@ -143,33 +140,31 @@ export default function ReviewDetailScreen() {
             style={styles.scroll}
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
+            {error ? <Text style={styles.inlineError}>{error}</Text> : null}
+
             <SectionCard
               title={`${detail.student_name} · ${detail.student_no}`}
-              right={<StatusBadge status={detail.status} />}>
+              right={<StatusBadge status={detail.status} kind="grant" />}>
               <DetailRow label="认定年度" value={String(detail.year)} />
+              <DetailRow label="助学金类型" value={grantTypeLabel(detail.grant_type)} />
               <DetailRow label="民族" value={nationLabel(detail.nation)} />
-              <DetailRow label="籍贯" value={detail.native_place} />
-              <DetailRow label="身份证号" value={detail.id_card} />
+              <DetailRow label="年级" value={detail.grade_name} />
+              <DetailRow label="院系专业班级" value={detail.school_unit} full />
               <DetailRow label="手机号" value={detail.phone} />
-              <DetailRow label="家长手机号" value={detail.guardian_phone} />
-              <DetailRow label="家庭人口" value={`${detail.family_population} 人`} />
-              <DetailRow label="户口类型" value={householdLabel(detail.household_type)} />
-              <DetailRow label="主要收入来源" value={incomeSourceLabel(detail.income_source)} />
-              <DetailRow label="详细通讯地址" value={detail.address} full />
+              <DetailRow label="身份证号" value={detail.id_card} />
             </SectionCard>
 
-            <SectionCard title="家庭经济状况">
-              <View style={styles.perCapitaBar}>
-                <Text style={styles.perCapitaLabel}>家庭人均年收入</Text>
-                <Text style={styles.perCapitaValue}>
-                  ¥{formatCurrency(detail.per_capita_annual_income)}
-                </Text>
-              </View>
-              <DetailRow label="自然灾害影响" value={detail.natural_disaster || '无'} full />
-              <DetailRow label="突发意外事件" value={detail.sudden_accident || '无'} full />
-              <DetailRow label="家庭劳动力情况" value={detail.weak_labor || '无'} full />
-              <DetailRow label="失业 / 待业情况" value={detail.unemployment || '无'} full />
-              <DetailRow label="家庭负债情况" value={detail.debt || '无'} full />
+            <SectionCard title="家庭经济">
+              <DetailRow label="户口类型" value={householdLabel(detail.household_type)} />
+              <DetailRow label="家庭人口" value={`${detail.family_population} 人`} />
+              <DetailRow label="月总收入" value={`¥${formatCurrency(detail.monthly_income)}`} />
+              <DetailRow
+                label="人均月收入"
+                value={`¥${formatCurrency(detail.per_capita_monthly_income)}`}
+              />
+              <DetailRow label="收入来源" value={incomeSourceLabel(detail.income_source)} />
+              <DetailRow label="通讯地址" value={detail.address} full />
+              <DetailRow label="邮政编码" value={detail.postal_code} />
             </SectionCard>
 
             <SectionCard title={`家庭成员（${detail.family_members.length} 人）`}>
@@ -177,36 +172,28 @@ export default function ReviewDetailScreen() {
                 <Text style={styles.emptyText}>暂无家庭成员信息</Text>
               ) : (
                 detail.family_members.map((m, i) => (
-                  <FamilyMemberView key={m.id} index={i} member={m} />
+                  <View key={m.id || i} style={styles.memberRow}>
+                    <Text style={styles.memberName}>
+                      {i + 1}. {m.name || '—'}
+                    </Text>
+                    <Text style={styles.memberMeta}>
+                      {[`${m.age || '—'}岁`, relationLabel(m.relation), m.work_unit || '—']
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
                 ))
               )}
             </SectionCard>
 
-            <SectionCard title="特殊群体 / 说明">
-              <View style={styles.chipRow}>
-                {detail.special_types.length === 0 ? (
-                  <Text style={styles.emptyText}>未勾选特殊群体</Text>
-                ) : (
-                  detail.special_types.map((t) => (
-                    <View key={t} style={styles.chip}>
-                      <Text style={styles.chipText}>{specialGroupLabel(t)}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-              {detail.other_info ? (
-                <Text style={styles.otherInfo}>{detail.other_info}</Text>
-              ) : null}
+            <SectionCard title="申请理由">
+              <Text style={styles.reason}>{detail.reason || '—'}</Text>
               {detail.reject_reason ? (
                 <View style={styles.rejectBox}>
                   <Text style={styles.rejectLabel}>最近一次退回原因</Text>
                   <Text style={styles.rejectText}>{detail.reject_reason}</Text>
                 </View>
               ) : null}
-            </SectionCard>
-
-            <SectionCard title="个人承诺与签字">
-              <SignaturePreview recognitionId={numericId} />
             </SectionCard>
 
             <SectionCard title="评审记录">
@@ -247,6 +234,7 @@ export default function ReviewDetailScreen() {
             visible={actionMode !== null}
             mode={actionMode ?? 'pass'}
             currentLevel={currentLevel}
+            requireDifficulty={false}
             submitting={submitting}
             onClose={() => setActionMode(null)}
             onConfirm={handleConfirmAction}
@@ -280,6 +268,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Brand.mutedForeground,
   },
+  inlineError: {
+    fontSize: 13,
+    color: Brand.error,
+    textAlign: 'center',
+  },
   retryBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -291,48 +284,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Brand.primary,
   },
-  perCapitaBar: {
-    padding: 14,
-    borderRadius: Brand.radiusSm,
-    backgroundColor: Brand.inputBackground,
-    marginBottom: 8,
-  },
-  perCapitaLabel: {
-    fontSize: 12,
-    color: Brand.mutedForeground,
-  },
-  perCapitaValue: {
-    marginTop: 4,
-    fontSize: 20,
-    fontWeight: '700',
-    color: Brand.primary,
-  },
   emptyText: {
     fontSize: 13,
     color: Brand.mutedForeground,
     textAlign: 'center',
     paddingVertical: 8,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  memberRow: {
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.border,
   },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: Brand.brand50,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Brand.primary,
-  },
-  otherInfo: {
-    marginTop: 12,
+  memberName: {
     fontSize: 13,
-    lineHeight: 19,
+    fontWeight: '600',
+    color: Brand.foreground,
+  },
+  memberMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    color: Brand.mutedForeground,
+  },
+  reason: {
+    fontSize: 13,
+    lineHeight: 20,
     color: Brand.foreground,
   },
   rejectBox: {

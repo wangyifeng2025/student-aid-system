@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoadingState, ErrorState } from "@/components/ui/states";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
+import { SignaturePreview } from "@/components/recognition/signature-preview";
 import { ReviewLog } from "@/components/review/review-log";
 import { ReviewActionDialog } from "@/components/review/review-action-dialog";
 import {
@@ -265,6 +266,10 @@ export default function ReviewDetailPage() {
                 ))}
               </div>
             )}
+          </Card>
+
+          <Card title="个人承诺与签字">
+            <SignaturePreview recognitionId={id} />
           </Card>
 
           <Card title="附件材料">

@@ -21,6 +21,8 @@ type GrantFilter struct {
 	Status          string
 	GrantType       string
 	Keyword         string
+	DeptID          uint
+	ClassID         uint
 	Page            int
 	PageSize        int
 	ExcludeStatuses []string
@@ -64,6 +66,12 @@ func applyGrantFilter(q *gorm.DB, f GrantFilter) *gorm.DB {
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		q = q.Where("students.name LIKE ? OR students.student_no LIKE ?", kw, kw)
+	}
+	if f.DeptID > 0 {
+		q = q.Where("students.dept_id = ?", f.DeptID)
+	}
+	if f.ClassID > 0 {
+		q = q.Where("students.class_id = ?", f.ClassID)
 	}
 	if len(f.ExcludeStatuses) > 0 {
 		q = q.Where("grant_applications.status NOT IN ?", f.ExcludeStatuses)

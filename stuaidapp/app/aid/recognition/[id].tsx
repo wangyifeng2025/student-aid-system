@@ -8,6 +8,7 @@ import { SectionCard } from '@/components/recognition-form/section-card';
 import { DetailRow } from '@/components/reviews/detail-row';
 import { FamilyMemberView } from '@/components/reviews/family-member-view';
 import { ReviewTimeline } from '@/components/reviews/review-timeline';
+import { SignaturePreview } from '@/components/reviews/signature-preview';
 import { StatusBadge } from '@/components/reviews/status-badge';
 import { Brand } from '@/constants/brand';
 import {
@@ -150,6 +151,10 @@ export default function RecognitionDetailScreen() {
                   <Text style={styles.rejectText}>{detail.reject_reason}</Text>
                 </View>
               ) : null}
+            </SectionCard>
+
+            <SectionCard title="个人承诺与签字">
+              <SignaturePreview recognitionId={numericId} />
             </SectionCard>
 
             <SectionCard title="评审记录">

@@ -3,7 +3,17 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Brand } from '@/constants/brand';
 import { difficultyLabel, levelName, reviewActionLabel } from '@/constants/review-options';
-import type { ReviewRecord } from '@/types/recognition';
+
+/** 认定 / 助学金评审记录共用的最小字段集。 */
+export type TimelineReview = {
+  id: number;
+  level: number;
+  reviewer_name: string;
+  action: string;
+  opinion: string;
+  created_at: string;
+  difficulty_level?: string;
+};
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -12,7 +22,7 @@ function formatDateTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function ReviewTimeline({ reviews }: { reviews: ReviewRecord[] }) {
+export function ReviewTimeline({ reviews }: { reviews: TimelineReview[] }) {
   if (reviews.length === 0) {
     return <Text style={styles.empty}>暂无评审记录</Text>;
   }

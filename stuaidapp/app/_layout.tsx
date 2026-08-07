@@ -27,7 +27,10 @@ export default function RootLayout() {
           <Stack.Screen name="aid/grant-apply" options={{ headerShown: false }} />
           <Stack.Screen name="aid/grant/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="reviews/index" options={{ headerShown: false }} />
+          <Stack.Screen name="reviews/recognition" options={{ headerShown: false }} />
           <Stack.Screen name="reviews/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="reviews/grants/index" options={{ headerShown: false }} />
+          <Stack.Screen name="reviews/grants/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="light" />

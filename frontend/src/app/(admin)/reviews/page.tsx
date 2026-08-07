@@ -14,6 +14,11 @@ import { Pagination } from "@/components/base-data/pagination";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { ReviewActionDialog } from "@/components/review/review-action-dialog";
 import {
+  OrgScopeFilters,
+  orgScopeParams,
+  type OrgScopeValue,
+} from "@/components/review/org-scope-filters";
+import {
   difficultyLabel,
   difficultyTone,
   levelName,
@@ -47,10 +52,13 @@ export default function ReviewsPage() {
   const [filterStatus, setFilterStatus] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
+  const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({ deptId: 0, classId: 0 });
 
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [batchDialog, setBatchDialog] = React.useState<ReviewActionType | null>(null);
   const [batching, setBatching] = React.useState(false);
+
+  const showSubordinateHint = role === "department" || role === "aidcenter" || role === "admin";
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -62,6 +70,7 @@ export default function ReviewsPage() {
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         year: filterYear ? Number(filterYear) : undefined,
+        ...orgScopeParams(orgScope),
       });
       setList(res.items);
       setTotal(res.total);
@@ -71,7 +80,7 @@ export default function ReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, keyword, filterStatus, filterYear]);
+  }, [page, pageSize, keyword, filterStatus, filterYear, orgScope]);
 
   React.useEffect(() => {
     void load();
@@ -211,7 +220,17 @@ export default function ReviewsPage() {
   return (
     <div>
       <p className="mb-4 text-sm text-ink-soft">
-        按您的数据范围与评审级别展示待办申请。可逐条审核，或勾选后批量通过 / 退回（快速定档）。
+        按您的数据范围与评审级别展示本级待办。可逐条审核，或勾选后批量通过 / 退回。
+        {showSubordinateHint && (
+          <>
+            {" "}
+            若需查看下级尚未审核的申请，请前往
+            <Link href="/reviews/records?tab=todo" className="mx-1 text-link hover:underline">
+              认定记录 · 待审核
+            </Link>
+            （可按班级 / 院系 / 姓名筛选）。
+          </>
+        )}
       </p>
 
       <Toolbar>
@@ -229,6 +248,13 @@ export default function ReviewsPage() {
               className="h-9 pl-8 text-sm"
             />
           </div>
+          <OrgScopeFilters
+            value={orgScope}
+            onChange={(next) => {
+              setOrgScope(next);
+              setPage(1);
+            }}
+          />
           <Select
             value={filterStatus}
             onChange={(e) => {

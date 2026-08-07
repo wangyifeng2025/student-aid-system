@@ -12,7 +12,9 @@ import type {
 import type { CreateGrantInput, Grant, GrantInput, GrantListItem } from '@/types/grant';
 import type { StudentProfile } from '@/types/student';
 import { clearSession, getSession, saveSession } from '@/lib/token-storage';
-import * as FileSystem from 'expo-file-system';
+// expo-file-system v19 起新增基于 File/Directory 的 API，旧版 cacheDirectory /
+// downloadAsync / EncodingType 等移至 `expo-file-system/legacy`。
+import * as FileSystem from 'expo-file-system/legacy';
 
 export interface Attachment {
   id: number;
@@ -301,6 +303,10 @@ export interface ReviewListFilter {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  status?: string;
+  year?: number;
+  deptId?: number;
+  classId?: number;
 }
 
 export const reviewApi = {
@@ -310,6 +316,10 @@ export const reviewApi = {
         page: filter?.page,
         page_size: filter?.pageSize,
         keyword: filter?.keyword,
+        status: filter?.status,
+        year: filter?.year,
+        dept_id: filter?.deptId,
+        class_id: filter?.classId,
       })}`,
     ),
   records: (filter?: ReviewListFilter) =>
@@ -319,6 +329,10 @@ export const reviewApi = {
         page: filter?.page,
         page_size: filter?.pageSize,
         keyword: filter?.keyword,
+        status: filter?.status,
+        year: filter?.year,
+        dept_id: filter?.deptId,
+        class_id: filter?.classId,
       })}`,
     ),
   get: (id: number) => apiFetch<RecognitionDetail>(`/reviews/${id}`),
@@ -326,4 +340,53 @@ export const reviewApi = {
     apiFetch<RecognitionDetail>(`/reviews/${id}/pass`, { method: 'POST', body }),
   reject: (id: number, body: ReviewActionInput) =>
     apiFetch<RecognitionDetail>(`/reviews/${id}/reject`, { method: 'POST', body }),
+  withdraw: (id: number) =>
+    apiFetch<RecognitionDetail>(`/reviews/${id}/withdraw`, { method: 'POST' }),
+};
+
+// ===== 助学金三级评审（模块 6，班主任/教学系/资助中心） =====
+
+export const grantReviewApi = {
+  todo: (filter?: ReviewListFilter) =>
+    apiFetch<PageResult<GrantListItem>>(
+      `/grant-reviews/todo${buildParams({
+        page: filter?.page,
+        page_size: filter?.pageSize,
+        keyword: filter?.keyword,
+        status: filter?.status,
+        year: filter?.year,
+        dept_id: filter?.deptId,
+        class_id: filter?.classId,
+      })}`,
+    ),
+  records: (filter?: ReviewListFilter) =>
+    apiFetch<PageResult<GrantListItem>>(
+      `/grant-reviews/records${buildParams({
+        tab: filter?.tab,
+        page: filter?.page,
+        page_size: filter?.pageSize,
+        keyword: filter?.keyword,
+        status: filter?.status,
+        year: filter?.year,
+        dept_id: filter?.deptId,
+        class_id: filter?.classId,
+      })}`,
+    ),
+  get: (id: number) => apiFetch<Grant>(`/grant-reviews/${id}`),
+  pass: (id: number, body: ReviewActionInput = {}) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/pass`, { method: 'POST', body }),
+  reject: (id: number, body: ReviewActionInput) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/reject`, { method: 'POST', body }),
+  withdraw: (id: number) =>
+    apiFetch<Grant>(`/grant-reviews/${id}/withdraw`, { method: 'POST' }),
+};
+
+// ===== 组织机构（审核筛选：院系 / 班级） =====
+
+export const orgApi = {
+  listDepartments: () => apiFetch<import('@/types/org').Department[]>('/orgs/departments'),
+  listClasses: (deptId?: number) =>
+    apiFetch<import('@/types/org').OrgClass[]>(
+      `/orgs/classes${buildParams({ dept_id: deptId })}`,
+    ),
 };

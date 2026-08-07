@@ -20,6 +20,8 @@ type RecognitionFilter struct {
 	Year            int
 	Status          string
 	Keyword         string // 学生姓名/学号
+	DeptID          uint   // 按院系筛选（资助中心/管理员）
+	ClassID         uint   // 按班级筛选（教学系/资助中心）
 	Page            int
 	PageSize        int
 	ExcludeStatuses []string // 排除的状态（如 draft，供审核角色隐藏未提交申请）
@@ -63,6 +65,12 @@ func applyRecognitionFilter(q *gorm.DB, f RecognitionFilter) *gorm.DB {
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		q = q.Where("students.name LIKE ? OR students.student_no LIKE ?", kw, kw)
+	}
+	if f.DeptID > 0 {
+		q = q.Where("students.dept_id = ?", f.DeptID)
+	}
+	if f.ClassID > 0 {
+		q = q.Where("students.class_id = ?", f.ClassID)
 	}
 	if len(f.ExcludeStatuses) > 0 {
 		q = q.Where("recognition_applications.status NOT IN ?", f.ExcludeStatuses)

@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/recognition/status-badge";
 import { ProgressTimeline } from "@/components/recognition/progress-timeline";
 import { ReviewLog } from "@/components/review/review-log";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
+import { SignaturePreview } from "@/components/recognition/signature-preview";
 import {
   nationLabel,
   householdLabel,
@@ -279,6 +280,10 @@ export default function RecognitionDetailPage() {
                 ))}
               </div>
             )}
+          </Card>
+
+          <Card title="个人承诺与签字">
+            <SignaturePreview recognitionId={id} />
           </Card>
 
           <Card title="附件材料">

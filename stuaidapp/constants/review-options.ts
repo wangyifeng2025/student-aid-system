@@ -77,6 +77,32 @@ export function canReview(role: Role | undefined, status: ApplicationStatus): bo
   }
 }
 
+/**
+ * 评审人是否可撤回本人最近一次审核意见。
+ * 条件：最后一条评审为自己提交，且下级（如教学系）尚未继续审核。
+ */
+export function canWithdrawReview(
+  role: Role | undefined,
+  userId: number | undefined,
+  reviews?: { level: number; reviewer_id: number }[],
+): boolean {
+  if (!role || role === 'student' || !userId || !reviews?.length) return false;
+  const last = reviews[reviews.length - 1];
+  if (last.reviewer_id !== userId) return false;
+  switch (role) {
+    case 'classadvisor':
+      return last.level === 1;
+    case 'department':
+      return last.level === 2;
+    case 'aidcenter':
+      return last.level === 3 || last.level === 4;
+    case 'admin':
+      return last.level >= 1 && last.level <= 4;
+    default:
+      return false;
+  }
+}
+
 /** 退回目标选项：可退回到学生或任意更低级别。 */
 export function rejectTargetOptions(currentLevel: number): Option[] {
   const all: Option[] = [
@@ -98,4 +124,44 @@ export function reviewActionLabel(action: string): string {
   if (action === 'pass') return '通过';
   if (action === 'reject') return '退回';
   return action;
+}
+
+/** 本级待办状态筛选项。 */
+export function todoStatusOptionsForRole(role: Role | undefined): Option[] {
+  switch (role) {
+    case 'classadvisor':
+      return [{ value: 'pending_class', label: STATUS_META.pending_class.label }];
+    case 'department':
+      return [{ value: 'pending_dept', label: STATUS_META.pending_dept.label }];
+    case 'aidcenter':
+      return [{ value: 'pending_college', label: STATUS_META.pending_college.label }];
+    case 'admin':
+      return (['pending_class', 'pending_dept', 'pending_college'] as const).map((v) => ({
+        value: v,
+        label: STATUS_META[v].label,
+      }));
+    default:
+      return [];
+  }
+}
+
+/** 记录「待审核/在途」标签状态筛选项（本级 + 下级待审）。 */
+export function recordsTodoStatusOptionsForRole(role: Role | undefined): Option[] {
+  switch (role) {
+    case 'classadvisor':
+      return [{ value: 'pending_class', label: STATUS_META.pending_class.label }];
+    case 'department':
+      return (['pending_class', 'pending_dept'] as const).map((v) => ({
+        value: v,
+        label: STATUS_META[v].label,
+      }));
+    case 'aidcenter':
+    case 'admin':
+      return (['pending_class', 'pending_dept', 'pending_college'] as const).map((v) => ({
+        value: v,
+        label: STATUS_META[v].label,
+      }));
+    default:
+      return [];
+  }
 }

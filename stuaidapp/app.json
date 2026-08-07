@@ -20,6 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
+      "usesCleartextTraffic": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.wangyifeng2026.stuaidapp"
     },
@@ -49,7 +50,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a874ffe0-2b58-4d4a-904b-2b16074c9a0f"
+        "projectId": "6282aea5-5db7-4d40-abcb-a5ebefb06a71"
       }
     }
   }

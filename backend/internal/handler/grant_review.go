@@ -17,6 +17,8 @@ func (h *Handler) ListGrantReviewTodo(c *gin.Context) {
 		Year:     parseIntQuery(c, "year"),
 		Status:   c.Query("status"),
 		Keyword:  c.Query("keyword"),
+		DeptID:   parseUintQuery(c, "dept_id"),
+		ClassID:  parseUintQuery(c, "class_id"),
 		Page:     page,
 		PageSize: pageSize,
 	}
@@ -38,6 +40,8 @@ func (h *Handler) ListGrantReviewRecords(c *gin.Context) {
 		Year:     parseIntQuery(c, "year"),
 		Status:   c.Query("status"),
 		Keyword:  c.Query("keyword"),
+		DeptID:   parseUintQuery(c, "dept_id"),
+		ClassID:  parseUintQuery(c, "class_id"),
 		Page:     page,
 		PageSize: pageSize,
 	}

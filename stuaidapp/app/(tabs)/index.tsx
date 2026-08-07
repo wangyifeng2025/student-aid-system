@@ -1,5 +1,7 @@
-import { type Href, useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnnouncementMarquee } from '@/components/home/announcement-marquee';
@@ -7,6 +9,7 @@ import { GrantBanner } from '@/components/home/grant-banner';
 import { HomeHeader } from '@/components/home/home-header';
 import { ServiceGrid } from '@/components/home/service-grid';
 import { Brand, type HomeServiceItem } from '@/constants/brand';
+import { grantReviewApi, reviewApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -21,7 +24,7 @@ function formatDateLine(date: Date) {
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const weekday = WEEKDAYS[date.getDay()];
-  return `${month}月${day}日 ${weekday} · 晴 22°C`;
+  return `${month}月${day}日 ${weekday}`;
 }
 
 export default function HomeScreen() {
@@ -31,11 +34,48 @@ export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
   const role = user?.role;
 
-  // 资助入口按角色分流：学生进资助申请，班主任/辅导员进审核管理。
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [recognitionTodo, setRecognitionTodo] = useState(0);
+  const [grantTodo, setGrantTodo] = useState(0);
+
+  const loadPending = useCallback(async () => {
+    if (role !== 'classadvisor' && role !== 'department' && role !== 'aidcenter' && role !== 'admin') {
+      return;
+    }
+    try {
+      // 本级待办角标；教学系/资助中心额外统计在途（含下级未审）
+      const [recTodo, grantTodo, recPipe, grantPipe] = await Promise.all([
+        reviewApi.todo({ page: 1, pageSize: 1 }),
+        grantReviewApi.todo({ page: 1, pageSize: 1 }),
+        reviewApi.records({ tab: 'todo', page: 1, pageSize: 1 }),
+        grantReviewApi.records({ tab: 'todo', page: 1, pageSize: 1 }),
+      ]);
+      setRecognitionTodo(recTodo.total);
+      setGrantTodo(grantTodo.total);
+      const mine = recTodo.total + grantTodo.total;
+      const pipeline = recPipe.total + grantPipe.total;
+      setPendingTotal(role === 'classadvisor' ? mine : Math.max(mine, pipeline));
+    } catch {
+      // 首页角标失败不阻断主流程。
+    }
+  }, [role]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPending();
+    }, [loadPending]),
+  );
+
+  // 资助入口按角色分流：学生进资助申请，评审角色进审核管理。
   function goToAid() {
     if (role === 'student') {
       router.push('/aid' as Href);
-    } else if (role === 'classadvisor') {
+    } else if (
+      role === 'classadvisor' ||
+      role === 'department' ||
+      role === 'aidcenter' ||
+      role === 'admin'
+    ) {
       router.push('/reviews' as Href);
     } else {
       Alert.alert('暂不支持', '当前角色暂无对应的移动端资助功能，请使用管理后台。');
@@ -47,6 +87,9 @@ export default function HomeScreen() {
       goToAid();
     }
   }
+
+  const isReviewer =
+    role === 'classadvisor' || role === 'department' || role === 'aidcenter' || role === 'admin';
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -60,9 +103,30 @@ export default function HomeScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.section, styles.greetingSection]}>
-          <Text style={styles.greeting}>{getGreeting(now.getHours(), user?.real_name || '同学')}</Text>
+          <Text style={styles.greeting}>
+            {getGreeting(now.getHours(), user?.real_name || (isReviewer ? '老师' : '同学'))}
+          </Text>
           <Text style={styles.dateLine}>{formatDateLine(now)}</Text>
         </View>
+
+        {isReviewer && pendingTotal > 0 ? (
+          <View style={styles.section}>
+            <Pressable
+              style={({ pressed }) => [styles.pendingCard, pressed && styles.pendingPressed]}
+              onPress={() => router.push('/reviews' as Href)}>
+              <View style={styles.pendingIcon}>
+                <Ionicons name="alert-circle" size={22} color={Brand.warning} />
+              </View>
+              <View style={styles.pendingBody}>
+                <Text style={styles.pendingTitle}>有 {pendingTotal} 条待审核</Text>
+                <Text style={styles.pendingDesc}>
+                  困难认定 {recognitionTodo} · 助学金 {grantTodo}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Brand.mutedForeground} />
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <AnnouncementMarquee />
@@ -73,7 +137,16 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <GrantBanner onPressApply={goToAid} />
+          {isReviewer ? (
+            <Pressable
+              style={({ pressed }) => [styles.reviewBanner, pressed && styles.pendingPressed]}
+              onPress={() => router.push('/reviews' as Href)}>
+              <Text style={styles.reviewBannerTitle}>进入审核工作台</Text>
+              <Text style={styles.reviewBannerDesc}>评审困难认定与助学金申请，查看已审记录</Text>
+            </Pressable>
+          ) : (
+            <GrantBanner onPressApply={goToAid} />
+          )}
         </View>
       </ScrollView>
     </View>
@@ -109,5 +182,53 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     color: Brand.mutedForeground,
+  },
+  pendingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: Brand.radius,
+    backgroundColor: Brand.warningSurface,
+  },
+  pendingPressed: {
+    opacity: 0.9,
+  },
+  pendingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Brand.card,
+  },
+  pendingBody: {
+    flex: 1,
+    gap: 2,
+  },
+  pendingTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Brand.foreground,
+  },
+  pendingDesc: {
+    fontSize: 12,
+    color: Brand.mutedForeground,
+  },
+  reviewBanner: {
+    padding: 18,
+    borderRadius: Brand.radius,
+    backgroundColor: Brand.brand50,
+    gap: 6,
+  },
+  reviewBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Brand.primary,
+  },
+  reviewBannerDesc: {
+    fontSize: 13,
+    color: Brand.mutedForeground,
+    lineHeight: 19,
   },
 });

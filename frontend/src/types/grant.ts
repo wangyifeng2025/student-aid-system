@@ -85,5 +85,7 @@ export interface GrantFilter {
   status?: string;
   grant_type?: string;
   keyword?: string;
+  dept_id?: number;
+  class_id?: number;
   tab?: "all" | "todo" | "done";
 }

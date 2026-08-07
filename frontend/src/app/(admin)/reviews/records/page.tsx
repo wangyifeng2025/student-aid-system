@@ -16,6 +16,11 @@ import { Pagination } from "@/components/base-data/pagination";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { StatTabBar } from "@/components/review/stat-tab-bar";
 import {
+  OrgScopeFilters,
+  orgScopeParams,
+  type OrgScopeValue,
+} from "@/components/review/org-scope-filters";
+import {
   difficultyLabel,
   difficultyTone,
   levelName,
@@ -58,6 +63,7 @@ export default function ReviewRecordsPage() {
   const [filterStatus, setFilterStatus] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
+  const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({ deptId: 0, classId: 0 });
 
   const [tabCounts, setTabCounts] = React.useState<Record<RecordsTab, number>>({
     all: 0,
@@ -85,6 +91,7 @@ export default function ReviewRecordsPage() {
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         year: filterYear ? Number(filterYear) : undefined,
+        ...orgScopeParams(orgScope),
       });
       setList(res.items);
       setTotal(res.total);
@@ -93,7 +100,7 @@ export default function ReviewRecordsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, page, pageSize, keyword, filterStatus, filterYear]);
+  }, [tab, page, pageSize, keyword, filterStatus, filterYear, orgScope]);
 
   React.useEffect(() => {
     void load();
@@ -109,6 +116,7 @@ export default function ReviewRecordsPage() {
       keyword: keyword || undefined,
       status: filterStatus || undefined,
       year: filterYear ? Number(filterYear) : undefined,
+      ...orgScopeParams(orgScope),
     };
     (async () => {
       try {
@@ -133,7 +141,7 @@ export default function ReviewRecordsPage() {
     return () => {
       cancelled = true;
     };
-  }, [keyword, filterStatus, filterYear]);
+  }, [keyword, filterStatus, filterYear, orgScope]);
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
@@ -165,6 +173,11 @@ export default function ReviewRecordsPage() {
       header: "专业",
       width: "160px",
       cell: (r) => <span className="text-ink">{r.major_name || "—"}</span>,
+    },
+    {
+      header: "院系",
+      width: "140px",
+      cell: (r) => <span className="text-ink">{r.dept_name || "—"}</span>,
     },
     {
       header: "班级",
@@ -226,6 +239,13 @@ export default function ReviewRecordsPage() {
               className="h-9 pl-8 text-sm"
             />
           </div>
+          <OrgScopeFilters
+            value={orgScope}
+            onChange={(next) => {
+              setOrgScope(next);
+              setPage(1);
+            }}
+          />
           <Select
             value={filterStatus}
             onChange={(e) => {
