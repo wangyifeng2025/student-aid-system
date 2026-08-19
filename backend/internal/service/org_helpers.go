@@ -1,6 +1,9 @@
 package service
 
-import "github.com/wangyifeng2025/student-aid-system/internal/repository"
+import (
+	"github.com/wangyifeng2025/student-aid-system/internal/model"
+	"github.com/wangyifeng2025/student-aid-system/internal/repository"
+)
 
 // buildOrgNameMaps 预加载院系/专业/班级的 ID -> 名称映射，供列表展示按 ID 解析名称。
 // 返回 (deptNames, majorNames, classNames)。
@@ -30,4 +33,16 @@ func buildOrgNameMaps(orgRepo *repository.OrgRepository) (map[uint]string, map[u
 		classNames[classes[i].ID] = classes[i].Name
 	}
 	return deptNames, majorNames, classNames, nil
+}
+
+// studentOrgNames 按学籍院系/班级 ID 解析名称；失败时返回空串。
+func studentOrgNames(orgRepo *repository.OrgRepository, stu *model.Student) (deptName, className string) {
+	if stu == nil {
+		return "", ""
+	}
+	deptNames, _, classNames, err := buildOrgNameMaps(orgRepo)
+	if err != nil {
+		return "", ""
+	}
+	return deptNames[stu.DeptID], classNames[stu.ClassID]
 }

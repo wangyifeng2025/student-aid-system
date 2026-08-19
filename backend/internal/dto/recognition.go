@@ -77,6 +77,8 @@ type RecognitionResponse struct {
 	StudentID   uint   `json:"student_id"`
 	StudentNo   string `json:"student_no"`
 	StudentName string `json:"student_name"`
+	DeptName    string `json:"dept_name"`
+	ClassName   string `json:"class_name"`
 	Year        int    `json:"year"`
 
 	Nation           string `json:"nation"`

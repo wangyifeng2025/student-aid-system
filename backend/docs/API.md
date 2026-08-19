@@ -153,6 +153,49 @@
   - `admin`：`admin:all`, `user:manage`, `auth:reset_password`
   - （以上均额外含基础权限 `auth:me`, `auth:change_password`）
 
+### GET /api/v1/dashboard
+
+工作台概览。登录用户均可访问；统计、待办与最近记录均按角色数据范围过滤（本人 / 本班 / 本系 / 全校）。评审角色的认定申请数不含草稿。
+
+**查询参数**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| year | int | 学年，缺省为当前年 |
+
+**成功响应 `data`**
+
+```json
+{
+  "year": 2026,
+  "role": "classadvisor",
+  "data_scope": "class",
+  "scope_label": "本班级",
+  "dept_name": "信息工程系",
+  "class_name": "计科2301",
+  "kpis": [
+    { "key": "recognition_total", "label": "认定申请", "value": 12, "hint": "本班级 · 2026学年" },
+    { "key": "recognition_todo", "label": "认定待审", "value": 3, "hint": "班级评审待办" },
+    { "key": "recognition_approved", "label": "已通过", "value": 8, "hint": "本班级 · 2026学年" },
+    { "key": "grant_todo", "label": "助学金待审", "value": 1, "hint": "班级评审待办" }
+  ],
+  "todos": [
+    {
+      "id": 18,
+      "kind": "recognition",
+      "student_name": "张三",
+      "student_no": "2023001",
+      "class_name": "计科2301",
+      "status": "pending_class",
+      "title": "困难认定"
+    }
+  ],
+  "recents": []
+}
+```
+
+学生角色 KPI 为：认定申请、待处理（草稿/退回）、已通过、助学金申请。
+
 ### PUT /api/v1/auth/password
 
 修改当前用户密码。
@@ -307,6 +350,85 @@
 ### DELETE /api/v1/dicts/:type/:code
 
 删除字典项。**仅 `admin`**。失败：`404 / 40400` 不存在。
+
+---
+
+## 五（附）、行政区划代码（模块 2）
+
+> 维护 12 位国家统计局区划代码，供后续按学生身份证前 6 位解析户籍地（省 / 市 / 区县）。**读取**所有登录用户可用；**写入**仅 `admin`。`make seed` 在表为空时导入内置全国数据。直辖市、省直管县可直接作为省级的下级（级别可从 1 直接到 3）。台湾省源数据代码非数字，导入时跳过。
+
+身份证匹配顺序：6 位区县码 → 前 4 位+00 地市码 → 前 2 位+0000 省级码，命中最具体的一条后向上拼接全称。
+
+### GET /api/v1/region-codes
+
+列出区划。无 `keyword` 时按 `parent_code` 列出直接下级（缺省或空串为省级）；有 `keyword` 时按名称/代码/身份证前 6 位全局搜索。
+
+**查询参数**：`parent_code`、`keyword`、`level`（1/2/3）
+
+**成功响应 `data`**
+```json
+[
+  {
+    "id": 1,
+    "code": "520000000000",
+    "name": "贵州省",
+    "level": 1,
+    "type": "省",
+    "parent_code": "",
+    "id_prefix": "520000",
+    "sort": 0,
+    "child_count": 9
+  }
+]
+```
+
+### GET /api/v1/region-codes/lookup?q=
+
+`q` 可为 18 位身份证或 6 位区划码。失败：`400` 参数不足；`404` 未命中。
+
+**成功响应 `data`**
+```json
+{
+  "id_prefix": "110101",
+  "matched_code": "110101000000",
+  "matched_name": "东城区",
+  "matched_level": 3,
+  "province": { "code": "110000000000", "name": "北京市", "type": "直辖市", "level": 1 },
+  "city": null,
+  "district": { "code": "110101000000", "name": "东城区", "type": "市辖区", "level": 3 },
+  "full_name": "北京市东城区"
+}
+```
+
+### GET /api/v1/region-codes/:code
+
+按 6 位或 12 位代码查询单条。
+
+### POST /api/v1/region-codes
+
+新增。**仅 `admin`**。`code` 为 6 或 12 位数字（6 位自动补 6 个 0）。非省级须填 `parent_code`。失败：`409` 代码已存在；`400` 上级不存在或级别不合法。
+
+```json
+{ "code": "520100", "name": "贵阳市", "level": 2, "type": "地级市", "parent_code": "520000000000", "sort": 0 }
+```
+
+### PUT /api/v1/region-codes/:code
+
+修改名称/级别/类型/上级/排序（代码不可改）。**仅 `admin`**。
+
+### DELETE /api/v1/region-codes/:code
+
+删除。有下级时 `409`「存在关联数据，无法删除」。
+
+### POST /api/v1/region-codes/import
+
+导入区划树 JSON（支持用户提供的 `{data:{children:[]}}` 包装，或节点本身）。按 `code` 增量 upsert。**仅 `admin`**。
+
+### POST /api/v1/region-codes/import-default
+
+导入系统内置全国区划。**仅 `admin`**。
+
+**成功响应 `data`**：`{ "created": 484, "updated": 0, "skipped": 1 }`
 
 ---
 
@@ -650,6 +772,7 @@
 | POST | `/api/v1/auth/refresh` | 否 | - |
 | POST | `/api/v1/auth/recover-password` | 否 | - |
 | GET | `/api/v1/me` | 是 | 任意 |
+| GET | `/api/v1/dashboard` | 是 | 任意（按数据范围） |
 | PUT | `/api/v1/auth/password` | 是 | 任意 |
 | POST | `/api/v1/auth/admin/reset-password` | 是 | admin |
 | GET | `/api/v1/orgs/departments` `/majors` `/grades` `/classes` | 是 | admin |
@@ -658,6 +781,9 @@
 | GET | `/api/v1/dicts/:type` | 是 | admin |
 | POST | `/api/v1/dicts/:type` | 是 | admin |
 | PUT/DELETE | `/api/v1/dicts/:type/:code` | 是 | admin |
+| GET | `/api/v1/region-codes` `/region-codes/lookup` `/region-codes/:code` | 是 | 登录用户 |
+| POST | `/api/v1/region-codes` `/import` `/import-default` | 是 | admin |
+| PUT/DELETE | `/api/v1/region-codes/:code` | 是 | admin |
 | GET | `/api/v1/students` `/students/:id` | 是 | admin |
 | POST/PUT/DELETE | `/api/v1/students[/:id]` | 是 | admin |
 | GET | `/api/v1/special-groups` `/special-groups/:id` | 是 | admin |

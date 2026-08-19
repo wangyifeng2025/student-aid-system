@@ -11,6 +11,7 @@ import type {
 } from '@/types/recognition';
 import type { CreateGrantInput, Grant, GrantInput, GrantListItem } from '@/types/grant';
 import type { StudentProfile } from '@/types/student';
+import type { DashboardOverview } from '@/types/dashboard';
 import { clearSession, getSession, saveSession } from '@/lib/token-storage';
 // expo-file-system v19 起新增基于 File/Directory 的 API，旧版 cacheDirectory /
 // downloadAsync / EncodingType 等移至 `expo-file-system/legacy`。
@@ -242,6 +243,24 @@ export function login(payload: LoginRequest): Promise<TokenResponse> {
 
 export const studentApi = {
   me: () => apiFetch<StudentProfile>('/students/me'),
+};
+
+export const dashboardApi = {
+  overview: (year?: number) =>
+    apiFetch<DashboardOverview>(`/dashboard${buildParams({ year })}`),
+};
+
+export interface RegionLookup {
+  id_prefix: string;
+  matched_code: string;
+  matched_name: string;
+  matched_level: number;
+  full_name: string;
+}
+
+export const regionCodeApi = {
+  lookup: (q: string) =>
+    apiFetch<RegionLookup>(`/region-codes/lookup${buildParams({ q })}`),
 };
 
 // ===== 困难认定申请（学生本人填报/续填/提交，模块 4） =====

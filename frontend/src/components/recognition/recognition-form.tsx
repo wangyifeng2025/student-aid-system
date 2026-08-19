@@ -13,7 +13,8 @@ import {
   Info,
   Send,
 } from "lucide-react";
-import { recognitionApi, studentApi, ApiError } from "@/lib/api";
+import { recognitionApi, regionCodeApi, studentApi, ApiError } from "@/lib/api";
+import { joinRegionDetail, splitRegionDetail } from "@/lib/id-card-region";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +26,8 @@ import {
   HOUSEHOLD_OPTIONS,
   SPECIAL_GROUP_OPTIONS,
 } from "@/lib/recognition-options";
-import {
-  FamilyMembersEditor,
-  emptyMember,
-} from "@/components/recognition/family-members-editor";
+import { StudentIdentity } from "@/components/recognition/student-identity";
+import { FamilyMembersEditor } from "@/components/recognition/family-members-editor";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
 import { CommitmentSignatureBlock } from "@/components/recognition/commitment-signature-block";
 import {
@@ -172,6 +171,15 @@ export function RecognitionForm({ mode, initial }: Props) {
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [signatureDataUrl, setSignatureDataUrl] = React.useState("");
   const [signatureDirty, setSignatureDirty] = React.useState(false);
+  const [regionLabel, setRegionLabel] = React.useState("");
+  const [regionLooking, setRegionLooking] = React.useState(false);
+  const [regionLookupFailed, setRegionLookupFailed] = React.useState(false);
+  const [profile, setProfile] = React.useState({
+    name: initial?.student_name ?? "",
+    student_no: initial?.student_no ?? "",
+    dept_name: initial?.dept_name ?? "",
+    class_name: initial?.class_name ?? "",
+  });
 
   // 编辑已有草稿时回填签字图。
   React.useEffect(() => {
@@ -199,6 +207,12 @@ export function RecognitionForm({ mode, initial }: Props) {
       try {
         const stu = await studentApi.me();
         if (cancelled) return;
+        setProfile({
+          name: stu.name,
+          student_no: stu.student_no,
+          dept_name: stu.dept_name || "",
+          class_name: stu.class_name || "",
+        });
         setForm((prev) => ({
           ...prev,
           id_card: stu.id_card,
@@ -217,6 +231,48 @@ export function RecognitionForm({ mode, initial }: Props) {
       cancelled = true;
     };
   }, []);
+
+  // 根据身份证前 6 位解析省市区县，填入籍贯与通讯地址前缀。
+  React.useEffect(() => {
+    const id = form.id_card.trim().toUpperCase();
+    if (!isIdCard(id)) {
+      setRegionLabel("");
+      setRegionLooking(false);
+      setRegionLookupFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setRegionLooking(true);
+    (async () => {
+      try {
+        const look = await regionCodeApi.lookup(id);
+        if (cancelled) return;
+        const region = (look.full_name || "").trim();
+        setRegionLabel(region);
+        setRegionLookupFailed(!region);
+        setForm((prev) => {
+          const detail = splitRegionDetail(prev.address, prev.native_place || region);
+          return {
+            ...prev,
+            native_place: region,
+            address: joinRegionDetail(region, detail),
+          };
+        });
+      } catch {
+        if (!cancelled) {
+          setRegionLabel("");
+          setRegionLookupFailed(true);
+        }
+      } finally {
+        if (!cancelled) setRegionLooking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.id_card]);
+
+  const addressDetail = splitRegionDetail(form.address, regionLabel || form.native_place);
 
   const set = <K extends keyof RecognitionInput>(key: K, value: RecognitionInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -267,8 +323,13 @@ export function RecognitionForm({ mode, initial }: Props) {
   function checkStep0(): string | null {
     if (!form.year || form.year < 2000) return "请填写有效的认定年度";
     if (!form.nation.trim()) return "请选择民族";
-    if (!form.native_place.trim()) return "请填写籍贯";
     if (!form.id_card || !isIdCard(form.id_card)) return "请填写有效的 18 位身份证号";
+    if (regionLooking) return "正在根据身份证解析省市区县，请稍候";
+    if (regionLabel) {
+      if (!form.native_place.trim()) return "请填写籍贯";
+    } else if (!form.native_place.trim()) {
+      return "请填写籍贯（未能根据身份证解析行政区划，请手动填写）";
+    }
     if (!form.phone || !isPhone(form.phone)) return "请填写有效的手机号";
     if (!form.guardian_phone.trim()) return "请填写家长手机号";
     if (!isPhone(form.guardian_phone)) return "家长手机号格式不正确";
@@ -278,7 +339,11 @@ export function RecognitionForm({ mode, initial }: Props) {
     if (!form.income_source.trim()) return "请选择主要收入来源";
     if (!form.postal_code.trim()) return "请填写邮政编码";
     if (!/^\d{6}$/.test(form.postal_code.trim())) return "邮政编码须为 6 位数字";
-    if (!form.address.trim()) return "请填写详细通讯地址";
+    if (regionLabel) {
+      if (!addressDetail.trim()) return "请填写街道、门牌等详细通讯地址";
+    } else if (!form.address.trim()) {
+      return "请填写详细通讯地址";
+    }
     return null;
   }
 
@@ -402,6 +467,12 @@ export function RecognitionForm({ mode, initial }: Props) {
 
   return (
     <div>
+      <StudentIdentity
+        name={profile.name}
+        studentNo={profile.student_no}
+        deptName={profile.dept_name}
+        className={profile.class_name}
+      />
       {/* Stepper */}
       <div
         className="mb-5"
@@ -429,7 +500,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               <button
                 type="button"
                 onClick={() => handleSelectStep(i)}
-                className="flex min-w-[80px] flex-col items-center"
+                className="flex min-w-20 flex-col items-center"
               >
                 <span
                   className="flex items-center justify-center text-xs font-semibold"
@@ -474,6 +545,36 @@ export function RecognitionForm({ mode, initial }: Props) {
         <SectionCard title="基本信息">
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
             <div>
+              <Label>姓名</Label>
+              <Input
+                value={profile.name}
+                readOnly
+                disabled={profileLoading}
+                placeholder={profileLoading ? "正在加载学籍信息…" : "学籍姓名"}
+                className="bg-page text-ink-soft"
+              />
+            </div>
+            <div>
+              <Label>教学系</Label>
+              <Input
+                value={profile.dept_name}
+                readOnly
+                disabled={profileLoading}
+                placeholder={profileLoading ? "正在加载学籍信息…" : "学籍教学系"}
+                className="bg-page text-ink-soft"
+              />
+            </div>
+            <div>
+              <Label>班级</Label>
+              <Input
+                value={profile.class_name}
+                readOnly
+                disabled={profileLoading}
+                placeholder={profileLoading ? "正在加载学籍信息…" : "学籍班级"}
+                className="bg-page text-ink-soft"
+              />
+            </div>
+            <div>
               <Label>认定年度 *</Label>
               <Input
                 inputMode="numeric"
@@ -496,9 +597,25 @@ export function RecognitionForm({ mode, initial }: Props) {
               <Label>籍贯 *</Label>
               <Input
                 value={form.native_place}
+                readOnly={!!regionLabel}
+                disabled={regionLooking}
                 onChange={(e) => set("native_place", e.target.value)}
-                placeholder="如：贵州省贵阳市"
+                placeholder={
+                  regionLooking
+                    ? "正在根据身份证解析…"
+                    : regionLookupFailed
+                      ? "未能解析，请手动填写省市区县"
+                      : "由身份证自动解析省市区县"
+                }
+                className={regionLabel ? "bg-page text-ink-soft" : undefined}
               />
+              <p className="mt-1 text-xs text-ink-mute">
+                {regionLabel
+                  ? "籍贯省市区县由身份证自动解析，不可修改。"
+                  : regionLookupFailed
+                    ? "未匹配到行政区划（请确认已导入区划数据），请手动填写。"
+                    : "填写或加载身份证后将自动解析省市区县。"}
+              </p>
             </div>
             <div>
               <Label>身份证号 *</Label>
@@ -574,11 +691,44 @@ export function RecognitionForm({ mode, initial }: Props) {
             </div>
             <div className="md:col-span-2">
               <Label>详细通讯地址 *</Label>
-              <Input
-                value={form.address}
-                onChange={(e) => set("address", e.target.value)}
-                placeholder="省 / 市 / 区县 / 街道门牌"
-              />
+              {regionLabel ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    readOnly
+                    value={regionLabel}
+                    className="bg-page text-ink-soft sm:max-w-xs"
+                  />
+                  <Input
+                    className="flex-1"
+                    value={addressDetail}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        address: joinRegionDetail(regionLabel, e.target.value),
+                      }))
+                    }
+                    placeholder="街道、门牌、村组等"
+                  />
+                </div>
+              ) : (
+                <Input
+                  value={form.address}
+                  disabled={regionLooking}
+                  onChange={(e) => set("address", e.target.value)}
+                  placeholder={
+                    regionLooking
+                      ? "正在根据身份证解析省市区县…"
+                      : "省 / 市 / 区县 / 街道门牌"
+                  }
+                />
+              )}
+              <p className="mt-1 text-xs text-ink-mute">
+                {regionLabel
+                  ? "省市区县由身份证自动解析，请补充街道、门牌等详细信息。"
+                  : regionLookupFailed
+                    ? "未能解析省市区县，请完整填写通讯地址。"
+                    : "省市区县将根据身份证自动填入。"}
+              </p>
             </div>
           </div>
         </SectionCard>

@@ -89,6 +89,18 @@ func setupOrgDictRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	writeDicts.PUT("/:type/:code", h.UpdateDict)
 	writeDicts.DELETE("/:type/:code", h.DeleteDict)
 
+	readRegs := secured.Group("/region-codes")
+	readRegs.GET("", h.ListRegionCodes)
+	readRegs.GET("/lookup", h.LookupRegionCode)
+	readRegs.GET("/:code", h.GetRegionCode)
+
+	writeRegs := admin.Group("/region-codes")
+	writeRegs.POST("", h.CreateRegionCode)
+	writeRegs.POST("/import", h.ImportRegionCodes)
+	writeRegs.POST("/import-default", h.ImportDefaultRegionCodes)
+	writeRegs.PUT("/:code", h.UpdateRegionCode)
+	writeRegs.DELETE("/:code", h.DeleteRegionCode)
+
 	students := admin.Group("/students")
 	students.GET("", h.ListStudents)
 	students.GET("/:id", h.GetStudent)

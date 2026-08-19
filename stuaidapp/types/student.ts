@@ -15,5 +15,7 @@ export interface StudentProfile {
   dept_id: number;
   major_id: number;
   class_id: number;
+  dept_name?: string;
+  class_name?: string;
   is_key_group: boolean;
 }

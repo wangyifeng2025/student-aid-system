@@ -19,7 +19,7 @@ function LeafLink({ item, active }: { item: NavLeaf; active: boolean }) {
         style={{ color: "var(--color-text-muted)" }}
         title="待开发"
       >
-        <Icon className="h-[18px] w-[18px] shrink-0" />
+        <Icon className="h-4.5 w-4.5 shrink-0" />
         <span>{item.label}</span>
       </span>
     );
@@ -34,7 +34,7 @@ function LeafLink({ item, active }: { item: NavLeaf; active: boolean }) {
         backgroundColor: active ? "var(--color-bg-sidebar-active)" : "transparent",
       }}
     >
-      <Icon className="h-[18px] w-[18px] shrink-0" />
+      <Icon className="h-4.5 w-4.5 shrink-0" />
       <span>{item.label}</span>
     </Link>
   );
@@ -64,7 +64,7 @@ function GroupBlock({
         className="flex w-full items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors duration-150"
         style={{ color: "var(--color-text-muted)" }}
       >
-        <Icon className="h-[18px] w-[18px] shrink-0" />
+        <Icon className="h-4.5 w-4.5 shrink-0" />
         <span className="flex-1 text-left">{group.label}</span>
         <ChevronDown
           className="h-3.5 w-3.5 shrink-0 transition-transform duration-150"

@@ -1,4 +1,4 @@
-import type { Role } from "@/types/auth";
+import type { Role, DataScope } from "@/types/auth";
 
 export const ROLE_LABELS: Record<Role, string> = {
   student: "学生",
@@ -8,8 +8,20 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: "系统管理员",
 };
 
+export const SCOPE_LABELS: Record<DataScope, string> = {
+  self: "仅本人",
+  class: "本班级",
+  department: "本教学系",
+  school: "全校",
+};
+
 export function roleLabel(role?: Role): string {
   return role ? (ROLE_LABELS[role] ?? role) : "";
+}
+
+export function scopeLabel(scope?: DataScope | string): string {
+  if (!scope) return "";
+  return SCOPE_LABELS[scope as DataScope] ?? scope;
 }
 
 // 取姓名/用户名首字符作为头像占位。

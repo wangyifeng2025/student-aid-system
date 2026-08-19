@@ -66,7 +66,7 @@ curl http://localhost:8080/health
 - 配置加载、数据库连接与自动迁移
 - 全部核心数据模型
 - **模块 1 认证与权限**：登录、JWT 双令牌刷新、修改密码、找回密码、管理员重置密码、RBAC 角色中间件、数据范围（本人/本班/本系/全校）
-- **模块 2 组织机构与基础数据**：院系/专业/年级/班级维护（外键校验 + 删除关联保护）、数据字典 CRUD（按 `type+code` 自然键，前端下拉来源），**全部接口含读取仅管理员**；`make seed` 写入默认字典
+- **模块 2 组织机构与基础数据**：院系/专业/年级/班级维护（外键校验 + 删除关联保护）、数据字典 CRUD（按 `type+code` 自然键，前端下拉来源）、**行政区划代码**（12 位国标码，按身份证前 6 位解析户籍地；读取登录用户、写入仅管理员），`make seed` 写入默认字典与全国区划
 - **模块 3 学生与重点人群数据**：学生信息管理（身份证/手机号/字典/外键校验 + 分页筛选）、重点保障人群名单管理、Excel 导入（模板下载 + 逐行错误回显，学生按学号增量 upsert）、重点人群自动匹配（命中标记 `is_key_group`，名单变更自动重算），**全部接口仅管理员**
 - **模块 4 困难认定申请**：在线填报认定申请表（基本情况 / 家庭成员 / 影响信息 / 个人承诺）、草稿与提交、整套数据校验与逻辑提示（身份证/手机号、家庭成员数与家庭人口一致、字典下拉约束、残疾或未勾选特殊群体须填其他情况、人均收入自动计算、单亲/单薪提示）、支撑材料附件上传/列出/下载/删除（本地磁盘）、认定通过后导出 Word（基于 docx 模板填数，无需外部依赖）。权限：学生增删改/提交本人，各级按数据范围只读
 - JWT 认证、CORS、统一响应
@@ -89,9 +89,11 @@ curl http://localhost:8080/health
 |------|------|------|------|
 | GET | `/api/v1/orgs/departments` `/majors` `/grades` `/classes` | 列表（`majors`/`classes` 支持 `dept_id`/`major_id`/`grade_id` 过滤） | 是（admin） |
 | POST/PUT/DELETE | `/api/v1/orgs/{departments\|majors\|grades\|classes}[/:id]` | 增删改 | 是（admin） |
-| GET | `/api/v1/dicts` `/dicts/:type` | 字典类型 / 按类型列项 | 是（admin） |
+| GET | `/api/v1/dicts` `/dicts/:type` | 字典类型 / 按类型列项 | 是（登录用户） |
 | POST | `/api/v1/dicts/:type` | 新增字典项 | 是（admin） |
 | PUT/DELETE | `/api/v1/dicts/:type/:code` | 改/删字典项 | 是（admin） |
+| GET | `/api/v1/region-codes` `/lookup` `/:code` | 行政区划列表 / 身份证解析 / 详情 | 是（登录用户） |
+| POST/PUT/DELETE | `/api/v1/region-codes` | 增删改、导入 JSON / 内置数据 | 是（admin） |
 
 ### 学生与重点人群 API（模块 3，全部仅 admin）
 

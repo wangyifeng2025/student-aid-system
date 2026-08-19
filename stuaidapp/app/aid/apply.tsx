@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ import { FormHeader } from '@/components/recognition-form/form-header';
 import { PickerField } from '@/components/recognition-form/picker-field';
 import { SectionCard } from '@/components/recognition-form/section-card';
 import { StepIndicator } from '@/components/recognition-form/step-indicator';
+import { StudentIdentity } from '@/components/recognition-form/student-identity';
 import { TextField } from '@/components/recognition-form/text-field';
 import { Brand } from '@/constants/brand';
 import {
@@ -31,7 +33,8 @@ import {
   SPECIAL_GROUP_OPTIONS,
 } from '@/constants/recognition-options';
 import { canEditRecognition } from '@/constants/review-options';
-import { ApiError, recognitionApi, studentApi } from '@/lib/api';
+import { ApiError, recognitionApi, regionCodeApi, studentApi } from '@/lib/api';
+import { joinRegionDetail, splitRegionDetail } from '@/lib/id-card-region';
 import { loadSignatureDataUrls, syncSignatureAttachments } from '@/lib/signature-upload';
 import { formatCurrency, isIdCard, isPhone } from '@/lib/validators';
 import { useAuthStore } from '@/store/auth';
@@ -56,10 +59,19 @@ export default function RecognitionApplyScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(editingId);
-  const [profileLoading, setProfileLoading] = useState(role === 'student' && !editingId);
+  const [profileLoading, setProfileLoading] = useState(role === 'student');
   const [recordLoading, setRecordLoading] = useState(!!editingId);
   const [signatureDataUrl, setSignatureDataUrl] = useState('');
   const [signatureDirty, setSignatureDirty] = useState(false);
+  const [regionLabel, setRegionLabel] = useState('');
+  const [regionLooking, setRegionLooking] = useState(false);
+  const [regionLookupFailed, setRegionLookupFailed] = useState(false);
+  const [profile, setProfile] = useState({
+    name: '',
+    student_no: '',
+    dept_name: '',
+    class_name: '',
+  });
 
   // 续填已有的草稿 / 被退回申请：从后端加载完整记录。
   const loadExisting = useCallback(async () => {
@@ -105,6 +117,12 @@ export default function RecognitionApplyScreen() {
           }),
         ),
       });
+      setProfile({
+        name: detail.student_name,
+        student_no: detail.student_no,
+        dept_name: detail.dept_name || '',
+        class_name: detail.class_name || '',
+      });
       try {
         const imgs = await loadSignatureDataUrls(editingId);
         setSignatureDataUrl(imgs.signature);
@@ -125,14 +143,20 @@ export default function RecognitionApplyScreen() {
     loadExisting();
   }, [loadExisting]);
 
-  // 身份证号 / 民族 / 手机号从学籍档案自动读取（与 Web 端认定表单行为一致），仅新建时预填。
+  // 姓名 / 教学系 / 班级 / 身份证号从学籍档案读取（与 Web 端认定表单一致）。
   useEffect(() => {
-    if (role !== 'student' || editingId) return;
+    if (role !== 'student') return;
     let cancelled = false;
     (async () => {
       try {
         const stu = await studentApi.me();
         if (cancelled) return;
+        setProfile({
+          name: stu.name,
+          student_no: stu.student_no,
+          dept_name: stu.dept_name || '',
+          class_name: stu.class_name || '',
+        });
         setForm((prev) => ({
           ...prev,
           id_card: stu.id_card || prev.id_card,
@@ -150,7 +174,48 @@ export default function RecognitionApplyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [role, editingId]);
+  }, [role]);
+
+  useEffect(() => {
+    const id = form.id_card.trim().toUpperCase();
+    if (!isIdCard(id)) {
+      setRegionLabel('');
+      setRegionLooking(false);
+      setRegionLookupFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setRegionLooking(true);
+    (async () => {
+      try {
+        const look = await regionCodeApi.lookup(id);
+        if (cancelled) return;
+        const region = (look.full_name || '').trim();
+        setRegionLabel(region);
+        setRegionLookupFailed(!region);
+        setForm((prev) => {
+          const detail = splitRegionDetail(prev.address, prev.native_place || region);
+          return {
+            ...prev,
+            native_place: region,
+            address: joinRegionDetail(region, detail),
+          };
+        });
+      } catch {
+        if (!cancelled) {
+          setRegionLabel('');
+          setRegionLookupFailed(true);
+        }
+      } finally {
+        if (!cancelled) setRegionLooking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.id_card]);
+
+  const addressDetail = splitRegionDetail(form.address, regionLabel || form.native_place);
 
   const set = <K extends keyof RecognitionFormState>(key: K, value: RecognitionFormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -223,8 +288,13 @@ export default function RecognitionApplyScreen() {
   function checkStep0(): string | null {
     if (!form.year || form.year < 2000) return '请填写有效的认定年度';
     if (!form.nation.trim()) return '请选择民族';
-    if (!form.native_place.trim()) return '请填写籍贯';
     if (!form.id_card || !isIdCard(form.id_card)) return '请填写有效的 18 位身份证号';
+    if (regionLooking) return '正在根据身份证解析省市区县，请稍候';
+    if (regionLabel) {
+      if (!form.native_place.trim()) return '请填写籍贯';
+    } else if (!form.native_place.trim()) {
+      return '请填写籍贯（未能根据身份证解析行政区划，请手动填写）';
+    }
     if (!form.phone || !isPhone(form.phone)) return '请填写有效的手机号';
     if (!form.guardian_phone.trim()) return '请填写家长手机号';
     if (!isPhone(form.guardian_phone)) return '家长手机号格式不正确';
@@ -234,7 +304,11 @@ export default function RecognitionApplyScreen() {
     if (!form.income_source.trim()) return '请选择主要收入来源';
     if (!form.postal_code.trim()) return '请填写邮政编码';
     if (!/^\d{6}$/.test(form.postal_code.trim())) return '邮政编码须为 6 位数字';
-    if (!form.address.trim()) return '请填写详细通讯地址';
+    if (regionLabel) {
+      if (!addressDetail.trim()) return '请填写街道、门牌等详细通讯地址';
+    } else if (!form.address.trim()) {
+      return '请填写详细通讯地址';
+    }
     return null;
   }
 
@@ -362,6 +436,12 @@ export default function RecognitionApplyScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <FormHeader title="困难认定申请" />
+      <StudentIdentity
+        name={profile.name}
+        studentNo={profile.student_no}
+        deptName={profile.dept_name}
+        className={profile.class_name}
+      />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.stepperWrap}>
@@ -375,6 +455,27 @@ export default function RecognitionApplyScreen() {
           showsVerticalScrollIndicator={false}>
           {step === 0 && (
             <SectionCard title="基本信息">
+              <TextField
+                label="姓名"
+                value={profile.name}
+                onChangeText={() => undefined}
+                editable={false}
+                placeholder={profileLoading ? '正在从学籍档案读取…' : '学籍姓名'}
+              />
+              <TextField
+                label="教学系"
+                value={profile.dept_name}
+                onChangeText={() => undefined}
+                editable={false}
+                placeholder={profileLoading ? '正在从学籍档案读取…' : '学籍教学系'}
+              />
+              <TextField
+                label="班级"
+                value={profile.class_name}
+                onChangeText={() => undefined}
+                editable={false}
+                placeholder={profileLoading ? '正在从学籍档案读取…' : '学籍班级'}
+              />
               <TextField
                 label="认定年度"
                 required
@@ -395,7 +496,21 @@ export default function RecognitionApplyScreen() {
                 required
                 value={form.native_place}
                 onChangeText={(v) => set('native_place', v)}
-                placeholder="如：贵州省贵阳市"
+                editable={!regionLabel && !regionLooking}
+                placeholder={
+                  regionLooking
+                    ? '正在根据身份证解析…'
+                    : regionLookupFailed
+                      ? '未能解析，请手动填写省市区县'
+                      : '由身份证自动解析省市区县'
+                }
+                hint={
+                  regionLabel
+                    ? '籍贯省市区县由身份证自动解析，不可修改。'
+                    : regionLookupFailed
+                      ? '未匹配到行政区划，请手动填写。'
+                      : '填写或加载身份证后将自动解析省市区县。'
+                }
               />
               <TextField
                 label="身份证号"
@@ -464,15 +579,65 @@ export default function RecognitionApplyScreen() {
                   onChange={(v) => set('income_source', v)}
                 />
               </View>
-              <TextField
-                label="详细通讯地址"
-                required
-                value={form.address}
-                onChangeText={(v) => set('address', v)}
-                placeholder="省 / 市 / 区县 / 街道门牌"
-                multiline
-                numberOfLines={2}
-              />
+              <View style={styles.addressField}>
+                <Text style={styles.addressLabel}>
+                  详细通讯地址<Text style={styles.addressRequired}> *</Text>
+                </Text>
+                {regionLabel ? (
+                  <View style={styles.addressSplit}>
+                    <View style={[styles.addressControl, styles.addressControlReadonly]}>
+                      <Text style={styles.addressPrefixText}>{regionLabel}</Text>
+                    </View>
+                    <View style={[styles.addressControl, styles.addressControlMultiline]}>
+                      <TextInput
+                        style={[styles.addressInput, styles.addressInputMultiline]}
+                        value={addressDetail}
+                        onChangeText={(v) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            address: joinRegionDetail(regionLabel, v),
+                          }))
+                        }
+                        placeholder="街道、门牌、村组等"
+                        placeholderTextColor={Brand.mutedForeground}
+                        multiline
+                        numberOfLines={2}
+                        textAlignVertical="top"
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.addressControl,
+                      styles.addressControlMultiline,
+                      regionLooking && styles.addressControlReadonly,
+                    ]}>
+                    <TextInput
+                      style={[styles.addressInput, styles.addressInputMultiline]}
+                      value={form.address}
+                      onChangeText={(v) => set('address', v)}
+                      editable={!regionLooking}
+                      placeholder={
+                        regionLooking
+                          ? '正在根据身份证解析省市区县…'
+                          : '省 / 市 / 区县 / 街道门牌'
+                      }
+                      placeholderTextColor={Brand.mutedForeground}
+                      multiline
+                      numberOfLines={2}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                )}
+                <Text style={styles.addressHint}>
+                  {regionLabel
+                    ? '省市区县由身份证自动解析，请补充街道、门牌等详细信息。'
+                    : regionLookupFailed
+                      ? '未能解析省市区县，请完整填写通讯地址。'
+                      : '省市区县将根据身份证自动填入。'}
+                </Text>
+              </View>
             </SectionCard>
           )}
 
@@ -730,6 +895,59 @@ const styles = StyleSheet.create({
   },
   flex1: {
     flex: 1,
+  },
+  addressField: {
+    marginBottom: 16,
+  },
+  addressLabel: {
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '500',
+    color: Brand.foreground,
+  },
+  addressRequired: {
+    color: Brand.error,
+  },
+  addressSplit: {
+    gap: 8,
+  },
+  addressControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: Brand.radiusSm,
+    backgroundColor: Brand.inputBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+  },
+  addressControlReadonly: {
+    opacity: 0.72,
+  },
+  addressControlMultiline: {
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+  },
+  addressPrefixText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    color: Brand.foreground,
+  },
+  addressInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Brand.foreground,
+    padding: 0,
+  },
+  addressInputMultiline: {
+    minHeight: 64,
+    width: '100%',
+  },
+  addressHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Brand.mutedForeground,
   },
   okBadge: {
     flexDirection: 'row',

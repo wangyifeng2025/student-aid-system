@@ -16,6 +16,13 @@ import type {
   DictUpdateInput,
 } from "@/types/dict";
 import type {
+  RegionCode,
+  RegionCodeInput,
+  RegionCodeUpdateInput,
+  RegionImportResult,
+  RegionLookup,
+} from "@/types/region";
+import type {
   ImportResult,
   PageResult,
   SpecialGroup,
@@ -50,6 +57,7 @@ import type {
   UserFilter,
   UserUpdateInput,
 } from "@/types/user";
+import type { DashboardOverview } from "@/types/dashboard";
 import { clearSession, loadSession, updateSession } from "@/lib/token-storage";
 
 /** 请求时解析 API 根地址：Docker 同源反代留空 env 即可；本地开发默认 localhost:8080。 */
@@ -296,6 +304,11 @@ export function login(payload: LoginRequest): Promise<TokenResponse> {
   });
 }
 
+export const dashboardApi = {
+  overview: (year?: number) =>
+    apiFetch<DashboardOverview>(`/dashboard${buildParams({ year })}`),
+};
+
 // ===== 组织机构 · 院系 =====
 
 export const departmentApi = {
@@ -375,6 +388,43 @@ export const dictApi = {
       `/dicts/${encodeURIComponent(type)}/${encodeURIComponent(code)}`,
       { method: "DELETE" },
     ),
+};
+
+// ===== 行政区划 RegionCode =====
+
+export const regionCodeApi = {
+  list: (filter?: { parent_code?: string; keyword?: string; level?: number }) =>
+    apiFetch<RegionCode[]>(
+      `/region-codes${buildParams({
+        parent_code: filter?.parent_code,
+        keyword: filter?.keyword,
+        level: filter?.level,
+      })}`,
+    ),
+  get: (code: string) =>
+    apiFetch<RegionCode>(`/region-codes/${encodeURIComponent(code)}`),
+  lookup: (q: string) =>
+    apiFetch<RegionLookup>(`/region-codes/lookup${buildParams({ q })}`),
+  create: (body: RegionCodeInput) =>
+    apiFetch<RegionCode>("/region-codes", { method: "POST", body }),
+  update: (code: string, body: RegionCodeUpdateInput) =>
+    apiFetch<RegionCode>(`/region-codes/${encodeURIComponent(code)}`, {
+      method: "PUT",
+      body,
+    }),
+  remove: (code: string) =>
+    apiFetch<{ message: string }>(`/region-codes/${encodeURIComponent(code)}`, {
+      method: "DELETE",
+    }),
+  importTree: (body: unknown) =>
+    apiFetch<RegionImportResult>("/region-codes/import", {
+      method: "POST",
+      body,
+    }),
+  importDefault: () =>
+    apiFetch<RegionImportResult>("/region-codes/import-default", {
+      method: "POST",
+    }),
 };
 
 // ===== 学生 Student =====

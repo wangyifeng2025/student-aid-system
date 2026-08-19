@@ -1,41 +1,32 @@
-import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { Brand } from '@/constants/brand';
-
-/** 圆形校徽容器 + 书本图标（对应设计稿 splash-badge） */
+/** 启动页校徽：主色蓝校徽，白底圆徽在蓝色启动页上更清晰 */
 export function SchoolBadgeIcon() {
   return (
-    <View style={styles.badge}>
-      <View style={styles.ring} pointerEvents="none" />
-      <Ionicons name="book" size={64} color={Brand.primary} />
+    <View style={styles.wrap}>
+      <Image
+        source={require('@/assets/images/splash-icon.png')}
+        style={styles.badge}
+        resizeMode="contain"
+        accessibilityLabel="黔西南民族职业技术学院校徽"
+      />
     </View>
   );
 }
 
-const BADGE_SIZE = 120;
+const BADGE_SIZE = 168;
 
 const styles = StyleSheet.create({
-  badge: {
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-    borderRadius: BADGE_SIZE / 2,
-    backgroundColor: Brand.primaryForeground,
-    alignItems: 'center',
-    justifyContent: 'center',
+  wrap: {
     marginBottom: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
     elevation: 6,
   },
-  ring: {
-    ...StyleSheet.absoluteFillObject,
-    margin: -3,
-    borderRadius: (BADGE_SIZE + 6) / 2,
-    borderWidth: 3,
-    borderColor: Brand.primaryForeground,
-    opacity: 0.36,
+  badge: {
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
   },
 });

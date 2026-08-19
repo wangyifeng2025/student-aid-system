@@ -44,6 +44,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		secured.Use(middleware.JWTAuth(jwtMgr), middleware.LoadCurrentUser(db))
 		{
 			secured.GET("/me", h.Me)
+			secured.GET("/dashboard", h.DashboardOverview)
 			secured.GET("/students/me", h.GetMyStudent)
 
 			authSecured := secured.Group("/auth")
@@ -61,6 +62,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			// 模块 2：组织机构与字典 — 读取全员可读，写入仅管理员。
 			registerOrgRoutes(secured, adminOnly, h)
 			registerDictRoutes(secured, adminOnly, h)
+			registerRegionCodeRoutes(secured, adminOnly, h)
 
 			// 模块 3：学生与重点人群 — 仍仅管理员。
 			registerStudentRoutes(adminOnly, h)
@@ -157,6 +159,24 @@ func registerDictRoutes(read, write *gin.RouterGroup, h *handler.Handler) {
 		writeDicts.POST("/:type", h.CreateDict)
 		writeDicts.PUT("/:type/:code", h.UpdateDict)
 		writeDicts.DELETE("/:type/:code", h.DeleteDict)
+	}
+}
+
+// registerRegionCodeRoutes 行政区划：读取全员可读，写入仅管理员。
+func registerRegionCodeRoutes(read, write *gin.RouterGroup, h *handler.Handler) {
+	readRegs := read.Group("/region-codes")
+	{
+		readRegs.GET("", h.ListRegionCodes)
+		readRegs.GET("/lookup", h.LookupRegionCode)
+		readRegs.GET("/:code", h.GetRegionCode)
+	}
+	writeRegs := write.Group("/region-codes")
+	{
+		writeRegs.POST("", h.CreateRegionCode)
+		writeRegs.POST("/import", h.ImportRegionCodes)
+		writeRegs.POST("/import-default", h.ImportDefaultRegionCodes)
+		writeRegs.PUT("/:code", h.UpdateRegionCode)
+		writeRegs.DELETE("/:code", h.DeleteRegionCode)
 	}
 }
 

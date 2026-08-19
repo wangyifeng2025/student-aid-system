@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -59,7 +60,12 @@ export default function LoginScreen() {
       <View style={[styles.content, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.brandArea}>
           <View style={styles.logo}>
-            <Ionicons name="book" size={40} color={Brand.primary} />
+            <Image
+              source={require('@/assets/images/splash-icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessibilityLabel="黔西南民族职业技术学院校徽"
+            />
           </View>
           <Text style={styles.appName}>{AppCopy.schoolName}</Text>
           <Text style={styles.appSubtitle}>请使用学号或工号登录</Text>
@@ -159,13 +165,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: Brand.brand50,
+    width: 88,
+    height: 88,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+  },
+  logoImage: {
+    width: 88,
+    height: 88,
   },
   appName: {
     fontSize: 19,

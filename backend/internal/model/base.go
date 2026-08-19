@@ -34,6 +34,7 @@ func AllModels() []any {
 		&Publicity{},
 		&Quota{},
 		&Dict{},
+		&RegionCode{},
 		&Notification{},
 		&AuditLog{},
 	}

@@ -465,10 +465,15 @@ func (s *ReviewService) buildResponse(id uint) (*dto.RecognitionResponse, error)
 		return nil, err
 	}
 	no, name := "", ""
-	if stu, sErr := s.stuRepo.FindStudent(a.StudentID); sErr == nil {
-		no, name = stu.StudentNo, stu.Name
+	var stu *model.Student
+	if found, sErr := s.stuRepo.FindStudentUnscoped(a.StudentID); sErr == nil {
+		stu = found
+		no, name = found.StudentNo, found.Name
 	}
 	resp := dto.ToRecognitionResponse(a, no, name)
+	if stu != nil {
+		resp.DeptName, resp.ClassName = studentOrgNames(s.orgRepo, stu)
+	}
 	resp.Reviews = s.reviewRecords(a.Reviews)
 	return &resp, nil
 }

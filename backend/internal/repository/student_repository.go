@@ -83,6 +83,15 @@ func (r *StudentRepository) FindStudent(id uint) (*model.Student, error) {
 	return &s, nil
 }
 
+// FindStudentUnscoped 按 ID 加载学生，含已软删除记录（申报记录备查展示学号/姓名）。
+func (r *StudentRepository) FindStudentUnscoped(id uint) (*model.Student, error) {
+	var s model.Student
+	if err := r.db.Unscoped().First(&s, id).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *StudentRepository) FindByStudentNo(no string) (*model.Student, error) {
 	var s model.Student
 	if err := r.db.Where("student_no = ?", no).First(&s).Error; err != nil {
@@ -107,7 +116,8 @@ func (r *StudentRepository) FindMapByIDs(ids []uint) (map[uint]model.Student, er
 		return out, nil
 	}
 	var items []model.Student
-	if err := r.db.Where("id IN ?", ids).Find(&items).Error; err != nil {
+	// 含已软删除学生：删除学籍后申报记录仍需展示学号/姓名备查。
+	if err := r.db.Unscoped().Where("id IN ?", ids).Find(&items).Error; err != nil {
 		return nil, err
 	}
 	for i := range items {

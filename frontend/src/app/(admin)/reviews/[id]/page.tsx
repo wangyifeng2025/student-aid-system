@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoadingState, ErrorState } from "@/components/ui/states";
+import { StudentIdentity } from "@/components/recognition/student-identity";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { AttachmentsPanel } from "@/components/recognition/attachments-panel";
 import { SignaturePreview } from "@/components/recognition/signature-preview";
@@ -75,29 +76,53 @@ export default function ReviewDetailPage() {
   const role = useAuthStore((s) => s.user?.role);
   const userId = useAuthStore((s) => s.user?.id);
 
-  const [data, setData] = React.useState<Recognition | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<{
+    forId: number;
+    data: Recognition | null;
+    error: string | null;
+  } | null>(null);
   const [dialog, setDialog] = React.useState<ReviewActionType | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [withdrawing, setWithdrawing] = React.useState(false);
 
   const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
-      setData(await reviewApi.get(id));
+      const next = await reviewApi.get(id);
+      setResult({ forId: id, data: next, error: null });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "加载失败");
-    } finally {
-      setLoading(false);
+      setResult({
+        forId: id,
+        data: null,
+        error: e instanceof ApiError ? e.message : "加载失败",
+      });
     }
   }, [id]);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    reviewApi
+      .get(id)
+      .then((next) => {
+        if (!cancelled) setResult({ forId: id, data: next, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setResult({
+            forId: id,
+            data: null,
+            error: e instanceof ApiError ? e.message : "加载失败",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const loading = result?.forId !== id;
+  const data = result?.forId === id ? result.data : null;
+  const error = result?.forId === id ? result.error : null;
 
   const reviewable = !!data && canReview(role, data.status);
   const withdrawable = !!data && canWithdrawReview(role, userId, data.reviews);
@@ -138,7 +163,17 @@ export default function ReviewDetailPage() {
   };
 
   if (loading) return <LoadingState />;
-  if (error) return <ErrorState label={error} onRetry={load} />;
+  if (error) {
+    return (
+      <ErrorState
+        label={error}
+        onRetry={() => {
+          setResult(null);
+          void load();
+        }}
+      />
+    );
+  }
   if (!data) return null;
 
   return (
@@ -150,25 +185,18 @@ export default function ReviewDetailPage() {
         </Link>
       </div>
 
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div
-          className="flex shrink-0 items-center justify-center text-base font-semibold"
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "var(--color-primary-light)",
-            color: "var(--color-primary)",
-          }}
-        >
-          {(data.student_name || "学").charAt(0)}
-        </div>
-        <h2 className="text-lg font-semibold text-ink">{data.student_name || "—"}</h2>
-        <span className="text-sm text-ink-mute">{data.student_no}</span>
-        <span className="text-sm text-ink-mute">· {data.year} 年度</span>
-        <StatusBadge status={data.status} />
-      </div>
+      <StudentIdentity
+        name={data.student_name}
+        studentNo={data.student_no}
+        deptName={data.dept_name}
+        className={data.class_name}
+        extra={
+          <>
+            <span className="text-sm text-ink-mute">· {data.year} 年度</span>
+            <StatusBadge status={data.status} />
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* Left */}
@@ -177,6 +205,8 @@ export default function ReviewDetailPage() {
             <div className="grid grid-cols-2 gap-x-6 md:grid-cols-3">
               <Field label="姓名" value={data.student_name} />
               <Field label="学号" value={data.student_no} />
+              <Field label="教学系" value={data.dept_name} />
+              <Field label="班级" value={data.class_name} />
               <Field label="认定年度" value={data.year} />
               <Field label="民族" value={nationLabel(data.nation)} />
               <Field label="籍贯" value={data.native_place} />
@@ -278,8 +308,8 @@ export default function ReviewDetailPage() {
         </div>
 
         {/* Right (sticky) */}
-        <div className="w-full shrink-0 lg:w-[340px]">
-          <div className="lg:sticky lg:top-[72px]">
+        <div className="w-full shrink-0 lg:w-85">
+          <div className="lg:sticky lg:top-18">
             <Card title="评审信息">
               <div className="flex flex-col gap-3 text-sm">
                 <div className="flex items-center justify-between">

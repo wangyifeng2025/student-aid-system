@@ -50,7 +50,7 @@ func (s *GrantPDFService) Export(actor rbac.Actor, id uint) ([]byte, string, err
 		return nil, "", NewValidationError("仅审批通过的助学金申请可导出申请表")
 	}
 
-	stu, _ := s.stuRepo.FindStudent(a.StudentID)
+	stu, _ := s.stuRepo.FindStudentUnscoped(a.StudentID)
 	schoolUnit, gradeName := resolveGrantSchoolUnit(s.orgRepo, stu)
 	labels := s.loadLabelMaps()
 	replacements := buildGrantDocxReplacements(s.cfg, a, stu, schoolUnit, gradeName, labels)

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -324,7 +323,7 @@ func (s *GrantReviewService) buildDetail(id uint) (*dto.GrantResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	stu, _ := s.stuRepo.FindStudent(a.StudentID)
+	stu, _ := s.stuRepo.FindStudentUnscoped(a.StudentID)
 	schoolUnit, gradeName := resolveGrantSchoolUnit(s.orgRepo, stu)
 	resp := dto.ToGrantResponse(a, stu, schoolUnit, gradeName)
 	names, _ := s.userRepo.FindNamesByIDs(reviewerIDs(a.Reviews))
@@ -358,20 +357,4 @@ func resolveGrantSchoolUnit(orgRepo *repository.OrgRepository, stu *model.Studen
 		}
 	}
 	return fmt.Sprintf("%s%s%s%s", deptName, gradeName, majorName, className), gradeName
-}
-
-// grantErrMessage 批量结果用（预留）。
-func grantErrMessage(err error) string {
-	var ve *ValidationError
-	if errors.As(err, &ve) {
-		return ve.Msg
-	}
-	switch {
-	case errors.Is(err, ErrNotFound):
-		return "记录不存在或不在数据范围内"
-	case errors.Is(err, ErrForbidden):
-		return "没有评审权限"
-	default:
-		return "操作失败"
-	}
 }

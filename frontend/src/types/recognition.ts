@@ -90,6 +90,8 @@ export interface Recognition extends RecognitionInput {
   student_id: number;
   student_no: string;
   student_name: string;
+  dept_name: string;
+  class_name: string;
   status: ApplicationStatus;
   current_level: number;
   difficulty_level: DifficultyLevel;

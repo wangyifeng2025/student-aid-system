@@ -210,7 +210,7 @@ func (s *GrantService) buildResponse(a *model.GrantApplication) (*dto.GrantRespo
 		}
 		a = full
 	}
-	stu, _ := s.stuRepo.FindStudent(a.StudentID)
+	stu, _ := s.stuRepo.FindStudentUnscoped(a.StudentID)
 	schoolUnit, gradeName := s.resolveSchoolUnit(stu)
 	resp := dto.ToGrantResponse(a, stu, schoolUnit, gradeName)
 	names := s.grantReviewNames(a.Reviews)

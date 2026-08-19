@@ -4,15 +4,8 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand } from '@/constants/brand';
+import { ROLE_LABELS } from '@/constants/roles';
 import { useAuthStore } from '@/store/auth';
-
-const ROLE_LABELS: Record<string, string> = {
-  student: '学生',
-  classadvisor: '班主任 / 辅导员',
-  department: '教学系经办人',
-  aidcenter: '资助中心',
-  admin: '系统管理员',
-};
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();

@@ -178,28 +178,6 @@ func TestNormalizeDocxTextRunsNoChange(t *testing.T) {
 	}
 }
 
-func buildMinimalDocx(t *testing.T, documentXML string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	w, err := zw.Create("word/document.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write([]byte(documentXML)); err != nil {
-		t.Fatal(err)
-	}
-	w2, err := zw.Create("[Content_Types].xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w2.Write([]byte(`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>`))
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
-}
-
 func readDocxDocumentXMLForTest(t *testing.T, docxBytes []byte) string {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))

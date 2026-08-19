@@ -21,6 +21,7 @@ type RecognitionService struct {
 	dictRepo *repository.DictRepository
 	userRepo *repository.UserRepository
 	attRepo  *repository.AttachmentRepository
+	region   *RegionCodeService
 }
 
 func NewRecognitionService(db *gorm.DB) *RecognitionService {
@@ -31,6 +32,7 @@ func NewRecognitionService(db *gorm.DB) *RecognitionService {
 		dictRepo: repository.NewDictRepository(db),
 		userRepo: repository.NewUserRepository(db),
 		attRepo:  repository.NewAttachmentRepository(db),
+		region:   NewRegionCodeService(db),
 	}
 }
 
@@ -113,6 +115,7 @@ func (s *RecognitionService) Get(actor rbac.Actor, id uint) (*dto.RecognitionRes
 	}
 	no, name := s.studentBrief(a.StudentID)
 	resp := dto.ToRecognitionResponse(a, no, name)
+	s.attachStudentOrg(&resp, a.StudentID)
 	resp.Reviews = s.reviewRecords(a.Reviews)
 	return &resp, nil
 }
@@ -153,6 +156,7 @@ func (s *RecognitionService) Create(actor rbac.Actor, req *dto.RecognitionReques
 		return nil, ErrDuplicate
 	}
 	applyStudentIDCard(req, stu)
+	s.applyIDCardRegion(req)
 	if err := s.validateFormat(req); err != nil {
 		return nil, err
 	}
@@ -164,6 +168,7 @@ func (s *RecognitionService) Create(actor rbac.Actor, req *dto.RecognitionReques
 		return nil, err
 	}
 	resp := dto.ToRecognitionResponse(a, stu.StudentNo, stu.Name)
+	s.attachStudentOrgFrom(&resp, stu)
 	return &resp, nil
 }
 
@@ -186,6 +191,7 @@ func (s *RecognitionService) Update(actor rbac.Actor, id uint, req *dto.Recognit
 		}
 	}
 	applyStudentIDCard(req, stu)
+	s.applyIDCardRegion(req)
 	if err := s.validateFormat(req); err != nil {
 		return nil, err
 	}
@@ -202,6 +208,7 @@ func (s *RecognitionService) Update(actor rbac.Actor, id uint, req *dto.Recognit
 		return nil, err
 	}
 	resp := dto.ToRecognitionResponse(a, stu.StudentNo, stu.Name)
+	s.attachStudentOrgFrom(&resp, stu)
 	return &resp, nil
 }
 
@@ -234,6 +241,7 @@ func (s *RecognitionService) Withdraw(actor rbac.Actor, id uint) (*dto.Recogniti
 		return nil, err
 	}
 	resp := dto.ToRecognitionResponse(a, stu.StudentNo, stu.Name)
+	s.attachStudentOrgFrom(&resp, stu)
 	return &resp, nil
 }
 
@@ -247,6 +255,9 @@ func (s *RecognitionService) Submit(actor rbac.Actor, id uint) (*dto.SubmitResul
 		return nil, NewValidationError("当前状态不可提交（仅草稿或被退回的申请可提交）")
 	}
 	if err := validateForSubmit(a); err != nil {
+		return nil, err
+	}
+	if err := s.requireAddressDetail(a); err != nil {
 		return nil, err
 	}
 	if err := s.requireSignatureAttachments(id); err != nil {
@@ -263,6 +274,7 @@ func (s *RecognitionService) Submit(actor rbac.Actor, id uint) (*dto.SubmitResul
 	}
 
 	resp := dto.ToRecognitionResponse(a, stu.StudentNo, stu.Name)
+	s.attachStudentOrgFrom(&resp, stu)
 	return &dto.SubmitResult{
 		Application: &resp,
 		Warnings:    buildWarnings(a),
@@ -294,11 +306,26 @@ func (s *RecognitionService) loadOwned(actor rbac.Actor, id uint) (*model.Recogn
 }
 
 func (s *RecognitionService) studentBrief(studentID uint) (no, name string) {
-	stu, err := s.stuRepo.FindStudent(studentID)
+	stu, err := s.stuRepo.FindStudentUnscoped(studentID)
 	if err != nil {
 		return "", ""
 	}
 	return stu.StudentNo, stu.Name
+}
+
+func (s *RecognitionService) attachStudentOrg(resp *dto.RecognitionResponse, studentID uint) {
+	stu, err := s.stuRepo.FindStudentUnscoped(studentID)
+	if err != nil {
+		return
+	}
+	s.attachStudentOrgFrom(resp, stu)
+}
+
+func (s *RecognitionService) attachStudentOrgFrom(resp *dto.RecognitionResponse, stu *model.Student) {
+	if resp == nil || stu == nil {
+		return
+	}
+	resp.DeptName, resp.ClassName = studentOrgNames(s.orgRepo, stu)
 }
 
 // validateFormat 对已填字段做格式与字典校验（草稿与提交共用）。
@@ -366,6 +393,61 @@ func (s *RecognitionService) requireDict(dictType, code, label string) error {
 // applyStudentIDCard 认定申请身份证号一律取自学籍档案，忽略前端传入值。
 func applyStudentIDCard(req *dto.RecognitionRequest, stu *model.Student) {
 	req.IDCard = stu.IDCard
+}
+
+// applyIDCardRegion 按身份证前 6 位解析省市区县：籍贯写入区划全称，通讯地址保留用户填写的街道门牌。
+// 区划未导入或无法匹配时不改写，以便草稿仍可保存。
+func (s *RecognitionService) applyIDCardRegion(req *dto.RecognitionRequest) {
+	if s.region == nil || strings.TrimSpace(req.IDCard) == "" {
+		return
+	}
+	look, err := s.region.Lookup(req.IDCard)
+	if err != nil || look == nil {
+		return
+	}
+	mergeIDCardRegion(req, look.FullName)
+}
+
+func mergeIDCardRegion(req *dto.RecognitionRequest, region string) {
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return
+	}
+	req.NativePlace = region
+	addr := strings.TrimSpace(req.Address)
+	detail := strings.TrimSpace(strings.TrimPrefix(addr, region))
+	if detail == "" {
+		req.Address = region
+		return
+	}
+	req.Address = region + detail
+}
+
+func addressDetailBeyondRegion(address, region string) string {
+	addr := strings.TrimSpace(address)
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return addr
+	}
+	if !strings.HasPrefix(addr, region) {
+		return addr
+	}
+	return strings.TrimSpace(strings.TrimPrefix(addr, region))
+}
+
+// requireAddressDetail 区划可解析时，通讯地址不能只填省市区县。
+func (s *RecognitionService) requireAddressDetail(a *model.RecognitionApplication) error {
+	if s.region == nil {
+		return nil
+	}
+	look, err := s.region.Lookup(a.IDCard)
+	if err != nil || look == nil || strings.TrimSpace(look.FullName) == "" {
+		return nil
+	}
+	if addressDetailBeyondRegion(a.Address, look.FullName) == "" {
+		return NewValidationError("请在通讯地址中补充街道、门牌等详细信息")
+	}
+	return nil
 }
 
 // applyRecognition 将请求写入模型主体（不含家庭成员、流程字段）。

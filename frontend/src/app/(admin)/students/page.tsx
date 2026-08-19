@@ -381,7 +381,7 @@ export default function StudentsPage() {
               onDone={load}
               entityLabel="学生"
               canWrite={canWrite}
-              hint={`确定删除选中的 ${selected.size} 名学生吗？关联的登录账号将一并删除，此操作不可撤销。`}
+              hint={`确定删除选中的 ${selected.size} 名学生吗？关联的登录账号将一并删除，认定与助学金申报记录会保留备查。`}
             />
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
               <Download size={16} />
@@ -538,7 +538,7 @@ export default function StudentsPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除学生"
-        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？关联的登录账号将一并删除。`}
+        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？关联的登录账号将一并删除，认定与助学金申报记录会保留备查。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

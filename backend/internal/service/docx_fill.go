@@ -195,9 +195,7 @@ func addImageRelationship(relsXML, rID, target string) string {
 func ensurePNGContentType(typesXML, partName string) string {
 	const pngDefault = `<Default Extension="png" ContentType="image/png"/>`
 	if !strings.Contains(typesXML, `Extension="png"`) {
-		if strings.Contains(typesXML, "</Types>") {
-			typesXML = strings.Replace(typesXML, "</Types>", pngDefault+"</Types>", 1)
-		}
+		typesXML = strings.Replace(typesXML, "</Types>", pngDefault+"</Types>", 1)
 	}
 	override := fmt.Sprintf(
 		`<Override PartName="/%s" ContentType="image/png"/>`,

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FormHeader } from '@/components/recognition-form/form-header';
 import { SectionCard } from '@/components/recognition-form/section-card';
+import { StudentIdentity } from '@/components/recognition-form/student-identity';
 import { DetailRow } from '@/components/reviews/detail-row';
 import { FamilyMemberView } from '@/components/reviews/family-member-view';
 import { ReviewTimeline } from '@/components/reviews/review-timeline';
@@ -106,6 +107,20 @@ export default function RecognitionDetailScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <FormHeader title="困难认定详情" />
+      {detail ? (
+        <StudentIdentity
+          name={detail.student_name}
+          studentNo={detail.student_no}
+          deptName={detail.dept_name}
+          className={detail.class_name}
+          extra={
+            <>
+              <Text style={styles.identityYear}>{detail.year} 年度</Text>
+              <StatusBadge status={detail.status} />
+            </>
+          }
+        />
+      ) : null}
 
       {loading ? (
         <View style={styles.centerBox}>
@@ -124,7 +139,12 @@ export default function RecognitionDetailScreen() {
             style={styles.scroll}
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
-            <SectionCard title={`${detail.year} 年度困难认定`} right={<StatusBadge status={detail.status} />}>
+            <SectionCard title="基本信息">
+              <DetailRow label="姓名" value={detail.student_name} />
+              <DetailRow label="学号" value={detail.student_no} />
+              <DetailRow label="教学系" value={detail.dept_name} />
+              <DetailRow label="班级" value={detail.class_name} />
+              <DetailRow label="认定年度" value={String(detail.year)} />
               <DetailRow label="民族" value={nationLabel(detail.nation)} />
               <DetailRow label="籍贯" value={detail.native_place} />
               <DetailRow label="身份证号" value={detail.id_card} />
@@ -237,6 +257,10 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
     paddingBottom: 32,
+  },
+  identityYear: {
+    fontSize: 13,
+    color: Brand.mutedForeground,
   },
   centerBox: {
     flex: 1,

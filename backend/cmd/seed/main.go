@@ -11,7 +11,7 @@ import (
 )
 
 // 初始化开发/演示数据（幂等，可重复执行）：
-// 字典、admin/admin123、测试学生 2024010101/student123、
+// 字典、行政区划、admin/admin123、测试学生 2024010101/student123、
 // 演示组织机构、评审账号 advisor01/dept01/aidcenter01（见 README 测试账号表）。
 func main() {
 	cfg, err := config.Load()
@@ -29,6 +29,9 @@ func main() {
 
 	if err := seedDicts(db); err != nil {
 		log.Fatalf("初始化字典失败: %v", err)
+	}
+	if err := seedRegionCodes(db); err != nil {
+		log.Fatalf("初始化行政区划失败: %v", err)
 	}
 
 	if err := seedAdmin(db); err != nil {

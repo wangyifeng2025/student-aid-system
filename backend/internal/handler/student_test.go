@@ -176,6 +176,79 @@ func TestStudentCRUDAndValidation(t *testing.T) {
 	}
 }
 
+func TestDeleteStudentRemovesUserKeepsApplications(t *testing.T) {
+	r, db := setupOrgDictRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+
+	studentNo := fmt.Sprintf("D%d", time.Now().UnixNano())
+	idCard := uniqueValidIDCard()
+	dept, major, class := seedStudentOrgRefs(t, db)
+	w := doJSON(t, r, http.MethodPost, "/api/v1/students", token,
+		validStudentReq(studentNo, "备查学生", idCard, dept.ID, major.ID, class.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("create student status %d, body %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		Data dto.StudentResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &created)
+	stuID, userID := created.Data.ID, created.Data.UserID
+	if stuID == 0 || userID == 0 {
+		t.Fatalf("expected student and user id, got %+v", created.Data)
+	}
+
+	rec := model.RecognitionApplication{StudentID: stuID, Year: 2026, Status: model.StatusApproved}
+	if err := db.Create(&rec).Error; err != nil {
+		t.Fatalf("create recognition: %v", err)
+	}
+	grant := model.GrantApplication{
+		StudentID: stuID, RecognitionID: rec.ID,
+		GrantType: model.GrantNationalAid, Year: 2026, Status: model.GrantStatusDraft,
+	}
+	if err := db.Create(&grant).Error; err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Unscoped().Where("id = ?", grant.ID).Delete(&model.GrantApplication{})
+		db.Unscoped().Where("id = ?", rec.ID).Delete(&model.RecognitionApplication{})
+		db.Unscoped().Where("id = ?", stuID).Delete(&model.Student{})
+		db.Unscoped().Where("id = ?", userID).Delete(&model.User{})
+	})
+
+	w = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/v1/students/%d", stuID), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete student status %d, body %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/students/%d", stuID), token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("deleted student expect 404, got %d", w.Code)
+	}
+	if err := db.First(&model.User{}, userID).Error; err == nil {
+		t.Fatal("associated login user should be deleted")
+	} else if err != gorm.ErrRecordNotFound {
+		t.Fatalf("lookup user: %v", err)
+	}
+
+	var keptRec model.RecognitionApplication
+	if err := db.First(&keptRec, rec.ID).Error; err != nil {
+		t.Fatalf("recognition should remain for archive: %v", err)
+	}
+	var keptGrant model.GrantApplication
+	if err := db.First(&keptGrant, grant.ID).Error; err != nil {
+		t.Fatalf("grant should remain for archive: %v", err)
+	}
+
+	var archived model.Student
+	if err := db.Unscoped().First(&archived, stuID).Error; err != nil {
+		t.Fatalf("soft-deleted student row should remain: %v", err)
+	}
+	if archived.Name != "备查学生" || archived.StudentNo != studentNo {
+		t.Fatalf("archived student snapshot unexpected: %+v", archived)
+	}
+}
+
 func TestSpecialGroupAutoMatch(t *testing.T) {
 	r, db := setupOrgDictRouter(t)
 	admin := seedUser(t, db, "pass123", model.RoleAdmin)
