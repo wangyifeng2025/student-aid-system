@@ -34,3 +34,5 @@ export:
   recognition_template_path: "./assets/templates/recognition_application.docx"
   # 助学金申请表 Word 模板（docx，含 {占位符}），审批通过后导出 docx 时使用
   grant_template_path: "./assets/templates/grant_national_aid.docx"
+  # 家庭经济困难学生认定结果汇总表 Excel 模板
+  recognition_summary_template_path: "./assets/templates/recognition_result_summary.xlsx"

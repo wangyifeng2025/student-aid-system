@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,7 +8,6 @@ import { AidRecordItem } from '@/components/aid/aid-record-item';
 import { FormHeader } from '@/components/recognition-form/form-header';
 import { Brand } from '@/constants/brand';
 import { grantTypeLabel } from '@/constants/grant-options';
-import { canEditRecognition } from '@/constants/review-options';
 import { ApiError, grantApi, recognitionApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/validators';
 import type { RecognitionListItem } from '@/types/recognition';
@@ -25,6 +24,7 @@ export default function AidRecordsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -37,6 +37,7 @@ export default function AidRecordsScreen() {
       ]);
       setRecs(recRes.items);
       setGrants(grantRes.items);
+      hasLoadedRef.current = true;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '加载失败，请稍后重试');
     } finally {
@@ -45,16 +46,15 @@ export default function AidRecordsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
+  // 每次进入/返回本页都重新拉取，删除后列表才能同步消失。
+  useFocusEffect(
+    useCallback(() => {
+      void load(hasLoadedRef.current);
+    }, [load]),
+  );
   function openRecognition(item: RecognitionListItem) {
-    if (canEditRecognition(item.status)) {
-      router.push({ pathname: '/aid/apply', params: { id: String(item.id) } });
-    } else {
-      router.push(`/aid/recognition/${item.id}`);
-    }
+    // 统一进详情：退回/草稿可在此删除或继续填写，避免直接进编辑页找不到删除入口。
+    router.push(`/aid/recognition/${item.id}`);
   }
 
   function openGrant(item: GrantListItem) {

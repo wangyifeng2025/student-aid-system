@@ -23,6 +23,7 @@ import {
   difficultyTone,
   canDeleteRecognition,
   canWithdrawRecognition,
+  canExportRecognitionSummary,
 } from "@/lib/recognition-options";
 import type { RecognitionListItem } from "@/types/recognition";
 
@@ -31,6 +32,7 @@ const DEFAULT_PAGE_SIZE = 20;
 export default function RecognitionsPage() {
   const role = useAuthStore((s) => s.user?.role);
   const isStudent = role === "student";
+  const canExportSummary = canExportRecognitionSummary(role);
 
   const [list, setList] = React.useState<RecognitionListItem[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -49,6 +51,7 @@ export default function RecognitionsPage() {
   const [deleting, setDeleting] = React.useState(false);
   const [withdrawTarget, setWithdrawTarget] = React.useState<RecognitionListItem | null>(null);
   const [withdrawing, setWithdrawing] = React.useState(false);
+  const [exportingSummary, setExportingSummary] = React.useState(false);
 
   const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(
     list.filter((r) => canDeleteRecognition(r.status)),
@@ -129,6 +132,21 @@ export default function RecognitionsPage() {
     }
   };
 
+  const handleExportSummary = async () => {
+    setExportingSummary(true);
+    try {
+      await recognitionApi.exportSummary({
+        keyword: keyword || undefined,
+        year: filterYear ? Number(filterYear) : undefined,
+      });
+      toast.success("认定结果汇总表已导出");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExportingSummary(false);
+    }
+  };
+
   const columns: Column<RecognitionListItem>[] = [
     ...(isStudent
       ? [
@@ -202,25 +220,25 @@ export default function RecognitionsPage() {
             <Eye size={14} />
             查看
           </Link>
+          {isStudent && (r.status === "draft" || r.status === "rejected") && (
+            <Link
+              href={`/recognitions/${r.id}/edit`}
+              className="inline-flex items-center gap-1 text-link hover:underline"
+            >
+              <Pencil size={14} />
+              编辑
+            </Link>
+          )}
           {isStudent && canDeleteRecognition(r.status) && (
-            <>
-              <Link
-                href={`/recognitions/${r.id}/edit`}
-                className="inline-flex items-center gap-1 text-link hover:underline"
-              >
-                <Pencil size={14} />
-                编辑
-              </Link>
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(r)}
-                className="inline-flex items-center gap-1 hover:underline"
-                style={{ color: "var(--state-error)" }}
-              >
-                <Trash2 size={14} />
-                删除
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(r)}
+              className="inline-flex items-center gap-1 hover:underline"
+              style={{ color: "var(--state-error)" }}
+            >
+              <Trash2 size={14} />
+              删除
+            </button>
           )}
           {isStudent && canWithdrawRecognition(r.status) && (
             <button
@@ -288,6 +306,17 @@ export default function RecognitionsPage() {
             查询
           </Button>
         </div>
+        {canExportSummary && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={exportingSummary}
+            onClick={() => void handleExportSummary()}
+          >
+            <Download size={16} />
+            {exportingSummary ? "导出中…" : "导出汇总表"}
+          </Button>
+        )}
         {isStudent && (
           <div className="flex items-center gap-2">
             <BatchDeleteButton
@@ -296,7 +325,7 @@ export default function RecognitionsPage() {
               onDone={load}
               entityLabel="认定申请"
               canWrite={isStudent}
-              hint={`确定删除选中的 ${selected.size} 条认定申请吗？仅未提交的草稿或被退回申请可删除，已提交或审核中的将自动跳过。此操作不可撤销。`}
+              hint={`确定删除选中的 ${selected.size} 条认定申请吗？仅草稿、被退回，或已提交但班级尚未审核的申请可删除，其余将自动跳过。此操作不可撤销。`}
             />
             <Link href="/recognitions/new">
               <Button size="sm">
@@ -333,7 +362,7 @@ export default function RecognitionsPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除认定申请"
-        description={`确定删除 ${deleteTarget?.year} 年度的认定申请吗？仅未提交的申请可删除，该操作不可撤销。`}
+        description={`确定删除 ${deleteTarget?.year} 年度的认定申请吗？草稿、被退回，或已提交但班级尚未审核的申请可删除，该操作不可撤销。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

@@ -11,8 +11,7 @@ type Props = {
 };
 
 /**
- * 只读展示已提交的手写承诺 / 签字图片（学生查看进度、教师审核详情页复用）。
- * 附件缺失（如仍是草稿）时静默显示「暂无」，不视为错误。
+ * 只读展示印刷承诺 + 手写签字（历史手写承诺图若存在则一并展示）。
  */
 export function SignaturePreview({ recognitionId }: Props) {
   const [commitment, setCommitment] = useState('');
@@ -47,20 +46,23 @@ export function SignaturePreview({ recognitionId }: Props) {
     );
   }
 
-  if (!commitment && !signature) {
-    return <Text style={styles.emptyText}>暂无手写签字信息（可能仍为草稿，尚未提交）。</Text>;
+  if (!signature && !commitment) {
+    return <Text style={styles.emptyText}>暂无签字信息（可能仍为草稿，尚未提交）。</Text>;
   }
 
   return (
     <View style={styles.wrap}>
       <View style={styles.block}>
-        <Text style={styles.label}>承诺内容（手写）</Text>
-        <Text style={styles.hint}>「{COMMITMENT_HANDWRITE_TEXT}」</Text>
+        <Text style={styles.label}>承诺内容</Text>
+        <View style={styles.printedBox}>
+          <Text style={styles.printedText}>{COMMITMENT_HANDWRITE_TEXT}</Text>
+        </View>
         {commitment ? (
-          <Image source={{ uri: commitment }} style={styles.image} contentFit="contain" />
-        ) : (
-          <Text style={styles.emptyText}>未提供</Text>
-        )}
+          <>
+            <Text style={styles.hint}>历史手写承诺（旧版申请）：</Text>
+            <Image source={{ uri: commitment }} style={styles.image} contentFit="contain" />
+          </>
+        ) : null}
       </View>
 
       <View style={styles.block}>
@@ -85,6 +87,19 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '600',
+    color: Brand.foreground,
+  },
+  printedBox: {
+    borderRadius: Brand.radiusSm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    backgroundColor: Brand.inputBackground,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  printedText: {
+    fontSize: 14,
+    lineHeight: 22,
     color: Brand.foreground,
   },
   hint: {

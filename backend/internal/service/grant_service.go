@@ -150,8 +150,8 @@ func (s *GrantService) Delete(actor rbac.Actor, id uint) error {
 	if err != nil {
 		return err
 	}
-	if !grantEditable(a.Status) {
-		return NewValidationError("当前状态不可删除")
+	if !grantDeletable(a) {
+		return NewValidationError("当前状态不可删除（仅草稿、被退回，或已提交但班级尚未审核的申请可删除）")
 	}
 	return s.repo.Delete(id)
 }
@@ -277,6 +277,22 @@ func (s *GrantService) loadOwned(actor rbac.Actor, id uint) (*model.GrantApplica
 
 func grantEditable(status model.GrantStatus) bool {
 	return status == model.GrantStatusDraft || status == model.GrantStatusRejected
+}
+
+// grantDeletable 草稿/退回，或已提交但班级尚未审核时可删除。
+func grantDeletable(a *model.GrantApplication) bool {
+	if grantEditable(a.Status) {
+		return true
+	}
+	if a.Status != model.GrantStatusPendingClass {
+		return false
+	}
+	for _, rec := range a.Reviews {
+		if rec.Level == model.LevelClass {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *GrantService) validateFormat(req *dto.GrantRequest) error {

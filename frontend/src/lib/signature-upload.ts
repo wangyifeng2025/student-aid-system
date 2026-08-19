@@ -22,7 +22,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** 从附件列表回填两张手写图（若存在）。 */
+/** 从附件列表回填签字图（历史承诺手写图一并返回，供详情兼容展示）。 */
 export async function loadSignatureDataUrls(recognitionId: number): Promise<{
   commitment: string;
   signature: string;
@@ -41,27 +41,22 @@ export async function loadSignatureDataUrls(recognitionId: number): Promise<{
 }
 
 /**
- * 将本地手写 data URL 同步为附件：同名旧文件先删再传。
- * 传入空串表示跳过该项（保留服务端已有文件）。
+ * 将本地签字 data URL 同步为附件：同名旧文件先删再传。
+ * 传入空串表示跳过（保留服务端已有文件）。
  */
 export async function syncSignatureAttachments(
   recognitionId: number,
-  commitmentDataUrl: string,
   signatureDataUrl: string,
 ): Promise<void> {
+  if (!signatureDataUrl.startsWith("data:")) return;
+
   const items = await recognitionApi.listAttachments(recognitionId);
-  const uploads: { dataUrl: string; fileName: string }[] = [];
-  if (commitmentDataUrl.startsWith("data:")) {
-    uploads.push({ dataUrl: commitmentDataUrl, fileName: COMMITMENT_HANDWRITING_FILE });
+  const old = items.filter((a) => a.file_name === STUDENT_SIGNATURE_FILE);
+  for (const a of old) {
+    await attachmentApi.remove(a.id);
   }
-  if (signatureDataUrl.startsWith("data:")) {
-    uploads.push({ dataUrl: signatureDataUrl, fileName: STUDENT_SIGNATURE_FILE });
-  }
-  for (const u of uploads) {
-    const old = items.filter((a) => a.file_name === u.fileName);
-    for (const a of old) {
-      await attachmentApi.remove(a.id);
-    }
-    await recognitionApi.uploadAttachment(recognitionId, dataUrlToFile(u.dataUrl, u.fileName));
-  }
+  await recognitionApi.uploadAttachment(
+    recognitionId,
+    dataUrlToFile(signatureDataUrl, STUDENT_SIGNATURE_FILE),
+  );
 }

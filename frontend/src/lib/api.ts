@@ -242,11 +242,19 @@ async function downloadFile(path: string, fallbackName: string): Promise<void> {
   }
   const res = await fetch(`${getApiBase()}${API_PREFIX}${path}`, { headers });
   if (!res.ok) {
-    throw new ApiError("下载失败，请稍后重试", -1, res.status);
+    let message = "下载失败，请稍后重试";
+    let code = -1;
+    try {
+      const body = (await res.json()) as ApiResponse<unknown>;
+      if (body?.message) message = body.message;
+      if (typeof body?.code === "number") code = body.code;
+    } catch {
+      // 非 JSON 错误体时沿用通用提示
+    }
+    throw new ApiError(message, code, res.status);
   }
   const disposition = res.headers.get("Content-Disposition") ?? "";
-  const match = disposition.match(/filename=([^;]+)/);
-  const filename = match ? decodeURIComponent(match[1].trim()) : fallbackName;
+  const filename = filenameFromDisposition(disposition, fallbackName);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -256,6 +264,26 @@ async function downloadFile(path: string, fallbackName: string): Promise<void> {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function filenameFromDisposition(disposition: string, fallback: string): string {
+  const star = disposition.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"+|"+$/g, ""));
+    } catch {
+      // ignore malformed encoding
+    }
+  }
+  const plain = disposition.match(/filename=([^;]+)/);
+  if (plain?.[1]) {
+    try {
+      return decodeURIComponent(plain[1].trim().replace(/^"+|"+$/g, ""));
+    } catch {
+      return plain[1].trim().replace(/^"+|"+$/g, "");
+    }
+  }
+  return fallback;
 }
 
 // ===== 认证相关 API =====
@@ -490,6 +518,16 @@ export const recognitionApi = {
     apiFetch<Recognition>(`/recognitions/${id}/withdraw`, { method: "POST" }),
   exportDocx: (id: number, fallbackName = `recognition_${id}.docx`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
+  exportSummary: (filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id">) =>
+    downloadFile(
+      `/recognitions/summary-export${buildParams({
+        year: filter?.year,
+        keyword: filter?.keyword,
+        dept_id: filter?.dept_id,
+        class_id: filter?.class_id,
+      })}`,
+      "recognition_summary.xlsx",
+    ),
   // 附件
   listAttachments: (id: number) =>
     apiFetch<Attachment[]>(`/recognitions/${id}/attachments`),

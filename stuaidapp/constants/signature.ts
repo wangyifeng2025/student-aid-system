@@ -1,8 +1,10 @@
 /** 困难认定「个人承诺 / 手写签字」约定（与纸质申请表、Web 端对齐）。 */
 
+/** 历史手写承诺图文件名（新流程不再要求上传，附件列表仍需识别并隐藏）。 */
 export const COMMITMENT_HANDWRITING_FILE = 'commitment_handwriting.png';
 export const STUDENT_SIGNATURE_FILE = 'student_signature.png';
 
+/** 印刷展示的个人承诺原文（勾选确认，不再手写）。 */
 export const COMMITMENT_HANDWRITE_TEXT =
   '本人承诺以上所填写资料真实，如有虚假，愿承担相应责任。';
 

@@ -10,8 +10,7 @@ type Props = {
 };
 
 /**
- * 只读展示已提交的手写承诺 / 签字图片（学生查看进度、教师审核详情页复用）。
- * 附件缺失（如仍是草稿）时静默显示「暂无」，不视为错误。
+ * 只读展示印刷承诺 + 手写签字（历史手写承诺图若存在则一并展示）。
  */
 export function SignaturePreview({ recognitionId }: Props) {
   const [commitment, setCommitment] = React.useState("");
@@ -40,28 +39,34 @@ export function SignaturePreview({ recognitionId }: Props) {
 
   if (loading) return <LoadingState label="加载签字信息…" />;
 
-  if (!commitment && !signature) {
-    return <p className="py-4 text-sm text-ink-mute">暂无手写签字信息（可能仍为草稿，尚未提交）。</p>;
+  if (!signature && !commitment) {
+    return <p className="py-4 text-sm text-ink-mute">暂无签字信息（可能仍为草稿，尚未提交）。</p>;
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div>
-        <div className="mb-2 text-xs font-semibold text-ink">承诺内容（手写）</div>
-        <p className="mb-2 text-xs leading-5" style={{ color: "var(--color-text-muted)" }}>
-          「{COMMITMENT_HANDWRITE_TEXT}」
-        </p>
+        <div className="mb-2 text-xs font-semibold text-ink">承诺内容</div>
+        <div
+          className="mb-2 rounded-md border px-3 py-3 text-sm leading-6 text-ink"
+          style={{ borderColor: "var(--color-border)", background: "var(--color-bg-page)" }}
+        >
+          {COMMITMENT_HANDWRITE_TEXT}
+        </div>
         {commitment ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={commitment}
-            alt="个人承诺手写内容"
-            className="w-full rounded-md border object-contain"
-            style={{ borderColor: "var(--color-border)", background: "#fafafa", maxHeight: 200 }}
-          />
-        ) : (
-          <p className="text-sm text-ink-mute">未提供</p>
-        )}
+          <>
+            <p className="mb-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              历史手写承诺（旧版申请）：
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={commitment}
+              alt="历史手写承诺"
+              className="w-full rounded-md border object-contain"
+              style={{ borderColor: "var(--color-border)", background: "#fafafa", maxHeight: 160 }}
+            />
+          </>
+        ) : null}
       </div>
 
       <div>

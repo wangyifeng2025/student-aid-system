@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -105,4 +107,9 @@ func mapCommonError(c *gin.Context, err error) {
 	default:
 		response.ServerError(c, "操作失败")
 	}
+}
+
+// attachmentDisposition 生成同时带 ASCII 回退名与 UTF-8 中文名的 Content-Disposition。
+func attachmentDisposition(asciiName, utf8Name string) string {
+	return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, asciiName, url.PathEscape(utf8Name))
 }

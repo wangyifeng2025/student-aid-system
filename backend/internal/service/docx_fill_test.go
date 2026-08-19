@@ -42,6 +42,8 @@ func TestFillDocxTemplate(t *testing.T) {
 		"unemployment":   "无",
 		"debt":           "无",
 		"other_info":     "无",
+		"commitment_text": "本人承诺以上所填写资料真实，如有虚假，愿承担相应责任。",
+		"student_signature": "（未签字）",
 		// 只填 1 个成员，其余应为空格
 		"M1_NAME":      "父亲",
 		"M1_AGE":       "50",
@@ -72,7 +74,10 @@ func TestFillDocxTemplate(t *testing.T) {
 	xml := readDocxDocumentXMLForTest(t, out)
 
 	// 固定占位符应全部被替换
-	for _, ph := range []string{"{student_name}", "{school}", "{special_groups}", "{M1_NAME}", "{M6_HEALTH}"} {
+	for _, ph := range []string{
+		"{student_name}", "{school}", "{special_groups}", "{M1_NAME}", "{M6_HEALTH}",
+		"{commitment_text}", "{student_signature}",
+	} {
 		if strings.Contains(xml, ph) {
 			t.Fatalf("占位符 %s 仍残留在 document.xml", ph)
 		}
@@ -80,9 +85,80 @@ func TestFillDocxTemplate(t *testing.T) {
 	if !strings.Contains(xml, "张三") {
 		t.Fatal("document.xml 中应包含填充的姓名 张三")
 	}
+	if !strings.Contains(xml, "本人承诺以上所填写资料真实") {
+		t.Fatal("document.xml 中应包含承诺正文")
+	}
 	if !strings.Contains(xml, "父亲") {
 		t.Fatal("document.xml 中应包含家庭成员 父亲")
 	}
+}
+
+func TestFillDocxTemplateWithSignatureImage(t *testing.T) {
+	root := findBackendRootForDocxTest(t)
+	templatePath := filepath.Join(root, "assets", "templates", "recognition_application.docx")
+	templateBytes, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Skipf("找不到认定表 docx 模板，跳过: %v", err)
+	}
+
+	// 1x1 透明 PNG
+	png1x1, err := decodeTestPNG()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repl := map[string]string{
+		"commitment_text":   "承诺测试",
+		"student_signature": "（未签字）",
+		"student_name":      "李四",
+	}
+	out, err := fillDocxTemplateWithImages(templateBytes, repl, []docxImage{{
+		Key:      "student_signature",
+		Data:     png1x1,
+		FileName: "student_signature.png",
+	}})
+	if err != nil {
+		t.Fatalf("fill with image: %v", err)
+	}
+	xml := readDocxDocumentXMLForTest(t, out)
+	if strings.Contains(xml, "{student_signature}") {
+		t.Fatal("签字占位符未被替换")
+	}
+	if strings.Contains(xml, "（未签字）") {
+		t.Fatal("有签字图时不应再填「未签字」文本")
+	}
+	if !strings.Contains(xml, "<w:drawing>") || !strings.Contains(xml, `r:embed="`) {
+		t.Fatal("document.xml 中应嵌入 drawing 图片节点")
+	}
+	if !docxZipHasFile(t, out, "word/media/student_signature.png") {
+		t.Fatal("docx 中应包含 word/media/student_signature.png")
+	}
+}
+
+func decodeTestPNG() ([]byte, error) {
+	// 最小合法 1×1 PNG
+	return []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+		0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+		0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+		0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+	}, nil
+}
+
+func docxZipHasFile(t *testing.T, docxBytes []byte, name string) bool {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestNormalizeDocxTextRuns(t *testing.T) {

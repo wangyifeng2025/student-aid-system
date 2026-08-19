@@ -5,47 +5,31 @@ import { Brand } from '@/constants/brand';
 import { COMMITMENT_HANDWRITE_TEXT } from '@/constants/signature';
 
 type Props = {
-  commitmentDataUrl: string;
   signatureDataUrl: string;
-  onCommitmentChange: (dataUrl: string) => void;
   onSignatureChange: (dataUrl: string) => void;
   disabled?: boolean;
-  /** 手写期间临时禁用外层 ScrollView 滚动，避免书写时页面跟着滑动。 */
-  onDrawStart?: () => void;
-  onDrawEnd?: () => void;
 };
 
 /**
- * 对照纸质「个人承诺」表格：上栏手写承诺正文，下栏学生本人（或监护人）签字。
- * 手机竖屏上下堆叠，避免并排挤压。
+ * 印刷承诺正文 + 仅手写签字（勾选同意在外层表单完成）。
  */
 export function CommitmentSignatureBlock({
-  commitmentDataUrl,
   signatureDataUrl,
-  onCommitmentChange,
   onSignatureChange,
   disabled,
-  onDrawStart,
-  onDrawEnd,
 }: Props) {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>个人承诺（须手写）</Text>
+        <Text style={styles.headerTitle}>个人承诺与签字</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.label}>承诺内容：</Text>
-        <Text style={styles.hintRed}>（此处手写：「{COMMITMENT_HANDWRITE_TEXT}」）</Text>
-        <SignaturePad
-          value={commitmentDataUrl}
-          onChange={onCommitmentChange}
-          height={140}
-          placeholder="请在此手写完整承诺内容"
-          disabled={disabled}
-          onDrawStart={onDrawStart}
-          onDrawEnd={onDrawEnd}
-        />
+        <View style={styles.printedBox}>
+          <Text style={styles.printedText}>{COMMITMENT_HANDWRITE_TEXT}</Text>
+        </View>
+        <Text style={styles.hintMuted}>请仔细阅读上述承诺，在下方手写签字并勾选同意。</Text>
       </View>
 
       <View style={[styles.section, styles.sectionBorder]}>
@@ -54,11 +38,11 @@ export function CommitmentSignatureBlock({
         <SignaturePad
           value={signatureDataUrl}
           onChange={onSignatureChange}
-          height={120}
-          placeholder="请在此签字"
+          layout="pad"
+          height={140}
+          title="学生本人（或监护人）签字"
+          placeholder="请手写签字"
           disabled={disabled}
-          onDrawStart={onDrawStart}
-          onDrawEnd={onDrawEnd}
         />
       </View>
     </View>
@@ -98,11 +82,20 @@ const styles = StyleSheet.create({
     color: Brand.foreground,
     marginBottom: 6,
   },
-  hintRed: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: Brand.error,
+  printedBox: {
+    borderRadius: Brand.radiusSm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    backgroundColor: Brand.inputBackground,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
     marginBottom: 8,
+  },
+  printedText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: Brand.foreground,
+    fontWeight: '500',
   },
   hintMuted: {
     fontSize: 11,

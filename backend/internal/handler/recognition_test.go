@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/wangyifeng2025/student-aid-system/internal/middleware"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/pkg/jwt"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -54,6 +57,7 @@ func setupRecognitionRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	recs := secured.Group("/recognitions")
 	recs.GET("", h.ListRecognitions)
 	recs.POST("", h.CreateRecognition)
+	recs.GET("/summary-export", h.ExportRecognitionSummary)
 	recs.GET("/:id", h.GetRecognition)
 	recs.PUT("/:id", h.UpdateRecognition)
 	recs.DELETE("/:id", h.DeleteRecognition)
@@ -104,6 +108,8 @@ func seedRecognitionDicts(db *gorm.DB) {
 	ensureDict(db, "occupation", "farmer", "务农")
 	ensureDict(db, "health_status", "good", "良好")
 	ensureDict(db, "health_status", "disabled", "残疾")
+	ensureDict(db, "special_group_type", "poverty", "脱贫家庭学生")
+	ensureDict(db, "special_group_type", "orphan", "孤儿")
 }
 
 // validBasicReq 构造一份可通过提交校验的请求（家庭人口 3 → 2 位成员）。
@@ -294,5 +300,92 @@ func TestRecognitionWithdraw(t *testing.T) {
 	w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/recognitions/%d/withdraw", id), token, nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("withdraw after class review expect 400, got %d, body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestExportRecognitionSummary(t *testing.T) {
+	r, db := setupRecognitionRouter(t)
+	seedRecognitionDicts(db)
+
+	dept, major, class := seedStudentOrgRefs(t, db)
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	stu := seedScopedStudent(t, db, stuUser.ID, class.ID, dept.ID)
+	if err := db.Model(stu).Updates(map[string]any{
+		"name": "汇总学生", "gender": "男", "nation": "han", "major_id": major.ID,
+	}).Error; err != nil {
+		t.Fatalf("update student: %v", err)
+	}
+
+	app := model.RecognitionApplication{
+		StudentID:       stu.ID,
+		Year:            2026,
+		Nation:          "han",
+		IDCard:          stu.IDCard,
+		Phone:           "13800001111",
+		Address:         "兴义市测试路1号",
+		SpecialTypes:    "poverty,orphan",
+		Status:          model.StatusApproved,
+		DifficultyLevel: model.DifficultySpecial,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatalf("create approved app: %v", err)
+	}
+
+	studentToken := loginToken(t, r, stuUser.Username, "pass123")
+	w := doJSON(t, r, http.MethodGet, "/api/v1/recognitions/summary-export?year=2026", studentToken, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("student export expect 403, got %d body %s", w.Code, w.Body.String())
+	}
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, class.ID, dept.ID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/recognitions/summary-export?year=2026", nil)
+	req.Header.Set("Authorization", "Bearer "+advisorToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("advisor export status %d, body %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != xlsxContentType {
+		t.Fatalf("content-type want %s, got %s", xlsxContentType, ct)
+	}
+	if !bytes.Contains([]byte(w.Header().Get("Content-Disposition")), []byte("filename*=UTF-8''")) {
+		t.Fatalf("missing utf-8 filename in disposition: %s", w.Header().Get("Content-Disposition"))
+	}
+
+	f, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer f.Close()
+	name, err := f.GetCellValue("Sheet1", "C4")
+	if err != nil {
+		t.Fatalf("C4: %v", err)
+	}
+	if name != "汇总学生" {
+		t.Fatalf("exported name want 汇总学生, got %q", name)
+	}
+	basis, _ := f.GetCellValue("Sheet1", "L4")
+	if basis != "脱贫家庭学生、孤儿" {
+		t.Fatalf("basis want 脱贫家庭学生、孤儿, got %q", basis)
+	}
+
+	other := seedReviewer(t, db, model.RoleClassAdvisor, class.ID+999, dept.ID+999)
+	otherToken := loginToken(t, r, other.Username, "pass123")
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/recognitions/summary-export?year=2026", nil)
+	req.Header.Set("Authorization", "Bearer "+otherToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("other advisor export status %d, body %s", w.Code, w.Body.String())
+	}
+	f2, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open other xlsx: %v", err)
+	}
+	defer f2.Close()
+	otherName, _ := f2.GetCellValue("Sheet1", "C4")
+	if otherName == "汇总学生" {
+		t.Fatalf("other class advisor should not see this class's student")
 	}
 }

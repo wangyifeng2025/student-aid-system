@@ -257,10 +257,13 @@ func (r *RecognitionRepository) SaveWithMembers(a *model.RecognitionApplication,
 	})
 }
 
-// Delete 软删除申请及其家庭成员。
+// Delete 软删除申请、家庭成员与评审记录。
 func (r *RecognitionRepository) Delete(id uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("application_id = ?", id).Delete(&model.FamilyMember{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("application_id = ?", id).Delete(&model.ReviewRecord{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&model.RecognitionApplication{}, id).Error

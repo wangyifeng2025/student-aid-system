@@ -2,6 +2,8 @@ package service
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-pdf/fpdf"
@@ -20,6 +22,7 @@ type RecognitionPDFService struct {
 	stuRepo  *repository.StudentRepository
 	orgRepo  *repository.OrgRepository
 	dictRepo *repository.DictRepository
+	attRepo  *repository.AttachmentRepository
 }
 
 func NewRecognitionPDFService(db *gorm.DB, cfg *config.Config) *RecognitionPDFService {
@@ -29,6 +32,7 @@ func NewRecognitionPDFService(db *gorm.DB, cfg *config.Config) *RecognitionPDFSe
 		stuRepo:  repository.NewStudentRepository(db),
 		orgRepo:  repository.NewOrgRepository(db),
 		dictRepo: repository.NewDictRepository(db),
+		attRepo:  repository.NewAttachmentRepository(db),
 	}
 }
 
@@ -56,8 +60,9 @@ func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, strin
 	dept, major, grade, class := resolveStudentOrgNames(s.orgRepo, stu)
 	labels := s.loadLabelMaps()
 	replacements := buildRecognitionDocxReplacements(s.cfg, a, stu, dept, major, grade, class, labels)
+	signaturePNG := s.loadStudentSignaturePNG(id)
 
-	docxBytes, err := exportRecognitionDocx(s.cfg, replacements)
+	docxBytes, err := exportRecognitionDocx(s.cfg, replacements, signaturePNG)
 	if err != nil {
 		return nil, "", err
 	}
@@ -67,6 +72,29 @@ func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, strin
 	}
 	filename := fmt.Sprintf("recognition_%d_%s.docx", a.Year, studentNo)
 	return docxBytes, filename, nil
+}
+
+// loadStudentSignaturePNG 读取认定申请的手写签字附件；不存在则返回 nil。
+func (s *RecognitionPDFService) loadStudentSignaturePNG(appID uint) []byte {
+	items, err := s.attRepo.ListByOwner(OwnerTypeRecognition, appID)
+	if err != nil {
+		return nil
+	}
+	var rel string
+	for i := range items {
+		if items[i].FileName == studentSignatureFile {
+			rel = items[i].Path
+			break
+		}
+	}
+	if rel == "" || s.cfg == nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(s.cfg.Upload.Dir, rel))
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	return data
 }
 
 // ===== 标签映射 =====

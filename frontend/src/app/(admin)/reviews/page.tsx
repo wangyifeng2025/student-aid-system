@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search, Eye, Check, Undo2 } from "lucide-react";
-import { reviewApi, ApiError } from "@/lib/api";
+import { Search, Eye, Check, Undo2, Download } from "lucide-react";
+import { reviewApi, recognitionApi, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -23,6 +23,7 @@ import {
   difficultyTone,
   levelName,
   todoStatusOptionsForRole,
+  canExportRecognitionSummary,
 } from "@/lib/recognition-options";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
@@ -53,6 +54,8 @@ export default function ReviewsPage() {
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
   const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({ deptId: 0, classId: 0 });
+  const [exportingSummary, setExportingSummary] = React.useState(false);
+  const canExportSummary = canExportRecognitionSummary(role);
 
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [batchDialog, setBatchDialog] = React.useState<ReviewActionType | null>(null);
@@ -95,6 +98,22 @@ export default function ReviewsPage() {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setPage(1);
+  };
+
+  const handleExportSummary = async () => {
+    setExportingSummary(true);
+    try {
+      await recognitionApi.exportSummary({
+        keyword: keyword || undefined,
+        year: filterYear ? Number(filterYear) : undefined,
+        ...orgScopeParams(orgScope),
+      });
+      toast.success("认定结果汇总表已导出");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExportingSummary(false);
+    }
   };
 
   const toggleRow = (id: number) => {
@@ -280,6 +299,18 @@ export default function ReviewsPage() {
             查询
           </Button>
         </div>
+        {canExportSummary && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={exportingSummary}
+            onClick={() => void handleExportSummary()}
+            title="导出当前筛选范围内已认定通过的学生汇总表"
+          >
+            <Download size={16} />
+            {exportingSummary ? "导出中…" : "导出汇总表"}
+          </Button>
+        )}
       </Toolbar>
 
       {selected.size > 0 && (

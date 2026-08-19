@@ -24,7 +24,7 @@ import { DetailRow } from '@/components/reviews/detail-row';
 import { ReviewTimeline } from '@/components/reviews/review-timeline';
 import { StatusBadge } from '@/components/reviews/status-badge';
 import { Brand } from '@/constants/brand';
-import { canEditGrant, grantTypeLabel } from '@/constants/grant-options';
+import { canDeleteGrant, canEditGrant, grantTypeLabel } from '@/constants/grant-options';
 import {
   HOUSEHOLD_OPTIONS,
   INCOME_SOURCE_OPTIONS,
@@ -60,6 +60,7 @@ export default function GrantDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +81,33 @@ export default function GrantDetailScreen() {
   }, [load]);
 
   const editable = detail ? canEditGrant(detail.status) : false;
+  const deletable = detail ? canDeleteGrant(detail.status, detail.reviews) : false;
+
+  function handleDelete() {
+    Alert.alert(
+      '删除申请',
+      '确定删除该助学金申请吗？草稿、被退回，或已提交但班级尚未审核的申请可删除，删除后不可恢复。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定删除',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await grantApi.remove(numericId);
+              Alert.alert('已删除', '申请已删除。', [
+                { text: '好的', onPress: () => router.back() },
+              ]);
+            } catch (e) {
+              Alert.alert('删除失败', e instanceof ApiError ? e.message : '请稍后重试');
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   function patch(p: Partial<GrantInput>) {
     setForm((prev) => (prev ? { ...prev, ...p } : prev));
@@ -340,19 +368,34 @@ export default function GrantDetailScreen() {
             </SectionCard>
           </ScrollView>
 
-          {editable && (
+          {(editable || deletable) && (
             <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
-              <Pressable style={[styles.draftBtn, saving && styles.btnDisabled]} disabled={saving} onPress={handleSaveDraft}>
-                <Ionicons name="save-outline" size={16} color={Brand.primary} />
-                <Text style={styles.draftBtnText}>{saving ? '保存中…' : '保存草稿'}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.primaryBtn, submitting && styles.btnDisabled]}
-                disabled={submitting}
-                onPress={handleSubmit}>
-                <Text style={styles.primaryBtnText}>{submitting ? '提交中…' : '提交申请'}</Text>
-                <Ionicons name="send" size={14} color={Brand.primaryForeground} />
-              </Pressable>
+              {deletable && (
+                <Pressable
+                  style={[styles.deleteBtn, deleting && styles.btnDisabled]}
+                  disabled={deleting || saving || submitting}
+                  onPress={handleDelete}>
+                  <Text style={styles.deleteBtnText}>{deleting ? '删除中…' : '删除'}</Text>
+                </Pressable>
+              )}
+              {editable && (
+                <>
+                  <Pressable
+                    style={[styles.draftBtn, saving && styles.btnDisabled]}
+                    disabled={saving || deleting}
+                    onPress={handleSaveDraft}>
+                    <Ionicons name="save-outline" size={16} color={Brand.primary} />
+                    <Text style={styles.draftBtnText}>{saving ? '保存中…' : '保存草稿'}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.primaryBtn, submitting && styles.btnDisabled]}
+                    disabled={submitting || deleting}
+                    onPress={handleSubmit}>
+                    <Text style={styles.primaryBtnText}>{submitting ? '提交中…' : '提交申请'}</Text>
+                    <Ionicons name="send" size={14} color={Brand.primaryForeground} />
+                  </Pressable>
+                </>
+              )}
             </View>
           )}
         </KeyboardAvoidingView>
@@ -465,6 +508,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Brand.primary,
+  },
+  deleteBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: Brand.errorSurface,
+  },
+  deleteBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Brand.error,
   },
   btnDisabled: {
     opacity: 0.6,

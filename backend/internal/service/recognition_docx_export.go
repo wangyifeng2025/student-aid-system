@@ -12,6 +12,9 @@ import (
 // 家庭成员最大行数（模板中预留 6 行 {M1_*} ~ {M6_*}）。
 const familyMemberMaxRows = 6
 
+// 与前端印刷承诺正文保持一致。
+const commitmentPrintText = "本人承诺以上所填写资料真实，如有虚假，愿承担相应责任。"
+
 // recognitionTemplatePath 解析认定申请表 docx 模板路径。
 func recognitionTemplatePath(cfg *config.Config) string {
 	if cfg != nil && strings.TrimSpace(cfg.Export.RecognitionTemplatePath) != "" {
@@ -24,6 +27,7 @@ func recognitionTemplatePath(cfg *config.Config) string {
 //
 // 模板含 {M1_*} ~ {M6_*} 共 6 行家庭成员占位符；实际成员不足 6 个时，
 // 剩余占位符填一个全角空格（保持表格单元格不为空，避免 Word 自动删行）。
+// {commitment_text} 为印刷承诺正文；{student_signature} 有签字图时由嵌入处理，否则填「（未签字）」。
 func buildRecognitionDocxReplacements(
 	cfg *config.Config,
 	a *model.RecognitionApplication,
@@ -34,29 +38,31 @@ func buildRecognitionDocxReplacements(
 	data := buildRecognitionFormData(cfg, a, stu, dept, major, grade, class, labels)
 
 	repl := map[string]string{
-		"school":         data.School,
-		"dept":           data.Dept,
-		"major":          data.Major,
-		"grade":          data.Grade,
-		"class":          data.Class,
-		"student_name":   data.StudentName,
-		"gender":         data.Gender,
-		"birth":          data.Birth,
-		"native_place":   data.NativePlace,
-		"id_card":        data.IDCard,
-		"family_pop":     data.FamilyPop,
-		"phone":          data.Phone,
-		"address":        data.Address,
-		"postal_code":    data.PostalCode,
-		"guardian_phone": data.GuardianPhone,
-		"special_groups": buildSpecialGroupsText(data),
-		"per_capita":     data.PerCapita,
-		"natural":        data.Natural,
-		"sudden":         data.Sudden,
-		"weak_labor":     data.WeakLabor,
-		"unemployment":   data.Unemployment,
-		"debt":           data.Debt,
-		"other_info":     data.OtherInfo,
+		"school":            data.School,
+		"dept":              data.Dept,
+		"major":             data.Major,
+		"grade":             data.Grade,
+		"class":             data.Class,
+		"student_name":      data.StudentName,
+		"gender":            data.Gender,
+		"birth":             data.Birth,
+		"native_place":      data.NativePlace,
+		"id_card":           data.IDCard,
+		"family_pop":        data.FamilyPop,
+		"phone":             data.Phone,
+		"address":           data.Address,
+		"postal_code":       data.PostalCode,
+		"guardian_phone":    data.GuardianPhone,
+		"special_groups":    buildSpecialGroupsText(data),
+		"per_capita":        data.PerCapita,
+		"natural":           data.Natural,
+		"sudden":            data.Sudden,
+		"weak_labor":        data.WeakLabor,
+		"unemployment":      data.Unemployment,
+		"debt":              data.Debt,
+		"other_info":        data.OtherInfo,
+		"commitment_text":   commitmentPrintText,
+		"student_signature": "（未签字）",
 	}
 
 	// 家庭成员 6 行：不足的填空格
@@ -116,12 +122,20 @@ func buildSpecialGroupsText(d recognitionFormData) string {
 	return strings.Join(parts, "；") + "。"
 }
 
-// exportRecognitionDocx 读模板 → 归一化占位符 → 填数 → 返回 docx 字节。
-func exportRecognitionDocx(cfg *config.Config, replacements map[string]string) ([]byte, error) {
+// exportRecognitionDocx 读模板 → 归一化占位符 → 填数（含签字图）→ 返回 docx 字节。
+func exportRecognitionDocx(cfg *config.Config, replacements map[string]string, signaturePNG []byte) ([]byte, error) {
 	templatePath := recognitionTemplatePath(cfg)
 	templateBytes, err := os.ReadFile(templatePath)
 	if err != nil {
 		return nil, NewValidationError(fmt.Sprintf("读取认定表 Word 模板失败（%s），请联系管理员", templatePath))
 	}
-	return fillDocxTemplate(templateBytes, replacements)
+	var images []docxImage
+	if len(signaturePNG) > 0 {
+		images = append(images, docxImage{
+			Key:      "student_signature",
+			Data:     signaturePNG,
+			FileName: "student_signature.png",
+		})
+	}
+	return fillDocxTemplateWithImages(templateBytes, replacements, images)
 }

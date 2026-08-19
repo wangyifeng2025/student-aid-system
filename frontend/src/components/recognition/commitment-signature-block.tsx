@@ -4,22 +4,16 @@ import { SignaturePad } from "@/components/recognition/signature-pad";
 import { COMMITMENT_HANDWRITE_TEXT } from "@/lib/signature";
 
 type Props = {
-  commitmentDataUrl: string;
   signatureDataUrl: string;
-  onCommitmentChange: (dataUrl: string) => void;
   onSignatureChange: (dataUrl: string) => void;
   disabled?: boolean;
 };
 
 /**
- * 对照纸质「个人承诺」表格布局：
- * 左栏手写承诺正文，右栏学生本人（或监护人）签字。
- * 窄屏自动上下堆叠。
+ * 印刷承诺正文 + 仅手写签字（勾选同意在外层表单完成）。
  */
 export function CommitmentSignatureBlock({
-  commitmentDataUrl,
   signatureDataUrl,
-  onCommitmentChange,
   onSignatureChange,
   disabled,
 }: Props) {
@@ -35,29 +29,23 @@ export function CommitmentSignatureBlock({
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        个人承诺（须手写）
+        个人承诺与签字
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        {/* 承诺内容 */}
-        <div
-          className="p-3 md:border-r"
-          style={{ borderColor: "var(--color-border)" }}
-        >
+        <div className="p-3 md:border-r" style={{ borderColor: "var(--color-border)" }}>
           <div className="mb-2 text-xs font-semibold text-ink">承诺内容：</div>
-          <p className="mb-2 text-xs leading-5" style={{ color: "var(--state-error)" }}>
-            （此处手写：「{COMMITMENT_HANDWRITE_TEXT}」）
+          <div
+            className="mb-2 rounded-md border px-3 py-3 text-sm leading-6 font-medium text-ink"
+            style={{ borderColor: "var(--color-border)", background: "var(--color-bg-page)" }}
+          >
+            {COMMITMENT_HANDWRITE_TEXT}
+          </div>
+          <p className="text-xs leading-5" style={{ color: "var(--color-text-muted)" }}>
+            请仔细阅读上述承诺，在右侧手写签字并勾选同意。
           </p>
-          <SignaturePad
-            value={commitmentDataUrl}
-            onChange={onCommitmentChange}
-            height={150}
-            placeholder="请在此手写完整承诺内容"
-            disabled={disabled}
-          />
         </div>
 
-        {/* 签字 */}
         <div className="border-t p-3 md:border-t-0" style={{ borderColor: "var(--color-border)" }}>
           <div className="mb-2 text-xs font-semibold text-ink">
             学生本人（或监护人）签字

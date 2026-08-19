@@ -34,11 +34,8 @@ func NewRecognitionService(db *gorm.DB) *RecognitionService {
 	}
 }
 
-// 与前端约定一致的手写承诺 / 签字附件文件名。
-const (
-	commitmentHandwritingFile = "commitment_handwriting.png"
-	studentSignatureFile      = "student_signature.png"
-)
+// 与前端约定一致的签字附件文件名。
+const studentSignatureFile = "student_signature.png"
 
 // List 按数据范围分页列出认定申请。
 func (s *RecognitionService) List(actor rbac.Actor, f repository.RecognitionFilter) (*dto.PageResult[dto.RecognitionListItem], error) {
@@ -214,8 +211,8 @@ func (s *RecognitionService) Delete(actor rbac.Actor, id uint) error {
 	if err != nil {
 		return err
 	}
-	if !isDeletable(a.Status) {
-		return NewValidationError("当前状态不可删除（仅未提交的草稿或被退回的申请可删除）")
+	if !isDeletable(a) {
+		return NewValidationError("当前状态不可删除（仅草稿、被退回，或已提交但班级尚未审核的申请可删除）")
 	}
 	return s.repo.Delete(id)
 }
@@ -417,9 +414,12 @@ func isEditable(status model.ApplicationStatus) bool {
 	return status == model.StatusDraft || status == model.StatusRejected
 }
 
-// isDeletable 未提交（草稿/退回）时可删除。
-func isDeletable(status model.ApplicationStatus) bool {
-	return isEditable(status)
+// isDeletable 草稿/退回，或已提交但班级尚未审核时可删除。
+func isDeletable(a *model.RecognitionApplication) bool {
+	if isEditable(a.Status) {
+		return true
+	}
+	return isWithdrawable(a)
 }
 
 // isWithdrawable 已提交且班级尚未审核时可撤回。
@@ -480,23 +480,18 @@ func validateForSubmit(a *model.RecognitionApplication) error {
 	return nil
 }
 
-// requireSignatureAttachments 提交前须已上传手写承诺内容与学生签字两张图。
+// requireSignatureAttachments 提交前须已上传学生本人（或监护人）签字图。
 func (s *RecognitionService) requireSignatureAttachments(appID uint) error {
 	items, err := s.attRepo.ListByOwner(OwnerTypeRecognition, appID)
 	if err != nil {
 		return err
 	}
-	hasCommitment, hasSignature := false, false
+	hasSignature := false
 	for i := range items {
-		switch items[i].FileName {
-		case commitmentHandwritingFile:
-			hasCommitment = true
-		case studentSignatureFile:
+		if items[i].FileName == studentSignatureFile {
 			hasSignature = true
+			break
 		}
-	}
-	if !hasCommitment {
-		return NewValidationError("请手写承诺内容并保存后再提交")
 	}
 	if !hasSignature {
 		return NewValidationError("请完成学生本人（或监护人）签字后再提交")

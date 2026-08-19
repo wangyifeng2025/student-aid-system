@@ -14,7 +14,7 @@ import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { GrantStatusBadge } from "@/components/grant/grant-status-badge";
-import { canEditGrant, grantTypeLabel, GRANT_STATUS_OPTIONS } from "@/lib/grant-options";
+import { canDeleteGrant, canEditGrant, grantTypeLabel, GRANT_STATUS_OPTIONS } from "@/lib/grant-options";
 import type { GrantListItem } from "@/types/grant";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -99,7 +99,7 @@ export default function GrantsPage() {
               <Download size={14} className="inline" /> Word
             </button>
           )}
-          {isStudent && canEditGrant(r.status) && (
+          {isStudent && canDeleteGrant(r.status) && (
             <button type="button" className="text-xs text-error hover:underline" onClick={() => setDeleteTarget(r)}>
               <Trash2 size={14} className="inline" />
             </button>
@@ -135,7 +135,7 @@ export default function GrantsPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除助学金申请"
-        description="确定删除该草稿申请吗？"
+        description="确定删除该申请吗？草稿、被退回，或已提交但班级尚未审核的申请可删除，该操作不可撤销。"
         confirmText="删除"
         loading={deleting}
         onConfirm={handleDelete}

@@ -58,10 +58,8 @@ export default function RecognitionApplyScreen() {
   const [savedId, setSavedId] = useState<number | null>(editingId);
   const [profileLoading, setProfileLoading] = useState(role === 'student' && !editingId);
   const [recordLoading, setRecordLoading] = useState(!!editingId);
-  const [commitmentDataUrl, setCommitmentDataUrl] = useState('');
   const [signatureDataUrl, setSignatureDataUrl] = useState('');
   const [signatureDirty, setSignatureDirty] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // 续填已有的草稿 / 被退回申请：从后端加载完整记录。
   const loadExisting = useCallback(async () => {
@@ -109,7 +107,6 @@ export default function RecognitionApplyScreen() {
       });
       try {
         const imgs = await loadSignatureDataUrls(editingId);
-        setCommitmentDataUrl(imgs.commitment);
         setSignatureDataUrl(imgs.signature);
         setSignatureDirty(false);
       } catch {
@@ -263,7 +260,6 @@ export default function RecognitionApplyScreen() {
     if (form.special_types.length === 0 && !form.other_info.trim())
       return '未勾选特殊群体类型时，请在「其他情况说明」中说明家庭经济困难原因';
     if (!form.commitment_agreed) return '请先勾选个人承诺';
-    if (!commitmentDataUrl) return '请手写承诺内容';
     if (!signatureDataUrl) return '请完成学生本人（或监护人）签字';
     return null;
   }
@@ -313,7 +309,7 @@ export default function RecognitionApplyScreen() {
         setForm((prev) => ({ ...prev, id_card: res.id_card }));
       }
       if (signatureDirty && currentId) {
-        await syncSignatureAttachments(currentId, commitmentDataUrl, signatureDataUrl);
+        await syncSignatureAttachments(currentId, signatureDataUrl);
         setSignatureDirty(false);
       }
       Alert.alert('已保存草稿', '可随时返回继续填写。');
@@ -340,7 +336,7 @@ export default function RecognitionApplyScreen() {
         currentId = created.id;
         setSavedId(created.id);
       }
-      await syncSignatureAttachments(currentId, commitmentDataUrl, signatureDataUrl);
+      await syncSignatureAttachments(currentId, signatureDataUrl);
       setSignatureDirty(false);
       const result = await recognitionApi.submit(currentId);
       const message = ['申请已提交，进入班级评审。', ...(result.warnings ?? [])].join('\n');
@@ -376,7 +372,6 @@ export default function RecognitionApplyScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={scrollEnabled}
           showsVerticalScrollIndicator={false}>
           {step === 0 && (
             <SectionCard title="基本信息">
@@ -627,33 +622,26 @@ export default function RecognitionApplyScreen() {
                     value={form.special_types.length ? `${form.special_types.length} 项` : '未勾选'}
                   />
                 </View>
-
-                <View style={styles.divider} />
-
-                <CheckboxRow
-                  checked={form.commitment_agreed}
-                  onToggle={() => set('commitment_agreed', !form.commitment_agreed)}>
-                  <Text style={styles.commitmentText}>
-                    本人承诺所填写的家庭经济信息真实、准确，并知晓如有弄虚作假将取消资助资格并承担相应责任。
-                  </Text>
-                </CheckboxRow>
               </SectionCard>
 
               <CommitmentSignatureBlock
-                commitmentDataUrl={commitmentDataUrl}
                 signatureDataUrl={signatureDataUrl}
-                onCommitmentChange={(v) => {
-                  setCommitmentDataUrl(v);
-                  setSignatureDirty(true);
-                }}
                 onSignatureChange={(v) => {
                   setSignatureDataUrl(v);
                   setSignatureDirty(true);
                 }}
                 disabled={submitting || savingDraft}
-                onDrawStart={() => setScrollEnabled(false)}
-                onDrawEnd={() => setScrollEnabled(true)}
               />
+
+              <SectionCard title="确认同意">
+                <CheckboxRow
+                  checked={form.commitment_agreed}
+                  onToggle={() => set('commitment_agreed', !form.commitment_agreed)}>
+                  <Text style={styles.commitmentText}>
+                    我已阅读并同意上述个人承诺内容。
+                  </Text>
+                </CheckboxRow>
+              </SectionCard>
             </>
           )}
         </ScrollView>

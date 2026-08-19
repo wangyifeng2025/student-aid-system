@@ -76,7 +76,7 @@ export function getNavForRole(role?: Role): NavItem[] {
       {
         type: "leaf",
         key: "review",
-        label: "认定待办",
+        label: "困难认定待办",
         href: "/reviews",
         icon: ClipboardCheck,
       },
@@ -90,7 +90,7 @@ export function getNavForRole(role?: Role): NavItem[] {
       {
         type: "leaf",
         key: "review-records",
-        label: "认定记录",
+        label: "困难认定记录",
         href: "/reviews/records",
         icon: List,
       },

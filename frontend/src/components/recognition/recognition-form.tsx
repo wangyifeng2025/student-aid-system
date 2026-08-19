@@ -170,11 +170,10 @@ export function RecognitionForm({ mode, initial }: Props) {
   const [saving, setSaving] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [profileLoading, setProfileLoading] = React.useState(true);
-  const [commitmentDataUrl, setCommitmentDataUrl] = React.useState("");
   const [signatureDataUrl, setSignatureDataUrl] = React.useState("");
   const [signatureDirty, setSignatureDirty] = React.useState(false);
 
-  // 编辑已有草稿时回填手写承诺 / 签字图。
+  // 编辑已有草稿时回填签字图。
   React.useEffect(() => {
     if (!savedId) return;
     let cancelled = false;
@@ -182,7 +181,6 @@ export function RecognitionForm({ mode, initial }: Props) {
       try {
         const imgs = await loadSignatureDataUrls(savedId);
         if (cancelled) return;
-        setCommitmentDataUrl(imgs.commitment);
         setSignatureDataUrl(imgs.signature);
         setSignatureDirty(false);
       } catch {
@@ -307,7 +305,6 @@ export function RecognitionForm({ mode, initial }: Props) {
     if (form.special_types.length === 0 && !form.other_info.trim())
       return "未勾选特殊群体类型时，请在「其他情况说明」中说明家庭经济困难原因";
     if (!form.commitment_agreed) return "请先勾选个人承诺";
-    if (!commitmentDataUrl) return "请手写承诺内容";
     if (!signatureDataUrl) return "请完成学生本人（或监护人）签字";
     return null;
   }
@@ -364,7 +361,7 @@ export function RecognitionForm({ mode, initial }: Props) {
     const id = await persist();
     if (id && signatureDirty) {
       try {
-        await syncSignatureAttachments(id, commitmentDataUrl, signatureDataUrl);
+        await syncSignatureAttachments(id, signatureDataUrl);
         setSignatureDirty(false);
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : "手写签字上传失败");
@@ -389,7 +386,7 @@ export function RecognitionForm({ mode, initial }: Props) {
       return;
     }
     try {
-      await syncSignatureAttachments(id, commitmentDataUrl, signatureDataUrl);
+      await syncSignatureAttachments(id, signatureDataUrl);
       setSignatureDirty(false);
       const res = await recognitionApi.submit(id);
       toast.success("申请已提交，进入班级评审");
@@ -720,6 +717,30 @@ export function RecognitionForm({ mode, initial }: Props) {
       {/* Step 3: 提交确认 */}
       {step === 3 && (
         <>
+          <SectionCard title="个人承诺与签字">
+            <p className="mb-3 text-xs text-ink-mute">
+              请阅读印刷承诺正文，完成本人或监护人签字，并勾选同意。
+            </p>
+            <CommitmentSignatureBlock
+              signatureDataUrl={signatureDataUrl}
+              onSignatureChange={(v) => {
+                setSignatureDataUrl(v);
+                setSignatureDirty(true);
+              }}
+              disabled={busy}
+            />
+            <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded"
+                style={{ accentColor: "var(--color-primary)" }}
+                checked={form.commitment_agreed}
+                onChange={(e) => set("commitment_agreed", e.target.checked)}
+              />
+              <span>我已阅读并同意上述个人承诺内容。</span>
+            </label>
+          </SectionCard>
+
           <SectionCard title="提交确认">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm md:grid-cols-2">
               <SummaryItem label="认定年度" value={String(form.year || "—")} />
@@ -733,40 +754,6 @@ export function RecognitionForm({ mode, initial }: Props) {
                 value={form.special_types.length ? `${form.special_types.length} 项` : "未勾选"}
               />
             </dl>
-
-            <div style={{ borderTop: "1px solid var(--color-border)", margin: "20px 0" }} />
-
-            <label className="flex cursor-pointer items-start gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded"
-                style={{ accentColor: "var(--color-primary)" }}
-                checked={form.commitment_agreed}
-                onChange={(e) => set("commitment_agreed", e.target.checked)}
-              />
-              <span>
-                本人承诺所填写的家庭经济信息真实、准确，并知晓如有弄虚作假将取消资助资格并承担相应责任。
-              </span>
-            </label>
-          </SectionCard>
-
-          <SectionCard title="个人承诺与签字">
-            <p className="mb-3 text-xs text-ink-mute">
-              对照纸质申请表「个人承诺」栏：左侧手写承诺原文，右侧本人或监护人签字。提交前两项均须完成。
-            </p>
-            <CommitmentSignatureBlock
-              commitmentDataUrl={commitmentDataUrl}
-              signatureDataUrl={signatureDataUrl}
-              onCommitmentChange={(v) => {
-                setCommitmentDataUrl(v);
-                setSignatureDirty(true);
-              }}
-              onSignatureChange={(v) => {
-                setSignatureDataUrl(v);
-                setSignatureDirty(true);
-              }}
-              disabled={busy}
-            />
           </SectionCard>
 
           <SectionCard title="附件材料">

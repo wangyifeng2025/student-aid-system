@@ -187,6 +187,7 @@ func registerRecognitionRoutes(g *gin.RouterGroup, h *handler.Handler) {
 	{
 		recs.GET("", h.ListRecognitions)
 		recs.POST("", h.CreateRecognition)
+		recs.GET("/summary-export", h.ExportRecognitionSummary)
 		recs.GET("/:id", h.GetRecognition)
 		recs.PUT("/:id", h.UpdateRecognition)
 		recs.DELETE("/:id", h.DeleteRecognition)

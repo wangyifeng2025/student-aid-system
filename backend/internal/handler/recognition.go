@@ -165,3 +165,24 @@ func (h *Handler) ExportRecognitionDocx(c *gin.Context) {
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		data)
 }
+
+// ExportRecognitionSummary 导出家庭经济困难学生认定结果汇总表（评审角色与管理员）。
+func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	f := repository.RecognitionFilter{
+		Year:    parseIntQuery(c, "year"),
+		Keyword: c.Query("keyword"),
+		DeptID:  parseUintQuery(c, "dept_id"),
+		ClassID: parseUintQuery(c, "class_id"),
+	}
+	data, filename, asciiName, err := h.RecognitionSummary.Export(actor, f)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", attachmentDisposition(asciiName, filename))
+	c.Data(http.StatusOK, xlsxContentType, data)
+}

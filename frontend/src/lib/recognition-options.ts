@@ -175,6 +175,11 @@ export function canReview(role: Role | undefined, status: ApplicationStatus): bo
   }
 }
 
+/** 班主任 / 教学系 / 资助中心 / 管理员可导出认定结果汇总表。 */
+export function canExportRecognitionSummary(role: Role | undefined): boolean {
+  return role === "classadvisor" || role === "department" || role === "aidcenter" || role === "admin";
+}
+
 // 角色待办状态筛选项（与后端 todoStatusesForRole 对齐，用于待办审核页）。
 export function todoStatusOptionsForRole(role: Role | undefined): { value: ApplicationStatus; label: string }[] {
   switch (role) {
@@ -276,9 +281,13 @@ export function rejectTargetLabel(level: number): string {
 
 // ===== 学生端：删除 / 撤回 =====
 
-/** 未提交（草稿/退回）时可删除 */
-export function canDeleteRecognition(status: ApplicationStatus): boolean {
-  return status === "draft" || status === "rejected";
+/** 草稿/退回，或已提交且班级尚未审核时可删除 */
+export function canDeleteRecognition(
+  status: ApplicationStatus,
+  reviews?: { level: number }[],
+): boolean {
+  if (status === "draft" || status === "rejected") return true;
+  return canWithdrawRecognition(status, reviews);
 }
 
 /** 已提交且班级尚未审核时可撤回（详情页可结合 reviews 精确判断） */

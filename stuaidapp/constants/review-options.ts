@@ -41,9 +41,23 @@ export function canEditRecognition(status: ApplicationStatus): boolean {
   return status === 'draft' || status === 'rejected';
 }
 
-/** 认定申请学生本人是否可撤回（已提交但尚未经过班级评审）。 */
-export function canWithdrawRecognition(status: ApplicationStatus): boolean {
-  return status === 'pending_class';
+/** 已提交且班级尚未审核时可撤回。 */
+export function canWithdrawRecognition(
+  status: ApplicationStatus,
+  reviews?: { level: number }[],
+): boolean {
+  if (status !== 'pending_class') return false;
+  if (!reviews?.length) return true;
+  return !reviews.some((r) => r.level === 1);
+}
+
+/** 草稿/退回，或已提交且班级尚未审核时可删除。 */
+export function canDeleteRecognition(
+  status: ApplicationStatus,
+  reviews?: { level: number }[],
+): boolean {
+  if (canEditRecognition(status)) return true;
+  return canWithdrawRecognition(status, reviews);
 }
 
 /** 当前状态对应的评审级别（1~3），非待审状态返回 0；pending_final 兼容历史数据。 */
@@ -75,6 +89,11 @@ export function canReview(role: Role | undefined, status: ApplicationStatus): bo
     default:
       return false;
   }
+}
+
+/** 班主任 / 教学系 / 资助中心 / 管理员可导出认定结果汇总表。 */
+export function canExportRecognitionSummary(role: Role | undefined): boolean {
+  return role === 'classadvisor' || role === 'department' || role === 'aidcenter' || role === 'admin';
 }
 
 /**

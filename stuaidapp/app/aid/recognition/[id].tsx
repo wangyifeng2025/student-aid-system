@@ -17,7 +17,7 @@ import {
   nationLabel,
   specialGroupLabel,
 } from '@/constants/recognition-options';
-import { canEditRecognition, canWithdrawRecognition } from '@/constants/review-options';
+import { canDeleteRecognition, canEditRecognition, canWithdrawRecognition } from '@/constants/review-options';
 import { ApiError, recognitionApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/validators';
 import type { RecognitionDetail } from '@/types/recognition';
@@ -31,6 +31,7 @@ export default function RecognitionDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const numericId = Number(id);
 
@@ -52,7 +53,7 @@ export default function RecognitionDetailScreen() {
   }, [load]);
 
   function handleWithdraw() {
-    Alert.alert('撤回申请', '撤回后申请将回到草稿状态，需重新提交，确定撤回吗？', [
+    Alert.alert('撤回申请', '撤回后申请将回到草稿状态，可继续编辑后重新提交，确定撤回吗？', [
       { text: '取消', style: 'cancel' },
       {
         text: '确定撤回',
@@ -72,8 +73,35 @@ export default function RecognitionDetailScreen() {
     ]);
   }
 
+  function handleDelete() {
+    Alert.alert(
+      '删除申请',
+      '确定删除该申请吗？草稿、被退回，或已提交但班级尚未审核的申请可删除，删除后不可恢复。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定删除',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await recognitionApi.remove(numericId);
+              Alert.alert('已删除', '申请已删除。', [
+                { text: '好的', onPress: () => router.back() },
+              ]);
+            } catch (e) {
+              Alert.alert('删除失败', e instanceof ApiError ? e.message : '请稍后重试');
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const editable = detail ? canEditRecognition(detail.status) : false;
-  const withdrawable = detail ? canWithdrawRecognition(detail.status) : false;
+  const deletable = detail ? canDeleteRecognition(detail.status, detail.reviews) : false;
+  const withdrawable = detail ? canWithdrawRecognition(detail.status, detail.reviews) : false;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -162,12 +190,20 @@ export default function RecognitionDetailScreen() {
             </SectionCard>
           </ScrollView>
 
-          {(editable || withdrawable) && (
+          {(editable || deletable || withdrawable) && (
             <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
+              {deletable && (
+                <Pressable
+                  style={[styles.deleteBtn, deleting && styles.btnDisabled]}
+                  disabled={deleting || withdrawing}
+                  onPress={handleDelete}>
+                  <Text style={styles.deleteBtnText}>{deleting ? '删除中…' : '删除申请'}</Text>
+                </Pressable>
+              )}
               {withdrawable && (
                 <Pressable
                   style={[styles.withdrawBtn, withdrawing && styles.btnDisabled]}
-                  disabled={withdrawing}
+                  disabled={withdrawing || deleting}
                   onPress={handleWithdraw}>
                   <Text style={styles.withdrawBtnText}>{withdrawing ? '撤回中…' : '撤回申请'}</Text>
                 </Pressable>
@@ -298,9 +334,24 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Brand.errorSurface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    backgroundColor: Brand.card,
   },
   withdrawBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Brand.foreground,
+  },
+  deleteBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Brand.errorSurface,
+  },
+  deleteBtnText: {
     fontSize: 14,
     fontWeight: '600',
     color: Brand.error,

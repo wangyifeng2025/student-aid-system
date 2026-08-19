@@ -15,6 +15,7 @@ import { clearSession, getSession, saveSession } from '@/lib/token-storage';
 // expo-file-system v19 起新增基于 File/Directory 的 API，旧版 cacheDirectory /
 // downloadAsync / EncodingType 等移至 `expo-file-system/legacy`。
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 export interface Attachment {
   id: number;
@@ -142,6 +143,40 @@ function buildParams(params: Record<string, string | number | boolean | undefine
   return qs ? `?${qs}` : '';
 }
 
+async function downloadAndShareFile(
+  path: string,
+  fallbackName: string,
+  mimeType: string,
+  dialogTitle: string,
+): Promise<void> {
+  const send = async () => {
+    const headers: Record<string, string> = {};
+    const session = getSession();
+    if (session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
+    const target = `${FileSystem.cacheDirectory}${fallbackName}`;
+    return FileSystem.downloadAsync(`${getApiBase()}${API_PREFIX}${path}`, target, { headers });
+  };
+
+  let result = await send();
+  if (result.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      result = await send();
+    } else {
+      await clearSession();
+    }
+  }
+  if (result.status !== 200) {
+    throw new ApiError('下载失败，请稍后重试', -1, result.status);
+  }
+
+  const available = await Sharing.isAvailableAsync();
+  if (!available) {
+    throw new ApiError('当前设备不支持分享或保存文件', -1, 0);
+  }
+  await Sharing.shareAsync(result.uri, { mimeType, dialogTitle, UTI: 'org.openxmlformats.spreadsheetml.sheet' });
+}
+
 /** multipart 上传本地文件（uri 可为 file:// 或 data URL 落盘后的路径）。 */
 async function apiUploadFile<T>(
   path: string,
@@ -240,10 +275,29 @@ export const recognitionApi = {
     ),
   withdraw: (id: number) =>
     apiFetch<RecognitionDetail>(`/recognitions/${id}/withdraw`, { method: 'POST' }),
+  remove: (id: number) =>
+    apiFetch<{ message: string }>(`/recognitions/${id}`, { method: 'DELETE' }),
   listAttachments: (id: number) =>
     apiFetch<Attachment[]>(`/recognitions/${id}/attachments`),
   uploadAttachment: (id: number, fileUri: string, fileName: string, mime = 'image/png') =>
     apiUploadFile<Attachment>(`/recognitions/${id}/attachments`, fileUri, fileName, mime),
+  exportSummary: (filter?: {
+    year?: number;
+    keyword?: string;
+    deptId?: number;
+    classId?: number;
+  }) =>
+    downloadAndShareFile(
+      `/recognitions/summary-export${buildParams({
+        year: filter?.year,
+        keyword: filter?.keyword,
+        dept_id: filter?.deptId,
+        class_id: filter?.classId,
+      })}`,
+      `recognition_summary_${filter?.year || new Date().getFullYear()}.xlsx`,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '导出认定结果汇总表',
+    ),
 };
 
 export const attachmentApi = {
@@ -294,6 +348,8 @@ export const grantApi = {
   update: (id: number, body: GrantInput) =>
     apiFetch<Grant>(`/grants/${id}`, { method: 'PUT', body }),
   submit: (id: number) => apiFetch<Grant>(`/grants/${id}/submit`, { method: 'POST' }),
+  remove: (id: number) =>
+    apiFetch<{ message: string }>(`/grants/${id}`, { method: 'DELETE' }),
 };
 
 // ===== 困难认定三级评审（模块 5） =====

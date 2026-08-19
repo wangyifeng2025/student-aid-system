@@ -97,9 +97,10 @@ export default function RecognitionDetailPage() {
     void load();
   }, [load]);
 
-  const editable = !!data && canDeleteRecognition(data.status);
+  const editable = !!data && isStudent && (data.status === "draft" || data.status === "rejected");
+  const deletable = !!data && isStudent && canDeleteRecognition(data.status, data.reviews);
   const withdrawable = !!data && isStudent && canWithdrawRecognition(data.status, data.reviews);
-  const canManage = isStudent && editable;
+  const canManage = editable;
 
   const handleSubmit = async () => {
     setConfirmSubmit(false);
@@ -317,7 +318,7 @@ export default function RecognitionDetailPage() {
               </div>
             </Card>
 
-            {(canManage || withdrawable || data.status === "approved") && (
+            {(canManage || deletable || withdrawable || data.status === "approved") && (
               <Card title="操作">
                 <div className="flex flex-col gap-3">
                   {canManage && (
@@ -332,11 +333,13 @@ export default function RecognitionDetailPage() {
                           编辑申请
                         </Button>
                       </Link>
-                      <Button variant="danger" onClick={() => setConfirmDelete(true)} className="w-full">
-                        <Trash2 size={16} />
-                        删除申请
-                      </Button>
                     </>
+                  )}
+                  {deletable && (
+                    <Button variant="danger" onClick={() => setConfirmDelete(true)} className="w-full">
+                      <Trash2 size={16} />
+                      删除申请
+                    </Button>
                   )}
                   {withdrawable && (
                     <Button
@@ -392,7 +395,7 @@ export default function RecognitionDetailPage() {
       <ConfirmDialog
         open={confirmSubmit}
         title="提交认定申请"
-        description="提交后将进入班级评审。在班主任审核前可撤回并继续修改，班级审核后将不可撤回或删除。确定提交吗？"
+        description="提交后将进入班级评审。在班主任审核前可撤回或删除；班级审核后将不可撤回或删除。确定提交吗？"
         confirmText="确认提交"
         loading={submitting}
         onConfirm={handleSubmit}
@@ -401,7 +404,7 @@ export default function RecognitionDetailPage() {
       <ConfirmDialog
         open={confirmDelete}
         title="删除认定申请"
-        description={`确定删除 ${data.year} 年度的认定申请吗？仅未提交的申请可删除，该操作不可撤销。`}
+        description={`确定删除 ${data.year} 年度的认定申请吗？草稿、被退回，或已提交但班级尚未审核的申请可删除，该操作不可撤销。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

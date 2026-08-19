@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { type Href, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -19,10 +21,11 @@ import {
 import { ReviewListItem } from '@/components/reviews/review-list-item';
 import { Brand } from '@/constants/brand';
 import {
+  canExportRecognitionSummary,
   recordsTodoStatusOptionsForRole,
   todoStatusOptionsForRole,
 } from '@/constants/review-options';
-import { ApiError, reviewApi } from '@/lib/api';
+import { ApiError, recognitionApi, reviewApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import type { RecognitionListItem } from '@/types/recognition';
 
@@ -52,6 +55,8 @@ export default function RecognitionReviewsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const canExport = canExportRecognitionSummary(role);
 
   const statusOptions = useMemo(
     () =>
@@ -96,9 +101,45 @@ export default function RecognitionReviewsScreen() {
     load(tab, filter);
   }, [tab, filter, load]);
 
+  async function handleExportSummary() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await recognitionApi.exportSummary({
+        keyword: filter.keyword || undefined,
+        deptId: filter.deptId || undefined,
+        classId: filter.classId || undefined,
+      });
+    } catch (e) {
+      Alert.alert('导出失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <FormHeader title="困难认定审核" />
+      <FormHeader
+        title="困难认定审核"
+        right={
+          canExport ? (
+            <Pressable
+              style={styles.exportBtn}
+              disabled={exporting}
+              onPress={() => void handleExportSummary()}
+              accessibilityLabel="导出认定结果汇总表">
+              {exporting ? (
+                <ActivityIndicator size="small" color={Brand.primary} />
+              ) : (
+                <>
+                  <Ionicons name="download-outline" size={16} color={Brand.primary} />
+                  <Text style={styles.exportText}>导出</Text>
+                </>
+              )}
+            </Pressable>
+          ) : null
+        }
+      />
 
       <View style={styles.tabs}>
         <TabButton label="本级待办" active={tab === 'mine'} onPress={() => setTab('mine')} />
@@ -116,6 +157,9 @@ export default function RecognitionReviewsScreen() {
         <Text style={styles.hint}>
           含本级待审及下级尚未完成的申请（如班级未审、教学系未审），便于督办。
         </Text>
+      ) : null}
+      {canExport ? (
+        <Text style={styles.hint}>导出为已认定通过学生的官方汇总表，可用当前院系/班级/关键字筛选。</Text>
       ) : null}
 
       {loading ? (
@@ -191,6 +235,18 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Brand.background,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 44,
+    paddingHorizontal: 8,
+  },
+  exportText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Brand.primary,
   },
   tabs: {
     flexDirection: 'row',

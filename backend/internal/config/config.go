@@ -64,6 +64,8 @@ type ExportConfig struct {
 	// GrantTemplatePath 助学金申请表 Word 模板（docx，含 {占位符}），
 	// 审批通过后导出 docx 时使用。
 	GrantTemplatePath string `mapstructure:"grant_template_path"`
+	// RecognitionSummaryTemplatePath 家庭经济困难学生认定结果汇总表 Excel 模板。
+	RecognitionSummaryTemplatePath string `mapstructure:"recognition_summary_template_path"`
 }
 
 // Load 从 config/config.yaml 及环境变量加载配置。
@@ -158,4 +160,5 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("export.school_name", "黔西南民族职业技术学院")
 	v.SetDefault("export.recognition_template_path", "./assets/templates/recognition_application.docx")
 	v.SetDefault("export.grant_template_path", "./assets/templates/grant_national_aid.docx")
+	v.SetDefault("export.recognition_summary_template_path", "./assets/templates/recognition_result_summary.xlsx")
 }

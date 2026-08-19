@@ -19,6 +19,17 @@ export function canEditGrant(status: GrantStatus): boolean {
   return status === "draft" || status === "rejected";
 }
 
+/** 草稿/退回，或已提交且班级尚未审核时可删除 */
+export function canDeleteGrant(
+  status: GrantStatus,
+  reviews?: { level: number }[],
+): boolean {
+  if (canEditGrant(status)) return true;
+  if (status !== "pending_class") return false;
+  if (!reviews?.length) return true;
+  return !reviews.some((r) => r.level === 1);
+}
+
 export function canReviewGrant(role: Role | undefined, status: GrantStatus): boolean {
   if (!role) return false;
   switch (status) {
