@@ -31,6 +31,7 @@ var specialGroupFormLabels = []struct {
 	{model.SGDisabledStudent, "残疾学生"},
 	{model.SGDisabledParent, "残疾人子女"},
 	{model.SGMartyrChild, "烈士子女"},
+	{model.SGPovertyRelocation, "异地扶贫搬迁"},
 }
 
 type recognitionFormData struct {

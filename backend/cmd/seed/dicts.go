@@ -101,6 +101,7 @@ var defaultDicts = map[string][]dictSeed{
 		{"disabled_student", "残疾学生"},
 		{"disabled_parent", "残疾人子女"},
 		{"martyr_child", "烈士子女"},
+		{"poverty_relocation", "是否异地扶贫搬迁"},
 	},
 }
 

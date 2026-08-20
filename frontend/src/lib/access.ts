@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   FileText,
   ClipboardCheck,
-  List,
   Wallet,
 } from "lucide-react";
 import type { Role } from "@/types/auth";
@@ -35,7 +34,7 @@ export function getHomePath(role?: Role): string {
   return "/dashboard";
 }
 
-/** 按角色过滤侧边栏菜单。 */
+/** 按角色返回侧边栏。路由本身不按角色拆分，同一套页面靠本函数与 canAccessPath 分流。 */
 export function getNavForRole(role?: Role): NavItem[] {
   if (!role) return [];
   if (isAdmin(role)) return ADMIN_NAV;
@@ -76,30 +75,16 @@ export function getNavForRole(role?: Role): NavItem[] {
       {
         type: "leaf",
         key: "review",
-        label: "困难认定待办",
+        label: "困难认定审核",
         href: "/reviews",
         icon: ClipboardCheck,
       },
       {
         type: "leaf",
         key: "grant-review",
-        label: "助学金待办",
+        label: "助学金审核",
         href: "/grant-reviews",
         icon: Wallet,
-      },
-      {
-        type: "leaf",
-        key: "review-records",
-        label: "困难认定记录",
-        href: "/reviews/records",
-        icon: List,
-      },
-      {
-        type: "leaf",
-        key: "grant-review-records",
-        label: "助学金记录",
-        href: "/grant-reviews/records",
-        icon: List,
       },
     ];
   }

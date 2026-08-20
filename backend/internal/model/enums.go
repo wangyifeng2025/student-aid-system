@@ -78,20 +78,21 @@ const (
 type SpecialGroupType string
 
 const (
-	SGPoverty          SpecialGroupType = "poverty"           // 脱贫家庭学生
-	SGPovertyUnstable  SpecialGroupType = "poverty_unstable"  // 脱贫不稳定家庭学生
-	SGMarginal         SpecialGroupType = "marginal"          // 边缘易致贫家庭学生
-	SGSuddenDifficulty SpecialGroupType = "sudden_difficulty" // 突发严重困难家庭学生
-	SGLowIncome        SpecialGroupType = "low_income"        // 低保家庭学生
-	SGLowIncomeMargin  SpecialGroupType = "low_income_margin" // 低保边缘家庭学生
-	SGExtremePoverty   SpecialGroupType = "extreme_poverty"   // 特困救助供养学生
-	SGRigidExpenditure SpecialGroupType = "rigid_expenditure" // 刚性支出困难家庭学生
-	SGOtherLowIncome   SpecialGroupType = "other_low_income"  // 其他低收入学生
-	SGOrphan           SpecialGroupType = "orphan"            // 孤儿
-	SGNoGuardian       SpecialGroupType = "no_guardian"       // 事实无人抚养儿童
-	SGDisabledStudent  SpecialGroupType = "disabled_student"  // 残疾学生
-	SGDisabledParent   SpecialGroupType = "disabled_parent"   // 残疾人子女
-	SGMartyrChild      SpecialGroupType = "martyr_child"      // 烈士子女
+	SGPoverty           SpecialGroupType = "poverty"            // 脱贫家庭学生
+	SGPovertyUnstable   SpecialGroupType = "poverty_unstable"   // 脱贫不稳定家庭学生
+	SGMarginal          SpecialGroupType = "marginal"           // 边缘易致贫家庭学生
+	SGSuddenDifficulty  SpecialGroupType = "sudden_difficulty"  // 突发严重困难家庭学生
+	SGLowIncome         SpecialGroupType = "low_income"         // 低保家庭学生
+	SGLowIncomeMargin   SpecialGroupType = "low_income_margin"  // 低保边缘家庭学生
+	SGExtremePoverty    SpecialGroupType = "extreme_poverty"    // 特困救助供养学生
+	SGRigidExpenditure  SpecialGroupType = "rigid_expenditure"  // 刚性支出困难家庭学生
+	SGOtherLowIncome    SpecialGroupType = "other_low_income"   // 其他低收入学生
+	SGOrphan            SpecialGroupType = "orphan"             // 孤儿
+	SGNoGuardian        SpecialGroupType = "no_guardian"        // 事实无人抚养儿童
+	SGDisabledStudent   SpecialGroupType = "disabled_student"   // 残疾学生
+	SGDisabledParent    SpecialGroupType = "disabled_parent"    // 残疾人子女
+	SGMartyrChild       SpecialGroupType = "martyr_child"       // 烈士子女
+	SGPovertyRelocation SpecialGroupType = "poverty_relocation" // 是否异地扶贫搬迁
 )
 
 // AllSpecialGroupTypes 返回全部合法的特殊群体类型（与 special_group_type 字典对齐）。
@@ -100,7 +101,7 @@ func AllSpecialGroupTypes() []SpecialGroupType {
 		SGPoverty, SGPovertyUnstable, SGMarginal, SGSuddenDifficulty,
 		SGLowIncome, SGLowIncomeMargin, SGExtremePoverty, SGRigidExpenditure,
 		SGOtherLowIncome, SGOrphan, SGNoGuardian, SGDisabledStudent,
-		SGDisabledParent, SGMartyrChild,
+		SGDisabledParent, SGMartyrChild, SGPovertyRelocation,
 	}
 }
 

@@ -553,6 +553,7 @@ export const recognitionApi = {
         year: filter?.year,
         status: filter?.status,
         keyword: filter?.keyword,
+        special_type: filter?.special_type,
       })}`,
     ),
   get: (id: number) => apiFetch<Recognition>(`/recognitions/${id}`),
@@ -568,13 +569,14 @@ export const recognitionApi = {
     apiFetch<Recognition>(`/recognitions/${id}/withdraw`, { method: "POST" }),
   exportDocx: (id: number, fallbackName = `recognition_${id}.docx`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
-  exportSummary: (filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id">) =>
+  exportSummary: (filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type">) =>
     downloadFile(
       `/recognitions/summary-export${buildParams({
         year: filter?.year,
         keyword: filter?.keyword,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
+        special_type: filter?.special_type,
       })}`,
       "recognition_summary.xlsx",
     ),
@@ -624,6 +626,7 @@ export const reviewApi = {
         year: filter?.year,
         status: filter?.status,
         keyword: filter?.keyword,
+        special_type: filter?.special_type,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
       })}`,
@@ -637,6 +640,7 @@ export const reviewApi = {
         year: filter?.year,
         status: filter?.status,
         keyword: filter?.keyword,
+        special_type: filter?.special_type,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
       })}`,

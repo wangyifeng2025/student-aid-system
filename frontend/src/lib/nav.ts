@@ -10,7 +10,6 @@ import {
   MapPinned,
   ClipboardCheck,
   FileText,
-  List,
   GraduationCap,
   UserCog,
   HeartHandshake,
@@ -39,7 +38,8 @@ export interface NavGroup {
 
 export type NavItem = NavLeaf | NavGroup;
 
-/** 管理员全量导航（其他角色通过 getNavForRole 过滤）。 */
+/** 管理员导航。页面路由与学生/评审共用 `(admin)` 布局，仅菜单与 canAccessPath 按角色分流。
+ *  认定/助学金的学生申请入口不出现在此；办事与查询统一走「资助审核」。 */
 export const ADMIN_NAV: NavItem[] = [
   {
     type: "leaf",
@@ -121,46 +121,26 @@ export const ADMIN_NAV: NavItem[] = [
     ],
   },
   {
-    type: "leaf",
-    key: "recognition",
-    label: "困难认定",
-    href: "/recognitions",
-    icon: FileText,
-  },
-  {
-    type: "leaf",
-    key: "grants",
-    label: "助学金申请",
-    href: "/grants",
-    icon: Wallet,
-  },
-  {
-    type: "leaf",
-    key: "review",
-    label: "待办审核",
-    href: "/reviews",
+    type: "group",
+    key: "aid-review",
+    label: "资助审核",
     icon: ClipboardCheck,
-  },
-  {
-    type: "leaf",
-    key: "grant-review",
-    label: "助学金待办",
-    href: "/grant-reviews",
-    icon: Wallet,
-  },
-  {
-    type: "leaf",
-    key: "review-records",
-    label: "认定记录",
-    href: "/reviews/records",
-    icon: List,
-  },
-  {
-    type: "leaf",
-    key: "grant-review-records",
-    label: "助学金记录",
-    href: "/grant-reviews/records",
-    icon: List,
+    children: [
+      {
+        type: "leaf",
+        key: "review",
+        label: "困难认定审核",
+        href: "/reviews",
+        icon: FileText,
+      },
+      {
+        type: "leaf",
+        key: "grant-review",
+        label: "助学金审核",
+        href: "/grant-reviews",
+        icon: Wallet,
+      },
+    ],
   },
   {
     type: "leaf",
@@ -220,13 +200,10 @@ export function resolvePageMeta(pathname: string): PageMeta {
   }
 
   if (pathname.startsWith("/reviews")) {
-    if (pathname === "/reviews/records") {
-      return { title: "认定记录", breadcrumb: ["首页", "审核管理", "认定记录"] };
+    if (pathname !== "/reviews" && pathname !== "/reviews/records") {
+      return { title: "认定申请审核", breadcrumb: ["首页", "资助审核", "困难认定审核", "详情"] };
     }
-    if (pathname !== "/reviews") {
-      return { title: "认定申请审核", breadcrumb: ["首页", "审核管理", "审核详情"] };
-    }
-    return { title: "待办审核", breadcrumb: ["首页", "审核管理", "待办审核"] };
+    return { title: "困难认定审核", breadcrumb: ["首页", "资助审核", "困难认定审核"] };
   }
 
   if (pathname.startsWith("/grants")) {
@@ -243,13 +220,10 @@ export function resolvePageMeta(pathname: string): PageMeta {
   }
 
   if (pathname.startsWith("/grant-reviews")) {
-    if (pathname === "/grant-reviews/records") {
-      return { title: "助学金记录", breadcrumb: ["首页", "审核管理", "助学金记录"] };
+    if (pathname !== "/grant-reviews" && pathname !== "/grant-reviews/records") {
+      return { title: "助学金审核", breadcrumb: ["首页", "资助审核", "助学金审核", "详情"] };
     }
-    if (pathname !== "/grant-reviews") {
-      return { title: "助学金审核", breadcrumb: ["首页", "审核管理", "助学金审核"] };
-    }
-    return { title: "助学金待办", breadcrumb: ["首页", "审核管理", "助学金待办"] };
+    return { title: "助学金审核", breadcrumb: ["首页", "资助审核", "助学金审核"] };
   }
 
   for (const item of ADMIN_NAV) {
@@ -264,4 +238,10 @@ export function resolvePageMeta(pathname: string): PageMeta {
     }
   }
   return { title: "工作台", breadcrumb: ["首页", "工作台"] };
+}
+
+/** 侧栏高亮：精确匹配，或当前路径为其子页（如 /reviews/12）。 */
+export function isNavHrefActive(pathname: string, href: string): boolean {
+  if (!href || href === "#") return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }

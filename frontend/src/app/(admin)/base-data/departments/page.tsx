@@ -115,7 +115,7 @@ export default function DepartmentsPage() {
 
   const columns: Column<Department>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (d) => d.id, (d) => d.name)]
+      ? [checkboxColumn<Department>(selected, allSelected, toggleAll, toggleRow, (d) => d.id, (d) => d.name)]
       : []),
     { header: "ID", width: "80px", cell: (d) => <span className="text-ink-mute tabular-nums">{d.id}</span> },
     { header: "院系名称", cell: (d) => <span className="text-ink">{d.name}</span> },

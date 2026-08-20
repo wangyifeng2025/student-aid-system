@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ShieldCheck } from "lucide-react";
 import { getNavForRole } from "@/lib/access";
-import type { NavGroup, NavLeaf } from "@/lib/nav";
+import { isNavHrefActive, type NavGroup, type NavLeaf } from "@/lib/nav";
 import { useAuthStore } from "@/store/auth";
 import { avatarInitial, roleLabel } from "@/lib/labels";
 
@@ -48,7 +48,7 @@ function GroupBlock({
   pathname: string;
 }) {
   const Icon = group.icon;
-  const hasActiveChild = group.children.some((c) => c.href === pathname);
+  const hasActiveChild = group.children.some((c) => isNavHrefActive(pathname, c.href));
   const [open, setOpen] = React.useState(hasActiveChild);
 
   // 当通过其它方式进入分组下页面时自动展开
@@ -75,7 +75,7 @@ function GroupBlock({
         <ul className="mt-0.5 flex flex-col gap-0.5 pl-3">
           {group.children.map((child) => (
             <li key={child.key}>
-              <LeafLink item={child} active={child.href === pathname} />
+              <LeafLink item={child} active={isNavHrefActive(pathname, child.href)} />
             </li>
           ))}
         </ul>
@@ -121,7 +121,7 @@ export function Sidebar() {
               <GroupBlock key={item.key} group={item} pathname={pathname} />
             ) : (
               <li key={item.key}>
-                <LeafLink item={item} active={item.href === pathname} />
+                <LeafLink item={item} active={isNavHrefActive(pathname, item.href)} />
               </li>
             ),
           )}

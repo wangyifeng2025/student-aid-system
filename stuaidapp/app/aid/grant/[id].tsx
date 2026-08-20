@@ -61,6 +61,7 @@ export default function GrantDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,6 +83,18 @@ export default function GrantDetailScreen() {
 
   const editable = detail ? canEditGrant(detail.status) : false;
   const deletable = detail ? canDeleteGrant(detail.status, detail.reviews) : false;
+  const downloadable = detail?.status === 'approved';
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await grantApi.exportDocx(numericId);
+    } catch (e) {
+      Alert.alert('下载失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function handleDelete() {
     Alert.alert(
@@ -368,12 +381,12 @@ export default function GrantDetailScreen() {
             </SectionCard>
           </ScrollView>
 
-          {(editable || deletable) && (
+          {(editable || deletable || downloadable) && (
             <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
               {deletable && (
                 <Pressable
                   style={[styles.deleteBtn, deleting && styles.btnDisabled]}
-                  disabled={deleting || saving || submitting}
+                  disabled={deleting || saving || submitting || exporting}
                   onPress={handleDelete}>
                   <Text style={styles.deleteBtnText}>{deleting ? '删除中…' : '删除'}</Text>
                 </Pressable>
@@ -382,19 +395,27 @@ export default function GrantDetailScreen() {
                 <>
                   <Pressable
                     style={[styles.draftBtn, saving && styles.btnDisabled]}
-                    disabled={saving || deleting}
+                    disabled={saving || deleting || exporting}
                     onPress={handleSaveDraft}>
                     <Ionicons name="save-outline" size={16} color={Brand.primary} />
                     <Text style={styles.draftBtnText}>{saving ? '保存中…' : '保存草稿'}</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.primaryBtn, submitting && styles.btnDisabled]}
-                    disabled={submitting || deleting}
+                    disabled={submitting || deleting || exporting}
                     onPress={handleSubmit}>
                     <Text style={styles.primaryBtnText}>{submitting ? '提交中…' : '提交申请'}</Text>
                     <Ionicons name="send" size={14} color={Brand.primaryForeground} />
                   </Pressable>
                 </>
+              )}
+              {downloadable && (
+                <Pressable
+                  style={[styles.draftBtn, exporting && styles.btnDisabled]}
+                  disabled={exporting}
+                  onPress={handleExport}>
+                  <Text style={styles.draftBtnText}>{exporting ? '下载中…' : '下载申请表'}</Text>
+                </Pressable>
               )}
             </View>
           )}

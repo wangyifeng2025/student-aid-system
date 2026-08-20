@@ -145,6 +145,7 @@ export interface RecognitionListItem {
   current_level: number;
   difficulty_level: DifficultyLevel;
   per_capita_annual_income: number;
+  special_types: string[];
 }
 
 // 提交结果：申请快照 + 非阻断性提示
@@ -171,6 +172,7 @@ export interface RecognitionFilter {
   year?: number;
   status?: string;
   keyword?: string;
+  special_type?: string;
   dept_id?: number;
   class_id?: number;
   tab?: "todo" | "done" | "all";

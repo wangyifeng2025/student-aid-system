@@ -141,7 +141,7 @@ export default function DictsPage() {
 
   const columns: Column<DictItem>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (it) => it.id, (it) => it.label)]
+      ? [checkboxColumn<DictItem>(selected, allSelected, toggleAll, toggleRow, (it) => it.id, (it) => it.label)]
       : []),
     { header: "排序", width: "80px", cell: (it) => <span className="text-ink-mute tabular-nums">{it.sort}</span> },
     { header: "编码 code", cell: (it) => <span className="font-mono">{it.code}</span> },

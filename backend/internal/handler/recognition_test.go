@@ -389,3 +389,80 @@ func TestExportRecognitionSummary(t *testing.T) {
 		t.Fatalf("other class advisor should not see this class's student")
 	}
 }
+
+func TestListRecognitionsBySpecialType(t *testing.T) {
+	r, db := setupRecognitionRouter(t)
+	seedRecognitionDicts(db)
+	user := seedUser(t, db, "pass123", model.RoleStudent)
+	seedStudentFor(t, db, user.ID)
+	token := loginToken(t, r, user.Username, "pass123")
+	yearPoverty := time.Now().Year()
+	yearReloc := yearPoverty + 1
+
+	povertyReq := validRecognitionReq(yearPoverty)
+	povertyReq.SpecialTypes = []string{"poverty"}
+	w := doJSON(t, r, http.MethodPost, "/api/v1/recognitions", token, povertyReq)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create poverty draft status %d, body %s", w.Code, w.Body.String())
+	}
+	var povertyResp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &povertyResp)
+
+	relocReq := validRecognitionReq(yearReloc)
+	relocReq.SpecialTypes = []string{"poverty_unstable", "poverty_relocation"}
+	w = doJSON(t, r, http.MethodPost, "/api/v1/recognitions", token, relocReq)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create relocation draft status %d, body %s", w.Code, w.Body.String())
+	}
+	var relocResp struct {
+		Data dto.RecognitionResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &relocResp)
+
+	listIDs := func(query string) []uint {
+		t.Helper()
+		w := doJSON(t, r, http.MethodGet, "/api/v1/recognitions?"+query, token, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("list status %d, body %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data dto.PageResult[dto.RecognitionListItem] `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		ids := make([]uint, 0, len(resp.Data.Items))
+		for _, item := range resp.Data.Items {
+			ids = append(ids, item.ID)
+		}
+		return ids
+	}
+	contains := func(ids []uint, id uint) bool {
+		for _, v := range ids {
+			if v == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	povertyIDs := listIDs("special_type=poverty")
+	if !contains(povertyIDs, povertyResp.Data.ID) || contains(povertyIDs, relocResp.Data.ID) {
+		t.Fatalf("special_type=poverty want only poverty app, got %v", povertyIDs)
+	}
+
+	relocIDs := listIDs("special_type=poverty_relocation")
+	if !contains(relocIDs, relocResp.Data.ID) || contains(relocIDs, povertyResp.Data.ID) {
+		t.Fatalf("special_type=poverty_relocation want only relocation app, got %v", relocIDs)
+	}
+
+	unstableIDs := listIDs("special_type=poverty_unstable")
+	if !contains(unstableIDs, relocResp.Data.ID) || contains(unstableIDs, povertyResp.Data.ID) {
+		t.Fatalf("poverty must not match poverty_unstable, got %v", unstableIDs)
+	}
+
+	invalidIDs := listIDs("special_type=not_a_type")
+	if len(invalidIDs) != 0 {
+		t.Fatalf("invalid special_type should return empty, got %v", invalidIDs)
+	}
+}

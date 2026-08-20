@@ -296,7 +296,7 @@ export default function StudentsPage() {
 
   const columns: Column<Student>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name)]
+      ? [checkboxColumn<Student>(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name)]
       : []),
     { header: "学号", width: "130px", cell: (s) => <span className="font-mono text-ink">{s.student_no}</span> },
     { header: "姓名", cell: (s) => <span className="text-ink">{s.name}</span> },

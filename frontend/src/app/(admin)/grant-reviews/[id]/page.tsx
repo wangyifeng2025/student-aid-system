@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Check, Undo2, RotateCcw } from "lucide-react";
-import { grantReviewApi, ApiError } from "@/lib/api";
+import { ArrowLeft, Check, Undo2, RotateCcw, Download } from "lucide-react";
+import { grantReviewApi, grantApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ export default function GrantReviewDetailPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [withdrawing, setWithdrawing] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -62,6 +63,18 @@ export default function GrantReviewDetailPage() {
   const reviewable = !!data && canReviewGrant(role, data.status);
   const withdrawable = !!data && canWithdrawReview(role, userId, data.reviews);
   const level = data ? actingLevel(data.status as never) : 0;
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await grantApi.exportDocx(id);
+      toast.success("助学金申请表已开始下载");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleAction = async (input: ReviewActionInput) => {
     if (!dialog) return;
@@ -104,7 +117,7 @@ export default function GrantReviewDetailPage() {
   return (
     <div>
       <Link href="/grant-reviews" className="mb-4 inline-flex items-center gap-1.5 text-sm text-link hover:underline">
-        <ArrowLeft size={16} /> 返回助学金待办
+        <ArrowLeft size={16} /> 返回助学金审核
       </Link>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -162,9 +175,19 @@ export default function GrantReviewDetailPage() {
                 <RotateCcw size={16} /> 撤回审核意见
               </Button>
             ) : (
-              <p className="mt-3 text-ink-mute">当前不在您的评审环节。</p>
+              <p className="mt-3 text-ink-mute">
+                {data.status === "approved" ? "该申请已审批通过。" : "当前不在您的评审环节。"}
+              </p>
             )}
           </section>
+          {data.status === "approved" && (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <Button variant="outline" onClick={handleExport} disabled={exporting} className="w-full">
+                <Download size={16} />
+                {exporting ? "下载中…" : "下载助学金申请表（Word）"}
+              </Button>
+            </section>
+          )}
           {data.reviews.length > 0 && (
             <section className="rounded-md border border-line bg-surface p-5">
               <h3 className="mb-3 text-sm font-semibold">流转日志</h3>

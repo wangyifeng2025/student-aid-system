@@ -246,6 +246,7 @@ func (s *ReviewService) buildRecognitionListItems(items []model.RecognitionAppli
 			CurrentLevel:          int(a.CurrentLevel),
 			DifficultyLevel:       string(a.DifficultyLevel),
 			PerCapitaAnnualIncome: a.PerCapitaAnnualIncome,
+			SpecialTypes:          dto.SplitSpecialTypes(a.SpecialTypes),
 		})
 	}
 	return list, nil

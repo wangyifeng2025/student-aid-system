@@ -21,6 +21,7 @@ export type ReviewFilterValue = {
   deptId: number;
   classId: number;
   status: string;
+  specialType: string;
 };
 
 type StatusOption = { value: string; label: string };
@@ -28,6 +29,7 @@ type StatusOption = { value: string; label: string };
 type Props = {
   value: ReviewFilterValue;
   statusOptions: StatusOption[];
+  specialTypeOptions?: StatusOption[];
   onApply: (next: ReviewFilterValue) => void;
 };
 
@@ -39,7 +41,7 @@ function canFilterClass(role: Role | undefined) {
   return role === 'department' || role === 'aidcenter' || role === 'admin';
 }
 
-export function ReviewFilterBar({ value, statusOptions, onApply }: Props) {
+export function ReviewFilterBar({ value, statusOptions, specialTypeOptions, onApply }: Props) {
   const insets = useSafeAreaInsets();
   const role = useAuthStore((s) => s.user?.role);
   const userDeptId = useAuthStore((s) => s.user?.dept_id);
@@ -98,6 +100,7 @@ export function ReviewFilterBar({ value, statusOptions, onApply }: Props) {
     value.deptId,
     value.classId,
     value.status,
+    value.specialType,
   ].filter(Boolean).length;
 
   return (
@@ -186,13 +189,40 @@ export function ReviewFilterBar({ value, statusOptions, onApply }: Props) {
                   ))}
                 </View>
               </View>
+
+              {specialTypeOptions && specialTypeOptions.length > 0 ? (
+                <View style={styles.field}>
+                  <Text style={styles.label}>特殊群体勾选</Text>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="全部"
+                      active={!draft.specialType}
+                      onPress={() => setDraft((d) => ({ ...d, specialType: '' }))}
+                    />
+                    {specialTypeOptions.map((o) => (
+                      <Chip
+                        key={o.value}
+                        label={o.label}
+                        active={draft.specialType === o.value}
+                        onPress={() => setDraft((prev) => ({ ...prev, specialType: o.value }))}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
             </ScrollView>
 
             <View style={styles.actions}>
               <Pressable
                 style={styles.resetBtn}
                 onPress={() =>
-                  setDraft({ keyword: draft.keyword, deptId: 0, classId: 0, status: '' })
+                  setDraft({
+                    keyword: draft.keyword,
+                    deptId: 0,
+                    classId: 0,
+                    status: '',
+                    specialType: '',
+                  })
                 }>
                 <Text style={styles.resetText}>重置</Text>
               </Pressable>

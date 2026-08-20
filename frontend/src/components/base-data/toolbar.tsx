@@ -4,7 +4,7 @@ import * as React from "react";
 export function Toolbar({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="mb-4 flex items-center justify-between gap-4 p-4"
+      className="mb-4 flex flex-wrap items-center justify-between gap-3 p-4"
       style={{
         backgroundColor: "var(--color-bg-card)",
         border: "1px solid var(--color-border)",

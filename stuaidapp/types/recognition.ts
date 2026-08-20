@@ -119,6 +119,7 @@ export interface RecognitionListItem {
   current_level: number;
   difficulty_level: DifficultyLevel;
   per_capita_annual_income: number;
+  special_types: string[];
 }
 
 export interface RecognitionDetail {

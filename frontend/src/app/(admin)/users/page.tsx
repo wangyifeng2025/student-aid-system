@@ -267,7 +267,7 @@ export default function UsersPage() {
 
   const columns: Column<User>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (u) => u.id, (u) => u.real_name || u.username)]
+      ? [checkboxColumn<User>(selected, allSelected, toggleAll, toggleRow, (u) => u.id, (u) => u.real_name || u.username)]
       : []),
     {
       header: "用户名",

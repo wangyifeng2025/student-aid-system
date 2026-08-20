@@ -567,14 +567,14 @@
 
 | 方法 | 路径 | 说明 | 权限 |
 |------|------|------|------|
-| GET | `/api/v1/recognitions` | 分页列表（按数据范围）。查询：`page`、`page_size`、`year`、`status`、`keyword`（姓名/学号）。**评审角色自动排除 `draft`（学生未提交）** | 登录（按范围） |
+| GET | `/api/v1/recognitions` | 分页列表（按数据范围）。查询：`page`、`page_size`、`year`、`status`、`keyword`（姓名/学号）、`special_type`（申请表勾选的特殊群体 code，命中该勾选项即返回）。**评审角色自动排除 `draft`（学生未提交）** | 登录（按范围） |
 | POST | `/api/v1/recognitions` | 创建认定申请（草稿） | 学生本人 |
 | GET | `/api/v1/recognitions/:id` | 申请详情（含家庭成员） | 登录（按范围） |
 | PUT | `/api/v1/recognitions/:id` | 修改（仅 `draft`/`rejected`；整体替换家庭成员） | 学生本人 |
 | DELETE | `/api/v1/recognitions/:id` | 删除（仅 `draft`/`rejected`） | 学生本人 |
 | POST | `/api/v1/recognitions/:id/submit` | 提交评审（完整校验 + 自动算人均收入 + 单亲/单薪提示） | 学生本人 |
 | POST | `/api/v1/recognitions/:id/withdraw` | 撤回申请（仅 `pending_class` 且无班级评审记录，恢复为 `draft`） | 学生本人 |
-| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 docx（仅 `approved`；基于 Word 模板填数，需配置 `export.recognition_template_path`） | 登录（按范围） |
+| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 docx（仅 `approved`；基于 Word 模板填数，需配置 `export.recognition_template_path`） | 学生本人；班主任 / 教学系 / 资助中心 / 管理员按数据范围 |
 | POST | `/api/v1/recognitions/:id/attachments` | 上传支撑材料（`multipart/form-data`，字段 `file`） | 学生本人 |
 | GET | `/api/v1/recognitions/:id/attachments` | 列出支撑材料 | 登录（按范围） |
 | GET | `/api/v1/attachments/:id/download` | 下载附件 | 登录（按范围） |
@@ -653,8 +653,8 @@
 
 | 方法 | 路径 | 说明 | 权限 |
 |------|------|------|------|
-| GET | `/api/v1/reviews/todo` | 待办列表（按角色级别 + 数据范围）。查询：`page`、`page_size`、`year`、`status`、`keyword` | 评审角色 / admin |
-| GET | `/api/v1/reviews/records` | 认定记录列表（不含学生未提交草稿）。`tab=todo`：本级待办或下级正在审核；`tab=done`：当前用户已评审过的申请；`tab=all`（默认）：数据范围内全部已提交申请。查询：`page`、`page_size`、`year`、`status`、`keyword` | 评审角色 / admin |
+| GET | `/api/v1/reviews/todo` | 待办列表（按角色级别 + 数据范围）。查询：`page`、`page_size`、`year`、`status`、`keyword`、`special_type` | 评审角色 / admin |
+| GET | `/api/v1/reviews/records` | 认定记录列表（不含学生未提交草稿）。`tab=todo`：本级待办或下级正在审核；`tab=done`：当前用户已评审过的申请；`tab=all`（默认）：数据范围内全部已提交申请。查询：`page`、`page_size`、`year`、`status`、`keyword`、`special_type` | 评审角色 / admin |
 | GET | `/api/v1/reviews/:id` | 评审详情（含家庭成员与 `reviews` 流转记录） | 评审角色 / admin（按范围） |
 | POST | `/api/v1/reviews/:id/pass` | 通过，流转到下一级；可初定/调整困难等级 | 对应级别 / admin |
 | POST | `/api/v1/reviews/:id/reject` | 退回到指定级别（附退回意见） | 对应级别 / admin |
@@ -673,7 +673,7 @@
 | PUT | `/api/v1/grants/:id` | 修改草稿/被退回申请 | 学生本人 |
 | DELETE | `/api/v1/grants/:id` | 删除草稿/被退回申请 | 学生本人 |
 | POST | `/api/v1/grants/:id/submit` | 提交进入班级评审 | 学生本人 |
-| GET | `/api/v1/grants/:id/export` | 导出《国家助学金申请表》docx（仅 `approved`；基于 Word 模板填数，需配置 `export.grant_template_path`） | 按数据范围 |
+| GET | `/api/v1/grants/:id/export` | 导出《国家助学金申请表》docx（仅 `approved`；基于 Word 模板填数，需配置 `export.grant_template_path`） | 学生本人；班主任 / 教学系 / 资助中心 / 管理员按数据范围 |
 
 **助学金评审**
 

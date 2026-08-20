@@ -33,6 +33,7 @@ const EMPTY_FILTER: ReviewFilterValue = {
   deptId: 0,
   classId: 0,
   status: '',
+  specialType: '',
 };
 
 export default function GrantReviewsScreen() {

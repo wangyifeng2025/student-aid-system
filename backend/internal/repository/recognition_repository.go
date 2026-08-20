@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strings"
+
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/internal/rbac"
 	"gorm.io/gorm"
@@ -20,6 +22,7 @@ type RecognitionFilter struct {
 	Year            int
 	Status          string
 	Keyword         string // 学生姓名/学号
+	SpecialType     string // 申请表勾选的特殊群体类型 code（命中即返回，可与其它勾选并存）
 	DeptID          uint   // 按院系筛选（资助中心/管理员）
 	ClassID         uint   // 按班级筛选（教学系/资助中心）
 	Page            int
@@ -72,10 +75,27 @@ func applyRecognitionFilter(q *gorm.DB, f RecognitionFilter) *gorm.DB {
 	if f.ClassID > 0 {
 		q = q.Where("students.class_id = ?", f.ClassID)
 	}
+	q = applySpecialTypeFilter(q, f.SpecialType)
 	if len(f.ExcludeStatuses) > 0 {
 		q = q.Where("recognition_applications.status NOT IN ?", f.ExcludeStatuses)
 	}
 	return q
+}
+
+// applySpecialTypeFilter 按逗号分隔的 special_types 做精确 token 匹配（避免 poverty 命中 poverty_unstable）。
+func applySpecialTypeFilter(q *gorm.DB, specialType string) *gorm.DB {
+	t := strings.TrimSpace(specialType)
+	if t == "" {
+		return q
+	}
+	if !model.IsValidSpecialGroupType(t) {
+		return q.Where("1 = 0")
+	}
+	escaped := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(t)
+	return q.Where(
+		"CONCAT(',', REPLACE(COALESCE(recognition_applications.special_types, ''), ' ', ''), ',') LIKE ? ESCAPE '!'",
+		"%,"+escaped+",%",
+	)
 }
 
 // List 按数据范围分页列出认定申请，返回当前页与总数。

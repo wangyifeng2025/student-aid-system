@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Check, Undo2, RotateCcw } from "lucide-react";
-import { reviewApi, ApiError } from "@/lib/api";
+import { ArrowLeft, Check, Undo2, RotateCcw, Download } from "lucide-react";
+import { reviewApi, recognitionApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ export default function ReviewDetailPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [withdrawing, setWithdrawing] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
@@ -127,6 +128,18 @@ export default function ReviewDetailPage() {
   const reviewable = !!data && canReview(role, data.status);
   const withdrawable = !!data && canWithdrawReview(role, userId, data.reviews);
   const level = data ? actingLevel(data.status) : 0;
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await recognitionApi.exportDocx(id);
+      toast.success("认定申请表已开始下载");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleWithdraw = async () => {
     setWithdrawing(true);
@@ -181,7 +194,7 @@ export default function ReviewDetailPage() {
       <div className="mb-5">
         <Link href="/reviews" className="inline-flex items-center gap-1.5 text-sm text-link hover:underline">
           <ArrowLeft size={16} />
-          返回待办
+          返回困难认定审核
         </Link>
       </div>
 
@@ -365,6 +378,15 @@ export default function ReviewDetailPage() {
                       ? "该申请已退回学生修改。"
                       : "当前不在您的评审环节，暂无可执行操作。"}
                 </p>
+              </Card>
+            )}
+
+            {data.status === "approved" && (
+              <Card title="申请表">
+                <Button variant="outline" onClick={handleExport} disabled={exporting} className="w-full">
+                  <Download size={16} />
+                  {exporting ? "下载中…" : "下载认定申请表（Word）"}
+                </Button>
               </Card>
             )}
 

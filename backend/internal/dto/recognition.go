@@ -116,18 +116,19 @@ type RecognitionResponse struct {
 
 // RecognitionListItem 认定申请列表项（精简）。
 type RecognitionListItem struct {
-	ID                    uint    `json:"id"`
-	StudentID             uint    `json:"student_id"`
-	StudentNo             string  `json:"student_no"`
-	StudentName           string  `json:"student_name"`
-	DeptName              string  `json:"dept_name"`
-	MajorName             string  `json:"major_name"`
-	ClassName             string  `json:"class_name"`
-	Year                  int     `json:"year"`
-	Status                string  `json:"status"`
-	CurrentLevel          int     `json:"current_level"`
-	DifficultyLevel       string  `json:"difficulty_level"`
-	PerCapitaAnnualIncome float64 `json:"per_capita_annual_income"`
+	ID                    uint     `json:"id"`
+	StudentID             uint     `json:"student_id"`
+	StudentNo             string   `json:"student_no"`
+	StudentName           string   `json:"student_name"`
+	DeptName              string   `json:"dept_name"`
+	MajorName             string   `json:"major_name"`
+	ClassName             string   `json:"class_name"`
+	Year                  int      `json:"year"`
+	Status                string   `json:"status"`
+	CurrentLevel          int      `json:"current_level"`
+	DifficultyLevel       string   `json:"difficulty_level"`
+	PerCapitaAnnualIncome float64  `json:"per_capita_annual_income"`
+	SpecialTypes          []string `json:"special_types"`
 }
 
 // SubmitResult 提交评审结果：申请快照 + 非阻断性提示（单亲/单薪等）。

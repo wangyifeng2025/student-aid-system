@@ -190,7 +190,7 @@ export default function SpecialGroupsPage() {
 
   const columns: Column<SpecialGroup>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name || s.student_no || String(s.id))]
+      ? [checkboxColumn<SpecialGroup>(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name || s.student_no || String(s.id))]
       : []),
     { header: "姓名", width: "100px", cell: (s) => <span className="text-ink">{s.name || "—"}</span> },
     { header: "学号", cell: (s) => <span className="font-mono">{s.student_no || "—"}</span> },

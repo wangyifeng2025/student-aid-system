@@ -118,7 +118,7 @@ export default function GradesPage() {
 
   const columns: Column<Grade>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (g) => g.id, (g) => g.name)]
+      ? [checkboxColumn<Grade>(selected, allSelected, toggleAll, toggleRow, (g) => g.id, (g) => g.name)]
       : []),
     { header: "ID", width: "80px", cell: (g) => <span className="text-ink-mute tabular-nums">{g.id}</span> },
     { header: "年级名称", cell: (g) => <span className="text-ink">{g.name}</span> },

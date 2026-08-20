@@ -28,7 +28,7 @@ import {
   specialGroupLabel,
 } from '@/constants/recognition-options';
 import { actingLevel, canReview, canWithdrawReview } from '@/constants/review-options';
-import { ApiError, reviewApi } from '@/lib/api';
+import { ApiError, recognitionApi, reviewApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/validators';
 import { useAuthStore } from '@/store/auth';
 import type { RecognitionDetail } from '@/types/recognition';
@@ -45,6 +45,7 @@ export default function ReviewDetailScreen() {
   const [actionMode, setActionMode] = useState<ReviewActionMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const numericId = Number(id);
 
@@ -117,6 +118,17 @@ export default function ReviewDetailScreen() {
         },
       ],
     );
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await recognitionApi.exportDocx(numericId);
+    } catch (e) {
+      Alert.alert('下载失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setExporting(false);
+    }
   }
 
   const canAct = detail ? canReview(role, detail.status) : false;
@@ -255,6 +267,17 @@ export default function ReviewDetailScreen() {
                 onPress={handleWithdraw}>
                 <Text style={styles.withdrawBtnText}>
                   {withdrawing ? '撤回中…' : '撤回审核意见'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : detail.status === 'approved' ? (
+            <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
+              <Pressable
+                style={[styles.withdrawBtn, exporting && styles.btnDisabled]}
+                disabled={exporting}
+                onPress={handleExport}>
+                <Text style={styles.withdrawBtnText}>
+                  {exporting ? '下载中…' : '下载认定申请表'}
                 </Text>
               </Pressable>
             </View>

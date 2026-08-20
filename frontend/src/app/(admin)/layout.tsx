@@ -27,15 +27,15 @@ export default function AdminLayout({
   if (!hydrated || !isAuthenticated) return null;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       <Sidebar />
       <div
-        className="flex flex-1 flex-col"
+        className="flex min-w-0 flex-1 flex-col"
         style={{ marginLeft: "var(--sidebar-width)" }}
       >
         <Topbar />
-        <main className="flex-1" style={{ backgroundColor: "var(--color-bg-page)" }}>
-          <div className="mx-auto px-6 py-6" style={{ maxWidth: "var(--content-max-width)" }}>
+        <main className="min-w-0 flex-1 overflow-x-hidden" style={{ backgroundColor: "var(--color-bg-page)" }}>
+          <div className="mx-auto w-full min-w-0 px-6 py-6" style={{ maxWidth: "var(--content-max-width)" }}>
             <RouteGuard>{children}</RouteGuard>
           </div>
         </main>

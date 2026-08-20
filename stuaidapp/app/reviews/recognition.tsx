@@ -20,6 +20,7 @@ import {
 } from '@/components/reviews/review-filter-bar';
 import { ReviewListItem } from '@/components/reviews/review-list-item';
 import { Brand } from '@/constants/brand';
+import { SPECIAL_GROUP_OPTIONS } from '@/constants/recognition-options';
 import {
   canExportRecognitionSummary,
   recordsTodoStatusOptionsForRole,
@@ -36,6 +37,7 @@ const EMPTY_FILTER: ReviewFilterValue = {
   deptId: 0,
   classId: 0,
   status: '',
+  specialType: '',
 };
 
 /**
@@ -78,6 +80,7 @@ export default function RecognitionReviewsScreen() {
           status: activeFilter.status || undefined,
           deptId: activeFilter.deptId || undefined,
           classId: activeFilter.classId || undefined,
+          specialType: activeFilter.specialType || undefined,
         };
         const res =
           activeTab === 'mine'
@@ -109,6 +112,7 @@ export default function RecognitionReviewsScreen() {
         keyword: filter.keyword || undefined,
         deptId: filter.deptId || undefined,
         classId: filter.classId || undefined,
+        specialType: filter.specialType || undefined,
       });
     } catch (e) {
       Alert.alert('导出失败', e instanceof ApiError ? e.message : '请稍后重试');
@@ -150,6 +154,7 @@ export default function RecognitionReviewsScreen() {
       <ReviewFilterBar
         value={filter}
         statusOptions={statusOptions}
+        specialTypeOptions={SPECIAL_GROUP_OPTIONS}
         onApply={(next) => setFilter(next)}
       />
 
@@ -159,7 +164,7 @@ export default function RecognitionReviewsScreen() {
         </Text>
       ) : null}
       {canExport ? (
-        <Text style={styles.hint}>导出为已认定通过学生的官方汇总表，可用当前院系/班级/关键字筛选。</Text>
+        <Text style={styles.hint}>导出为已认定通过学生的官方汇总表，可用当前院系/班级/关键字/特殊群体筛选。</Text>
       ) : null}
 
       {loading ? (

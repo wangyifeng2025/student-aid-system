@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBadge } from '@/components/reviews/status-badge';
 import { Brand } from '@/constants/brand';
 import { difficultyLabel } from '@/constants/review-options';
+import { specialTypesText } from '@/constants/recognition-options';
 import { formatCurrency } from '@/lib/validators';
 import type { RecognitionListItem } from '@/types/recognition';
 
@@ -28,6 +29,11 @@ export function ReviewListItem({ item, onPress }: Props) {
       <Text style={styles.meta} numberOfLines={1}>
         {[item.dept_name, item.class_name, `${item.year} 年度`].filter(Boolean).join(' · ')}
       </Text>
+      {item.special_types?.length ? (
+        <Text style={styles.special} numberOfLines={2}>
+          {specialTypesText(item.special_types)}
+        </Text>
+      ) : null}
 
       <View style={styles.bottom}>
         <Text style={styles.income}>
@@ -83,6 +89,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     color: Brand.mutedForeground,
+  },
+  special: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Brand.foreground,
   },
   bottom: {
     flexDirection: 'row',

@@ -17,11 +17,12 @@ func (h *Handler) ListRecognitions(c *gin.Context) {
 	}
 	page, pageSize := parsePagination(c)
 	f := repository.RecognitionFilter{
-		Year:     parseIntQuery(c, "year"),
-		Status:   c.Query("status"),
-		Keyword:  c.Query("keyword"),
-		Page:     page,
-		PageSize: pageSize,
+		Year:        parseIntQuery(c, "year"),
+		Status:      c.Query("status"),
+		Keyword:     c.Query("keyword"),
+		SpecialType: c.Query("special_type"),
+		Page:        page,
+		PageSize:    pageSize,
 	}
 	res, err := h.Recognition.List(actor, f)
 	if err != nil {
@@ -173,10 +174,11 @@ func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
 		return
 	}
 	f := repository.RecognitionFilter{
-		Year:    parseIntQuery(c, "year"),
-		Keyword: c.Query("keyword"),
-		DeptID:  parseUintQuery(c, "dept_id"),
-		ClassID: parseUintQuery(c, "class_id"),
+		Year:        parseIntQuery(c, "year"),
+		Keyword:     c.Query("keyword"),
+		SpecialType: c.Query("special_type"),
+		DeptID:      parseUintQuery(c, "dept_id"),
+		ClassID:     parseUintQuery(c, "class_id"),
 	}
 	data, filename, asciiName, err := h.RecognitionSummary.Export(actor, f)
 	if err != nil {

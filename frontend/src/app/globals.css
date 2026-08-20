@@ -101,6 +101,12 @@
   --color-line: var(--color-border);
   --color-line-soft: var(--color-border-light);
 
+  /* shadcn/ui Table 使用的语义色，映射到现有品牌令牌 */
+  --color-background: var(--color-bg-card);
+  --color-foreground: var(--color-text-primary);
+  --color-muted: var(--color-bg-page);
+  --color-muted-foreground: var(--color-text-muted);
+
   --color-success: var(--state-success);
   --color-error: var(--state-error);
 

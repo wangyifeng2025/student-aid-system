@@ -172,7 +172,7 @@ export default function ClassesPage() {
 
   const columns: Column<Class>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (c) => c.id, (c) => c.name)]
+      ? [checkboxColumn<Class>(selected, allSelected, toggleAll, toggleRow, (c) => c.id, (c) => c.name)]
       : []),
     { header: "ID", width: "80px", cell: (c) => <span className="text-ink-mute tabular-nums">{c.id}</span> },
     { header: "班级名称", cell: (c) => <span className="text-ink">{c.name}</span> },

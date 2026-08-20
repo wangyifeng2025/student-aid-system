@@ -33,6 +33,7 @@ export default function RecognitionDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const numericId = Number(id);
 
@@ -103,6 +104,18 @@ export default function RecognitionDetailScreen() {
   const editable = detail ? canEditRecognition(detail.status) : false;
   const deletable = detail ? canDeleteRecognition(detail.status, detail.reviews) : false;
   const withdrawable = detail ? canWithdrawRecognition(detail.status, detail.reviews) : false;
+  const downloadable = detail?.status === 'approved';
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await recognitionApi.exportDocx(numericId);
+    } catch (e) {
+      Alert.alert('下载失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -210,12 +223,12 @@ export default function RecognitionDetailScreen() {
             </SectionCard>
           </ScrollView>
 
-          {(editable || deletable || withdrawable) && (
+          {(editable || deletable || withdrawable || downloadable) && (
             <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
               {deletable && (
                 <Pressable
                   style={[styles.deleteBtn, deleting && styles.btnDisabled]}
-                  disabled={deleting || withdrawing}
+                  disabled={deleting || withdrawing || exporting}
                   onPress={handleDelete}>
                   <Text style={styles.deleteBtnText}>{deleting ? '删除中…' : '删除申请'}</Text>
                 </Pressable>
@@ -223,7 +236,7 @@ export default function RecognitionDetailScreen() {
               {withdrawable && (
                 <Pressable
                   style={[styles.withdrawBtn, withdrawing && styles.btnDisabled]}
-                  disabled={withdrawing || deleting}
+                  disabled={withdrawing || deleting || exporting}
                   onPress={handleWithdraw}>
                   <Text style={styles.withdrawBtnText}>{withdrawing ? '撤回中…' : '撤回申请'}</Text>
                 </Pressable>
@@ -235,6 +248,14 @@ export default function RecognitionDetailScreen() {
                     router.push({ pathname: '/aid/apply', params: { id: String(detail.id) } })
                   }>
                   <Text style={styles.primaryBtnText}>继续填写</Text>
+                </Pressable>
+              )}
+              {downloadable && (
+                <Pressable
+                  style={[styles.withdrawBtn, exporting && styles.btnDisabled]}
+                  disabled={exporting}
+                  onPress={handleExport}>
+                  <Text style={styles.withdrawBtnText}>{exporting ? '下载中…' : '下载申请表'}</Text>
                 </Pressable>
               )}
             </View>

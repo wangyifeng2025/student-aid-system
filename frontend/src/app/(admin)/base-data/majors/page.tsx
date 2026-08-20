@@ -137,7 +137,7 @@ export default function MajorsPage() {
 
   const columns: Column<Major>[] = [
     ...(canWrite
-      ? [checkboxColumn(selected, allSelected, toggleAll, toggleRow, (m) => m.id, (m) => m.name)]
+      ? [checkboxColumn<Major>(selected, allSelected, toggleAll, toggleRow, (m) => m.id, (m) => m.name)]
       : []),
     { header: "ID", width: "80px", cell: (m) => <span className="text-ink-mute tabular-nums">{m.id}</span> },
     { header: "专业名称", cell: (m) => <span className="text-ink">{m.name}</span> },

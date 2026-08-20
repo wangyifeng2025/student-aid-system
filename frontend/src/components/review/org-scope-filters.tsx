@@ -87,7 +87,7 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
   if (!showDept && !showClass) return null;
 
   return (
-    <div className={className ? `flex flex-wrap items-center gap-3 ${className}` : "flex flex-wrap items-center gap-3"}>
+    <div className={className ? `flex flex-wrap items-center gap-2 ${className}` : "flex flex-wrap items-center gap-2"}>
       {showDept && (
         <Select
           value={value.deptId ? String(value.deptId) : ""}

@@ -149,6 +149,7 @@ async function downloadAndShareFile(
   fallbackName: string,
   mimeType: string,
   dialogTitle: string,
+  uti = 'org.openxmlformats.spreadsheetml.sheet',
 ): Promise<void> {
   const send = async () => {
     const headers: Record<string, string> = {};
@@ -175,7 +176,7 @@ async function downloadAndShareFile(
   if (!available) {
     throw new ApiError('当前设备不支持分享或保存文件', -1, 0);
   }
-  await Sharing.shareAsync(result.uri, { mimeType, dialogTitle, UTI: 'org.openxmlformats.spreadsheetml.sheet' });
+  await Sharing.shareAsync(result.uri, { mimeType, dialogTitle, UTI: uti });
 }
 
 /** multipart 上传本地文件（uri 可为 file:// 或 data URL 落盘后的路径）。 */
@@ -305,6 +306,7 @@ export const recognitionApi = {
     keyword?: string;
     deptId?: number;
     classId?: number;
+    specialType?: string;
   }) =>
     downloadAndShareFile(
       `/recognitions/summary-export${buildParams({
@@ -312,10 +314,19 @@ export const recognitionApi = {
         keyword: filter?.keyword,
         dept_id: filter?.deptId,
         class_id: filter?.classId,
+        special_type: filter?.specialType,
       })}`,
       `recognition_summary_${filter?.year || new Date().getFullYear()}.xlsx`,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       '导出认定结果汇总表',
+    ),
+  exportDocx: (id: number) =>
+    downloadAndShareFile(
+      `/recognitions/${id}/export`,
+      `recognition_${id}.docx`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '下载认定申请表',
+      'org.openxmlformats.wordprocessingml.document',
     ),
 };
 
@@ -369,6 +380,14 @@ export const grantApi = {
   submit: (id: number) => apiFetch<Grant>(`/grants/${id}/submit`, { method: 'POST' }),
   remove: (id: number) =>
     apiFetch<{ message: string }>(`/grants/${id}`, { method: 'DELETE' }),
+  exportDocx: (id: number) =>
+    downloadAndShareFile(
+      `/grants/${id}/export`,
+      `grant_${id}.docx`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '下载助学金申请表',
+      'org.openxmlformats.wordprocessingml.document',
+    ),
 };
 
 // ===== 困难认定三级评审（模块 5） =====
@@ -382,6 +401,7 @@ export interface ReviewListFilter {
   year?: number;
   deptId?: number;
   classId?: number;
+  specialType?: string;
 }
 
 export const reviewApi = {
@@ -395,6 +415,7 @@ export const reviewApi = {
         year: filter?.year,
         dept_id: filter?.deptId,
         class_id: filter?.classId,
+        special_type: filter?.specialType,
       })}`,
     ),
   records: (filter?: ReviewListFilter) =>
@@ -408,6 +429,7 @@ export const reviewApi = {
         year: filter?.year,
         dept_id: filter?.deptId,
         class_id: filter?.classId,
+        special_type: filter?.specialType,
       })}`,
     ),
   get: (id: number) => apiFetch<RecognitionDetail>(`/reviews/${id}`),

@@ -75,6 +75,7 @@ export const SPECIAL_GROUP_OPTIONS: Option[] = [
   { value: 'disabled_student', label: '残疾学生' },
   { value: 'disabled_parent', label: '残疾人子女' },
   { value: 'martyr_child', label: '烈士子女' },
+  { value: 'poverty_relocation', label: '是否异地扶贫搬迁' },
 ];
 
 function labelOf(options: Option[], value: string): string {
@@ -88,3 +89,8 @@ export const healthLabel = (v: string) => (v ? labelOf(HEALTH_OPTIONS, v) : '—
 export const incomeSourceLabel = (v: string) => (v ? labelOf(INCOME_SOURCE_OPTIONS, v) : '—');
 export const householdLabel = (v: string) => (v ? labelOf(HOUSEHOLD_OPTIONS, v) : '—');
 export const specialGroupLabel = (v: string) => (v ? labelOf(SPECIAL_GROUP_OPTIONS, v) : v);
+
+export function specialTypesText(types?: string[]): string {
+  if (!types?.length) return '';
+  return types.map(specialGroupLabel).join('、');
+}

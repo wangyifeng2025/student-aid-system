@@ -365,7 +365,7 @@ export default function RecognitionDetailPage() {
                       {withdrawing ? "撤回中…" : "撤回申请"}
                     </Button>
                   )}
-                  {data.status === "approved" && (
+                  {data.status === "approved" && isStudent && (
                     <>
                       <div
                         className="rounded-md px-3 py-2 text-xs"
@@ -382,11 +382,13 @@ export default function RecognitionDetailPage() {
                           申请国家助学金
                         </Button>
                       </Link>
-                      <Button variant="outline" onClick={handleExport} className="w-full">
-                        <Download size={16} />
-                        下载认定申请表（Word）
-                      </Button>
                     </>
+                  )}
+                  {data.status === "approved" && (
+                    <Button variant="outline" onClick={handleExport} className="w-full">
+                      <Download size={16} />
+                      下载认定申请表（Word）
+                    </Button>
                   )}
                 </div>
               </Card>

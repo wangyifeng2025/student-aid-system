@@ -12,18 +12,20 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
-import { DataTable, type Column } from "@/components/base-data/data-table";
+import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import {
   STATUS_META,
+  SPECIAL_GROUP_OPTIONS,
   difficultyLabel,
   difficultyTone,
   canDeleteRecognition,
   canWithdrawRecognition,
   canExportRecognitionSummary,
+  specialTypesText,
 } from "@/lib/recognition-options";
 import type { RecognitionListItem } from "@/types/recognition";
 
@@ -44,6 +46,7 @@ export default function RecognitionsPage() {
   const [keywordInput, setKeywordInput] = React.useState("");
   const [keyword, setKeyword] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("");
+  const [filterSpecialType, setFilterSpecialType] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
 
@@ -67,6 +70,7 @@ export default function RecognitionsPage() {
         page_size: pageSize,
         keyword: keyword || undefined,
         status: filterStatus || undefined,
+        special_type: filterSpecialType || undefined,
         year: filterYear ? Number(filterYear) : undefined,
       });
       setList(res.items);
@@ -77,7 +81,7 @@ export default function RecognitionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, keyword, filterStatus, filterYear, clearSelection]);
+  }, [page, pageSize, keyword, filterStatus, filterSpecialType, filterYear, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -138,6 +142,7 @@ export default function RecognitionsPage() {
       await recognitionApi.exportSummary({
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
+        special_type: filterSpecialType || undefined,
       });
       toast.success("认定结果汇总表已导出");
     } catch (e) {
@@ -150,7 +155,7 @@ export default function RecognitionsPage() {
   const columns: Column<RecognitionListItem>[] = [
     ...(isStudent
       ? [
-          checkboxColumn(
+          checkboxColumn<RecognitionListItem>(
             selected,
             allSelected,
             toggleAll,
@@ -163,36 +168,51 @@ export default function RecognitionsPage() {
       : []),
     {
       header: "姓名",
-      width: "96px",
-      cell: (r) => <span className="text-ink">{r.student_name || "—"}</span>,
+      width: "88px",
+      cell: (r) => <CellText className="text-ink">{r.student_name || "—"}</CellText>,
     },
     ...(isStudent
       ? []
       : [
           {
             header: "学号",
-            cell: (r: RecognitionListItem) => <span className="font-mono">{r.student_no || "—"}</span>,
+            width: "140px",
+            cell: (r: RecognitionListItem) => (
+              <CellText className="font-mono">{r.student_no || "—"}</CellText>
+            ),
           },
         ]),
     {
       header: "专业",
-      width: "160px",
-      cell: (r) => <span className="text-ink">{r.major_name || "—"}</span>,
+      width: "140px",
+      cell: (r) => <CellText>{r.major_name || "—"}</CellText>,
     },
     {
       header: "班级",
-      width: "140px",
-      cell: (r) => <span className="text-ink">{r.class_name || "—"}</span>,
+      width: "112px",
+      cell: (r) => <CellText>{r.class_name || "—"}</CellText>,
     },
     {
       header: "年度",
-      width: "80px",
+      width: "64px",
       cell: (r) => <span className="tabular-nums">{r.year || "—"}</span>,
     },
-    { header: "状态", width: "120px", cell: (r) => <StatusBadge status={r.status} /> },
+    {
+      header: "特殊群体",
+      width: "160px",
+      cell: (r) =>
+        r.special_types?.length ? (
+          <CellText title={specialTypesText(r.special_types)}>
+            {specialTypesText(r.special_types)}
+          </CellText>
+        ) : (
+          <span className="text-ink-mute">未勾选</span>
+        ),
+    },
+    { header: "状态", width: "112px", cell: (r) => <StatusBadge status={r.status} /> },
     {
       header: "困难等级",
-      width: "100px",
+      width: "96px",
       cell: (r) =>
         r.difficulty_level ? (
           <Badge tone={difficultyTone(r.difficulty_level)}>
@@ -204,7 +224,7 @@ export default function RecognitionsPage() {
     },
     {
       header: "人均年收入",
-      width: "120px",
+      width: "112px",
       cell: (r) => (
         <span className="tabular-nums">
           {r.per_capita_annual_income ? `¥${r.per_capita_annual_income.toLocaleString()}` : "—"}
@@ -268,9 +288,9 @@ export default function RecognitionsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {!isStudent && (
-            <div className="relative min-w-0" style={{ width: 240 }}>
+            <div className="relative w-52 shrink-0">
               <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
               <Input
                 value={keywordInput}
@@ -287,6 +307,7 @@ export default function RecognitionsPage() {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
+            className="w-32 shrink-0"
           >
             <option value="">全部状态</option>
             {Object.entries(STATUS_META).map(([value, meta]) => (
@@ -295,14 +316,29 @@ export default function RecognitionsPage() {
               </option>
             ))}
           </Select>
+          <Select
+            value={filterSpecialType}
+            onChange={(e) => {
+              setFilterSpecialType(e.target.value);
+              setPage(1);
+            }}
+            className="w-40 min-w-0 shrink-0"
+          >
+            <option value="">全部特殊群体</option>
+            {SPECIAL_GROUP_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
           <Input
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="h-9 w-24 text-sm"
+            className="h-9 w-20 shrink-0 text-sm"
           />
-          <Button variant="outline" size="sm" onClick={submitSearch}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
         </div>
@@ -310,6 +346,7 @@ export default function RecognitionsPage() {
           <Button
             variant="outline"
             size="sm"
+            className="shrink-0"
             disabled={exportingSummary}
             onClick={() => void handleExportSummary()}
           >
