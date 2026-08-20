@@ -1,6 +1,8 @@
 node_modules/
 .next/
 out/
+pnpm-lock.yaml
+tsconfig.tsbuildinfo
 .env
 .env.*
 !.env.example

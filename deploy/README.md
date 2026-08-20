@@ -23,11 +23,11 @@ Nginx (:8088)
 
 | 组件 | 说明 |
 |------|------|
-| `postgres` | PostgreSQL 16，数据持久化到 Docker 卷 `pgdata` |
+| `postgres` | PostgreSQL 15（`postgres:15.18-trixie`），数据持久化到 Docker 卷 `pgdata` |
 | `backend` | Go 服务，启动时自动迁移表结构 |
 | `frontend` | Next.js standalone 生产构建 |
 | `nginx` | 统一入口，支持附件上传（最大 25MB） |
-| `seed` | 可选，写入演示字典与测试账号（profile: `init`） |
+| `seed` | 可选，Go `cmd/seed` 写入演示字典与测试账号（profile: `init`，复用 backend 镜像） |
 
 ---
 
@@ -74,6 +74,8 @@ docker compose --profile init run --rm seed
 ```
 
 该命令幂等，重复执行不会重复创建已存在账号。
+
+seed 与 HTTP 服务打在同一镜像里（`/app/seed`），由 `docker-entrypoint.sh` 的 `seed` 子命令启动。它自己也会跑一遍 `AutoMigrate`（与 backend 启动时相同），因此即使表已存在也安全。不要把 seed 做成常驻服务：它写完数据就会退出。
 
 ---
 
@@ -179,7 +181,9 @@ docker compose exec postgres pg_dump -U postgres student_aid_db > backup.sql
 | 现象 | 处理 |
 |------|------|
 | `backend` 一直 restarting | `docker compose logs backend`，多为数据库未就绪或密码不匹配 |
+| `seed` 报 image not found | 先执行 `docker compose up -d --build`，再 `docker compose --profile init run --rm seed` |
 | 页面能开但登录失败 | 确认已执行 `seed`；检查 `JWT_SECRET` 是否中途变更（变更后需重新登录） |
+| 打开 8088 一直 502 | 等 `frontend` / `backend` 变为 healthy：`docker compose ps` |
 | 上传附件失败 | 检查 `uploads` 卷权限；Nginx `client_max_body_size` 默认 25MB |
 | 构建 frontend 失败 | 确认 Node 镜像可拉取；本机内存不足时可增加 Docker 内存上限 |
 

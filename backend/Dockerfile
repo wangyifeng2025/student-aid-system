@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.23-alpine3.21 AS builder
+# 与 go.mod（go 1.26.x）对齐；GOTOOLCHAIN=local 禁止构建时再下载其它版本。
+FROM golang:1.26.4-alpine3.23 AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /src
 
-ENV GOTOOLCHAIN=auto
+ENV GOTOOLCHAIN=local
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 # 国内构建加速：Go 模块与 checksum 走 goproxy.cn（见 https://goproxy.cn ）
@@ -23,7 +24,7 @@ COPY . .
 RUN go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server \
   && go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed
 
-FROM alpine:3.21
+FROM alpine:3.23
 
 RUN apk add --no-cache ca-certificates tzdata wget \
   && addgroup -S app && adduser -S app -G app

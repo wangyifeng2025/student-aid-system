@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/wangyifeng2025/student-aid-system/internal/config"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
@@ -150,7 +149,12 @@ func (s *RecognitionSummaryExportService) Export(actor rbac.Actor, f repository.
 	if err != nil {
 		return nil, "", "", err
 	}
-	return data, recognitionSummaryFilename(year), recognitionSummaryASCIIFilename(year), nil
+	utf8Name, asciiName := recognitionSummaryDownloadNames(
+		actor.Role,
+		s.headerClassName(actor, f.ClassID, classNames, rows),
+		meta.DeptName,
+	)
+	return data, utf8Name, asciiName, nil
 }
 
 func (s *RecognitionSummaryExportService) loadLabelMaps() labelMaps {
@@ -209,10 +213,24 @@ func (s *RecognitionSummaryExportService) headerDeptName(actor rbac.Actor, filte
 	if actor.DeptID != nil && *actor.DeptID > 0 {
 		return deptNames[*actor.DeptID]
 	}
+	return uniqueRowField(rows, func(r recognitionSummaryRow) string { return r.DeptName })
+}
+
+func (s *RecognitionSummaryExportService) headerClassName(actor rbac.Actor, filterClassID uint, classNames map[uint]string, rows []recognitionSummaryRow) string {
+	if filterClassID > 0 {
+		return classNames[filterClassID]
+	}
+	if actor.ClassID != nil && *actor.ClassID > 0 {
+		return classNames[*actor.ClassID]
+	}
+	return uniqueRowField(rows, func(r recognitionSummaryRow) string { return r.ClassName })
+}
+
+func uniqueRowField(rows []recognitionSummaryRow, get func(recognitionSummaryRow) string) string {
 	seen := map[string]struct{}{}
 	var only string
 	for i := range rows {
-		name := strings.TrimSpace(rows[i].DeptName)
+		name := strings.TrimSpace(get(rows[i]))
 		if name == "" {
 			continue
 		}
@@ -274,18 +292,21 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-func recognitionSummaryFilename(year int) string {
-	if year > 0 {
-		return fmt.Sprintf("%d年家庭经济困难学生认定结果汇总表.xlsx", year)
+// recognitionSummaryDownloadNames 按教师角色生成汇总表下载文件名。
+// 班主任：{班级名}-困难认定汇总表；教学系：{系名}-困难认定汇总表；资助中心/管理员：学院困难认定汇总表。
+func recognitionSummaryDownloadNames(role model.Role, className, deptName string) (utf8Name, asciiName string) {
+	switch role {
+	case model.RoleClassAdvisor:
+		name := firstNonEmpty(className, "班级")
+		return sanitizeDownloadName(name) + "-困难认定汇总表.xlsx", "class_summary.xlsx"
+	case model.RoleDepartment:
+		name := firstNonEmpty(deptName, "系")
+		return sanitizeDownloadName(name) + "-困难认定汇总表.xlsx", "dept_summary.xlsx"
+	case model.RoleAidCenter, model.RoleAdmin:
+		return "学院困难认定汇总表.xlsx", "college_summary.xlsx"
+	default:
+		return "困难认定汇总表.xlsx", "recognition_summary.xlsx"
 	}
-	return "家庭经济困难学生认定结果汇总表.xlsx"
-}
-
-func recognitionSummaryASCIIFilename(year int) string {
-	if year > 0 {
-		return fmt.Sprintf("recognition_summary_%d.xlsx", year)
-	}
-	return fmt.Sprintf("recognition_summary_%d.xlsx", time.Now().Year())
 }
 
 func recognitionSummaryTemplatePath(cfg *config.Config) string {

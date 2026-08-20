@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,12 +64,41 @@ func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, strin
 	if err != nil {
 		return nil, "", err
 	}
-	studentNo := ""
+	return docxBytes, recognitionDocxFilename(stu), nil
+}
+
+// recognitionDocxFilename 下载文件名：{申请人姓名}-困难认定申请表.docx。
+func recognitionDocxFilename(stu *model.Student) string {
+	name := "申请人"
 	if stu != nil {
-		studentNo = stu.StudentNo
+		if n := strings.TrimSpace(stu.Name); n != "" {
+			name = n
+		}
 	}
-	filename := fmt.Sprintf("recognition_%d_%s.docx", a.Year, studentNo)
-	return docxBytes, filename, nil
+	return sanitizeDownloadName(name) + "-困难认定申请表.docx"
+}
+
+// sanitizeDownloadName 去掉路径分隔符与常见非法文件名字符，避免下载头被注入或落盘失败。
+func sanitizeDownloadName(s string) string {
+	s = strings.TrimSpace(s)
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+		"\n", "",
+		"\r", "",
+	)
+	s = replacer.Replace(s)
+	if s == "" {
+		return "申请人"
+	}
+	return s
 }
 
 // loadStudentSignaturePNG 读取认定申请的手写签字附件；不存在则返回 nil。

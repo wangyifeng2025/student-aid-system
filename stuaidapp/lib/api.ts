@@ -144,6 +144,32 @@ function buildParams(params: Record<string, string | number | boolean | undefine
   return qs ? `?${qs}` : '';
 }
 
+function filenameFromDisposition(disposition: string | undefined, fallback: string): string {
+  if (!disposition) return fallback;
+  const star = disposition.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"+|"+$/g, ''));
+    } catch {
+      // ignore malformed encoding
+    }
+  }
+  const plain = disposition.match(/filename=([^;]+)/);
+  if (plain?.[1]) {
+    return plain[1].trim().replace(/^"+|"+$/g, '');
+  }
+  return fallback;
+}
+
+function headerValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  const lower = name.toLowerCase();
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  return undefined;
+}
+
 async function downloadAndShareFile(
   path: string,
   fallbackName: string,
@@ -176,7 +202,25 @@ async function downloadAndShareFile(
   if (!available) {
     throw new ApiError('当前设备不支持分享或保存文件', -1, 0);
   }
-  await Sharing.shareAsync(result.uri, { mimeType, dialogTitle, UTI: uti });
+
+  let shareUri = result.uri;
+  const named = filenameFromDisposition(
+    headerValue(result.headers as Record<string, string> | undefined, 'Content-Disposition'),
+    fallbackName,
+  );
+  if (named && named !== fallbackName && FileSystem.cacheDirectory) {
+    const dest = `${FileSystem.cacheDirectory}${named}`;
+    if (dest !== result.uri) {
+      try {
+        await FileSystem.deleteAsync(dest, { idempotent: true });
+        await FileSystem.moveAsync({ from: result.uri, to: dest });
+        shareUri = dest;
+      } catch {
+        shareUri = result.uri;
+      }
+    }
+  }
+  await Sharing.shareAsync(shareUri, { mimeType, dialogTitle, UTI: uti });
 }
 
 /** multipart 上传本地文件（uri 可为 file:// 或 data URL 落盘后的路径）。 */

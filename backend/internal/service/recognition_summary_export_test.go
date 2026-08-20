@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -127,6 +128,32 @@ func TestFillRecognitionSummaryXLSXEmpty(t *testing.T) {
 	note := strings.Join(gotRows[len(gotRows)-1], "")
 	if !strings.Contains(note, "认定依据包含") {
 		t.Fatalf("last row should be note, got %q", note)
+	}
+}
+
+func TestRecognitionSummaryDownloadNames(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		role      model.Role
+		className string
+		deptName  string
+		utf8      string
+		ascii     string
+	}{
+		{model.RoleClassAdvisor, "护理2401班", "护理系", "护理2401班-困难认定汇总表.xlsx", "class_summary.xlsx"},
+		{model.RoleClassAdvisor, "", "", "班级-困难认定汇总表.xlsx", "class_summary.xlsx"},
+		{model.RoleDepartment, "护理2401班", "护理系", "护理系-困难认定汇总表.xlsx", "dept_summary.xlsx"},
+		{model.RoleAidCenter, "护理2401班", "护理系", "学院困难认定汇总表.xlsx", "college_summary.xlsx"},
+		{model.RoleAdmin, "", "", "学院困难认定汇总表.xlsx", "college_summary.xlsx"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.role)+tc.utf8, func(t *testing.T) {
+			t.Parallel()
+			utf8, ascii := recognitionSummaryDownloadNames(tc.role, tc.className, tc.deptName)
+			if utf8 != tc.utf8 || ascii != tc.ascii {
+				t.Fatalf("got (%q, %q), want (%q, %q)", utf8, ascii, tc.utf8, tc.ascii)
+			}
+		})
 	}
 }
 

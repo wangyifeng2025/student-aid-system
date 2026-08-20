@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -351,6 +353,10 @@ func TestExportRecognitionSummary(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(w.Header().Get("Content-Disposition")), []byte("filename*=UTF-8''")) {
 		t.Fatalf("missing utf-8 filename in disposition: %s", w.Header().Get("Content-Disposition"))
+	}
+	wantName := class.Name + "-困难认定汇总表.xlsx"
+	if !strings.Contains(w.Header().Get("Content-Disposition"), url.PathEscape(wantName)) {
+		t.Fatalf("advisor filename want %q, disposition %s", wantName, w.Header().Get("Content-Disposition"))
 	}
 
 	f, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
