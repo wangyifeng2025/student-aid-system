@@ -16,7 +16,7 @@ export interface UserBrief {
   real_name: string;
   role: Role;
   dept_id?: number;
-  class_id?: number;
+  class_ids?: number[];
   phone?: string;
 }
 

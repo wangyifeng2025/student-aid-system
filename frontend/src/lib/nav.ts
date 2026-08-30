@@ -77,6 +77,13 @@ export const ADMIN_NAV: NavItem[] = [
       },
       {
         type: "leaf",
+        key: "advisors",
+        label: "班主任信息",
+        href: "/advisors",
+        icon: UserCog,
+      },
+      {
+        type: "leaf",
         key: "classes",
         label: "班级管理",
         href: "/base-data/classes",

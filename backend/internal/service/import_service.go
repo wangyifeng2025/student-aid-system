@@ -23,6 +23,7 @@ const (
 	ImportTypeMajors        = "majors"
 	ImportTypeGrades        = "grades"
 	ImportTypeClasses       = "classes"
+	ImportTypeAdvisors      = "advisors"
 )
 
 // 模板列定义（表头顺序即列顺序）。
@@ -40,7 +41,8 @@ var specialGroupColumns = []string{
 var departmentColumns = []string{"院系名称", "院系编码"}
 var majorColumns = []string{"院系编码", "专业名称", "专业编码"}
 var gradeColumns = []string{"年级名称", "入学年份"}
-var classColumns = []string{"院系编码", "专业编码", "入学年份", "班级名称", "班主任用户名"}
+var classColumns = []string{"院系编码", "专业编码", "入学年份", "班级名称", "教工号"}
+var advisorColumns = []string{"系部", "教工号", "姓名", "电话", "班级名称", "专业", "年级"}
 
 // ImportService Excel 导入与模板生成。
 type ImportService struct {
@@ -51,6 +53,7 @@ type ImportService struct {
 	orgRepo  *repository.OrgRepository
 	user     *repository.UserRepository
 	dictRepo *repository.DictRepository
+	advisor  *AdvisorService
 }
 
 func NewImportService(db *gorm.DB) *ImportService {
@@ -62,6 +65,7 @@ func NewImportService(db *gorm.DB) *ImportService {
 		orgRepo:  repository.NewOrgRepository(db),
 		user:     repository.NewUserRepository(db),
 		dictRepo: repository.NewDictRepository(db),
+		advisor:  NewAdvisorService(db),
 	}
 }
 
@@ -95,8 +99,12 @@ func (s *ImportService) Template(kind string) ([]byte, string, error) {
 		filename = "grades_template.xlsx"
 	case ImportTypeClasses:
 		columns = classColumns
-		example = []any{"CS", "SE", 2024, "软工2401班", "advisor01"}
+		example = []any{"CS", "SE", 2024, "软工2401班", "T2024001"}
 		filename = "classes_template.xlsx"
+	case ImportTypeAdvisors:
+		columns = advisorColumns
+		example = []any{"信息工程学院", "T2024001", "李老师", "13800001111", "", "", ""}
+		filename = "advisors_template.xlsx"
 	default:
 		return nil, "", NewValidationError("不支持的模板类型")
 	}
@@ -554,15 +562,20 @@ func (s *ImportService) ImportClasses(r io.Reader) (*dto.ImportResult, error) {
 				continue
 			}
 		}
+		staffNo := cell(row, 4)
+		if staffNo == "" {
+			result.Fail(dto.ImportRowError{Row: excelRow, Column: "教工号", Message: "教工号不能为空"})
+			continue
+		}
 		in := &ClassImportInput{
-			DeptCode:        deptCode,
-			MajorCode:       cell(row, 1),
-			GradeYear:       year,
-			Name:            name,
-			AdvisorUsername: cell(row, 4),
+			DeptCode:  deptCode,
+			MajorCode: cell(row, 1),
+			GradeYear: year,
+			Name:      name,
+			StaffNo:   staffNo,
 		}
 		if err := s.org.UpsertClass(in); err != nil {
-			failRow(result, excelRow, "班级名称", err)
+			failRow(result, excelRow, "教工号", err)
 			continue
 		}
 		result.Success++
@@ -581,6 +594,8 @@ func (s *ImportService) Export(kind string) ([]byte, string, error) {
 		return s.exportGrades()
 	case ImportTypeClasses:
 		return s.exportClasses()
+	case ImportTypeAdvisors:
+		return s.ExportAdvisors()
 	default:
 		return nil, "", NewValidationError("不支持的导出类型")
 	}
@@ -723,23 +738,6 @@ func (s *ImportService) exportClasses() ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	// 批量解析班主任用户名
-	advisorNames := map[uint]string{}
-	for i := range items {
-		if items[i].AdvisorID != nil && *items[i].AdvisorID > 0 {
-			advisorNames[*items[i].AdvisorID] = ""
-		}
-	}
-	if len(advisorNames) > 0 {
-		ids := make([]uint, 0, len(advisorNames))
-		for id := range advisorNames {
-			ids = append(ids, id)
-		}
-		names, nErr := s.user.FindUsernamesByIDs(ids)
-		if nErr == nil {
-			advisorNames = names
-		}
-	}
 
 	rows := make([][]any, 0, len(items))
 	for i := range items {
@@ -748,19 +746,147 @@ func (s *ImportService) exportClasses() ([]byte, string, error) {
 		if c.GradeID > 0 {
 			year = gradeYear[c.GradeID]
 		}
-		advisor := ""
-		if c.AdvisorID != nil {
-			advisor = advisorNames[*c.AdvisorID]
-		}
 		rows = append(rows, []any{
 			deptCode[c.DeptID],
 			majorCode[c.MajorID],
 			year,
 			c.Name,
-			advisor,
+			c.StaffNo,
 		})
 	}
 	return writeXlsx(classColumns, rows, "classes_export.xlsx")
+}
+
+// ImportAdvisors 导入班主任名册。一行一位老师；班级名称可选，须已在班级管理中存在。
+func (s *ImportService) ImportAdvisors(r io.Reader) (*dto.ImportResult, error) {
+	rows, err := readRows(r)
+	if err != nil {
+		return nil, err
+	}
+	result := newImportResult()
+	if err := checkImportHeader(rows, advisorColumns, result); err != nil {
+		return result, nil
+	}
+	for i, row := range rows {
+		if i == 0 || isBlankRow(row) {
+			continue
+		}
+		result.Total++
+		excelRow := i + 1
+		deptKey := cell(row, 0)
+		staffNo := cell(row, 1)
+		name := cell(row, 2)
+		phone := cell(row, 3)
+		classRaw := cell(row, 4)
+		if staffNo == "" {
+			result.Fail(dto.ImportRowError{Row: excelRow, Column: "教工号", Message: "教工号不能为空"})
+			continue
+		}
+		if name == "" {
+			result.Fail(dto.ImportRowError{Row: excelRow, Column: "姓名", Message: "姓名不能为空"})
+			continue
+		}
+		dept, err := s.advisor.ResolveDepartment(deptKey)
+		if err != nil {
+			failRow(result, excelRow, "系部", err)
+			continue
+		}
+		classNames := splitAdvisorClassNames(classRaw)
+		if classRaw != "" && len(classNames) == 0 {
+			result.Fail(dto.ImportRowError{Row: excelRow, Column: "班级名称", Message: "班级名称无效"})
+			continue
+		}
+		var classIDs []uint
+		for _, cn := range classNames {
+			c, cerr := s.advisor.ResolveExistingClass(dept.ID, cn)
+			if cerr != nil {
+				failRow(result, excelRow, "班级名称", cerr)
+				classIDs = nil
+				break
+			}
+			classIDs = append(classIDs, c.ID)
+		}
+		if classRaw != "" && len(classIDs) == 0 {
+			continue
+		}
+		if err := s.advisor.UpsertImported(dept.ID, staffNo, name, phone, classIDs); err != nil {
+			failRow(result, excelRow, "教工号", err)
+			continue
+		}
+		result.Success++
+	}
+	return result, nil
+}
+
+func splitAdvisorClassNames(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	replacer := strings.NewReplacer("，", ",", "、", ",", "；", ",", ";", ",", " ", ",")
+	parts := strings.Split(replacer.Replace(raw), ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+// ExportAdvisors 导出班主任（一班一行，便于再导入）。
+func (s *ImportService) ExportAdvisors() ([]byte, string, error) {
+	items, err := s.advisor.List(repository.AdvisorFilter{})
+	if err != nil {
+		return nil, "", err
+	}
+	classMeta := map[uint]model.Class{}
+	classes, err := s.orgRepo.ListClasses(repository.ClassFilter{})
+	if err != nil {
+		return nil, "", err
+	}
+	for i := range classes {
+		classMeta[classes[i].ID] = classes[i]
+	}
+	majors, err := s.orgRepo.ListMajors(0)
+	if err != nil {
+		return nil, "", err
+	}
+	majorNames := map[uint]string{}
+	for i := range majors {
+		majorNames[majors[i].ID] = majors[i].Name
+	}
+	grades, err := s.orgRepo.ListGrades()
+	if err != nil {
+		return nil, "", err
+	}
+	gradeNames := map[uint]string{}
+	for i := range grades {
+		gradeNames[grades[i].ID] = grades[i].Name
+	}
+
+	var rows [][]any
+	for _, a := range items.Items {
+		if len(a.Classes) == 0 {
+			rows = append(rows, []any{a.DeptName, a.StaffNo, a.Name, a.Phone, "", "", ""})
+			continue
+		}
+		for _, cls := range a.Classes {
+			c := classMeta[cls.ID]
+			rows = append(rows, []any{
+				a.DeptName, a.StaffNo, a.Name, a.Phone, cls.Name,
+				majorNames[c.MajorID], gradeNames[c.GradeID],
+			})
+		}
+	}
+	return writeXlsx(advisorColumns, rows, "advisors_export.xlsx")
 }
 
 // writeXlsx 写入表头 + 数据行并返回 xlsx 字节。

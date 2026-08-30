@@ -33,6 +33,8 @@ async function runImport(kind: ImportKind, file: File): Promise<ImportResult> {
       return importApi.importGrades(file);
     case "classes":
       return importApi.importClasses(file);
+    case "advisors":
+      return importApi.importAdvisors(file);
   }
 }
 

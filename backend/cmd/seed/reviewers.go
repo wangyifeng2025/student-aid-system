@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"strings"
 
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/pkg/password"
@@ -14,7 +16,6 @@ type reviewerSeed struct {
 	RealName string
 	Role     model.Role
 	DeptID   *uint
-	ClassID  *uint
 }
 
 var demoReviewers = []reviewerSeed{
@@ -45,7 +46,6 @@ func seedDemoReviewers(db *gorm.DB, org demoOrgIDs) error {
 		switch spec.Role {
 		case model.RoleClassAdvisor:
 			spec.DeptID = &org.DeptID
-			spec.ClassID = &org.ClassID
 		case model.RoleDepartment:
 			spec.DeptID = &org.DeptID
 		}
@@ -77,9 +77,6 @@ func ensureUser(db *gorm.DB, spec reviewerSeed) (*model.User, bool, error) {
 		if spec.DeptID != nil && (user.DeptID == nil || *user.DeptID != *spec.DeptID) {
 			updates["dept_id"] = *spec.DeptID
 		}
-		if spec.ClassID != nil && (user.ClassID == nil || *user.ClassID != *spec.ClassID) {
-			updates["class_id"] = *spec.ClassID
-		}
 		if len(updates) > 0 {
 			if err := db.Model(&user).Updates(updates).Error; err != nil {
 				return nil, false, err
@@ -101,7 +98,6 @@ func ensureUser(db *gorm.DB, spec reviewerSeed) (*model.User, bool, error) {
 		RealName:     spec.RealName,
 		Role:         spec.Role,
 		DeptID:       spec.DeptID,
-		ClassID:      spec.ClassID,
 		Status:       1,
 	}
 	if err := db.Create(&user).Error; err != nil {
@@ -115,13 +111,47 @@ func setClassAdvisor(db *gorm.DB, classID, advisorUserID uint) error {
 	if err := db.First(&class, classID).Error; err != nil {
 		return err
 	}
-	if class.AdvisorID != nil && *class.AdvisorID == advisorUserID {
-		return nil
+	if class.AdvisorID == nil || *class.AdvisorID != advisorUserID {
+		advisorID := advisorUserID
+		if err := db.Model(&class).Update("advisor_id", advisorID).Error; err != nil {
+			return err
+		}
+		log.Printf("已将 %s 设为 %s 的班主任", demoReviewers[0].RealName, seedClassName)
 	}
-	advisorID := advisorUserID
-	if err := db.Model(&class).Update("advisor_id", advisorID).Error; err != nil {
+	return ensureAdvisorClassLink(db, advisorUserID, class.DeptID, classID)
+}
+
+func ensureAdvisorClassLink(db *gorm.DB, userID, deptID, classID uint) error {
+	var a model.Advisor
+	err := db.Where("user_id = ?", userID).First(&a).Error
+	if err == gorm.ErrRecordNotFound {
+		var u model.User
+		if err := db.First(&u, userID).Error; err != nil {
+			return err
+		}
+		staffNo := strings.TrimSpace(u.Username)
+		if staffNo == "" {
+			staffNo = fmt.Sprintf("U%d", u.ID)
+		}
+		name := strings.TrimSpace(u.RealName)
+		if name == "" {
+			name = staffNo
+		}
+		a = model.Advisor{DeptID: deptID, StaffNo: staffNo, Name: name, Phone: u.Phone, UserID: &userID}
+		if err := db.Create(&a).Error; err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
-	log.Printf("已将 %s 设为 %s 的班主任", demoReviewers[0].RealName, seedClassName)
-	return nil
+	var n int64
+	if err := db.Model(&model.AdvisorClass{}).Where("advisor_id = ? AND class_id = ?", a.ID, classID).Count(&n).Error; err != nil {
+		return err
+	}
+	if n == 0 {
+		if err := db.Create(&model.AdvisorClass{AdvisorID: a.ID, ClassID: classID}).Error; err != nil {
+			return err
+		}
+	}
+	return db.Where("class_id = ? AND advisor_id <> ?", classID, a.ID).Delete(&model.AdvisorClass{}).Error
 }

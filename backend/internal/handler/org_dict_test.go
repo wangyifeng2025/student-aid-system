@@ -388,14 +388,96 @@ func TestOrgImportExport(t *testing.T) {
 		t.Fatalf("import majors status %d, body %s", w.Code, w.Body.String())
 	}
 
-	// 导入班级
+	// 导入班级前须先有班主任（按教工号绑定）
+	var dept model.Department
+	if err := db.Where("code = ?", deptCode).First(&dept).Error; err != nil {
+		t.Fatalf("find imported dept: %v", err)
+	}
+	staffNo := "T" + suffix[len(suffix)-6:]
+	adv := model.Advisor{DeptID: dept.ID, StaffNo: staffNo, Name: "导入班主任", Phone: "13900001111"}
+	if err := db.Create(&adv).Error; err != nil {
+		t.Fatalf("create advisor: %v", err)
+	}
+	className := "测试班" + suffix[len(suffix)-4:]
+	className2 := "测试班乙" + suffix[len(suffix)-4:]
+	t.Cleanup(func() {
+		var latest model.Advisor
+		if err := db.First(&latest, adv.ID).Error; err == nil && latest.UserID != nil {
+			db.Unscoped().Where("id = ?", *latest.UserID).Delete(&model.User{})
+		}
+		db.Where("advisor_id = ?", adv.ID).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("id = ?", adv.ID).Delete(&model.Advisor{})
+		db.Unscoped().Where("name IN ?", []string{className, className2}).Delete(&model.Class{})
+	})
+
 	xlsx = buildXLSX(t, [][]any{
-		{"院系编码", "专业编码", "入学年份", "班级名称", "班主任用户名"},
-		{deptCode, majorCode, year, "测试班" + suffix[len(suffix)-4:], ""},
+		{"院系编码", "专业编码", "入学年份", "班级名称", "教工号"},
+		{deptCode, majorCode, year, className, staffNo},
 	})
 	w = uploadXLSX(t, r, "/api/v1/import/classes", token, xlsx)
 	if w.Code != http.StatusOK {
 		t.Fatalf("import classes status %d, body %s", w.Code, w.Body.String())
+	}
+	impResp = struct {
+		Data dto.ImportResult `json:"data"`
+	}{}
+	json.Unmarshal(w.Body.Bytes(), &impResp)
+	if impResp.Data.Failed != 0 || impResp.Data.Success != 1 {
+		t.Fatalf("import classes result: %+v", impResp.Data)
+	}
+
+	var cls model.Class
+	if err := db.Where("name = ?", className).First(&cls).Error; err != nil {
+		t.Fatalf("find imported class: %v", err)
+	}
+	var linked int64
+	if err := db.Model(&model.AdvisorClass{}).Where("advisor_id = ? AND class_id = ?", adv.ID, cls.ID).Count(&linked).Error; err != nil {
+		t.Fatalf("count advisor_classes: %v", err)
+	}
+	if linked != 1 {
+		t.Fatalf("class import should update advisor managed classes, got %d links", linked)
+	}
+	if err := db.First(&adv, adv.ID).Error; err != nil {
+		t.Fatalf("reload advisor: %v", err)
+	}
+	if adv.UserID == nil {
+		t.Fatal("class import should create advisor login user")
+	}
+	if cls.AdvisorID == nil || *cls.AdvisorID != *adv.UserID {
+		t.Fatalf("class.advisor_id should be login user, class=%v advisor.user_id=%v", cls.AdvisorID, adv.UserID)
+	}
+
+	xlsx = buildXLSX(t, [][]any{
+		{"院系编码", "专业编码", "入学年份", "班级名称", "教工号"},
+		{deptCode, majorCode, year, className2, staffNo},
+	})
+	w = uploadXLSX(t, r, "/api/v1/import/classes", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import second class status %d, body %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &impResp)
+	if impResp.Data.Failed != 0 || impResp.Data.Success != 1 {
+		t.Fatalf("import second class result: %+v", impResp.Data)
+	}
+	var n int64
+	if err := db.Model(&model.AdvisorClass{}).Where("advisor_id = ?", adv.ID).Count(&n).Error; err != nil {
+		t.Fatalf("count advisor classes: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("same advisor should manage 2 classes after second import, got %d", n)
+	}
+
+	xlsx = buildXLSX(t, [][]any{
+		{"院系编码", "专业编码", "入学年份", "班级名称", "教工号"},
+		{deptCode, majorCode, year, "失败班" + suffix[len(suffix)-4:], "NO_SUCH_STAFF"},
+	})
+	w = uploadXLSX(t, r, "/api/v1/import/classes", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import unknown staff status %d, body %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &impResp)
+	if impResp.Data.Failed != 1 || impResp.Data.Success != 0 {
+		t.Fatalf("unknown staff_no should fail import, got %+v", impResp.Data)
 	}
 
 	// 导出院系

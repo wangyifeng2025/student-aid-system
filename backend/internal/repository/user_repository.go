@@ -174,11 +174,6 @@ func (r *UserRepository) DeptExists(id uint) (bool, error) {
 	return existsByID(r.db, &model.Department{}, id)
 }
 
-// ClassExists 判断班级是否存在。
-func (r *UserRepository) ClassExists(id uint) (bool, error) {
-	return existsByID(r.db, &model.Class{}, id)
-}
-
 // IsNotFound 判断是否为记录不存在错误。
 func IsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)

@@ -26,6 +26,9 @@ export interface Class {
   grade_id: number;
   name: string;
   advisor_id?: number | null;
+  staff_no?: string;
+  advisor_name?: string;
+  advisor_phone?: string;
 }
 
 // ===== 请求体 =====
@@ -51,5 +54,5 @@ export interface ClassInput {
   major_id?: number;
   grade_id?: number;
   name: string;
-  advisor_id?: number | null;
+  staff_no: string;
 }

@@ -12,11 +12,17 @@ import (
 
 // OrgService 组织机构（院系/专业/年级/班级）业务逻辑。
 type OrgService struct {
-	repo *repository.OrgRepository
+	repo       *repository.OrgRepository
+	advisors   *repository.AdvisorRepository
+	advisorSvc *AdvisorService
 }
 
 func NewOrgService(db *gorm.DB) *OrgService {
-	return &OrgService{repo: repository.NewOrgRepository(db)}
+	return &OrgService{
+		repo:       repository.NewOrgRepository(db),
+		advisors:   repository.NewAdvisorRepository(db),
+		advisorSvc: NewAdvisorService(db),
+	}
 }
 
 // ===== 院系 =====
@@ -215,24 +221,33 @@ func (s *OrgService) ListClasses(deptID, majorID, gradeID uint) ([]dto.ClassResp
 	if err != nil {
 		return nil, err
 	}
-	return dto.ToClassResponses(items), nil
+	return s.toClassResponses(items)
 }
 
 func (s *OrgService) CreateClass(req *dto.ClassRequest) (*dto.ClassResponse, error) {
 	if err := s.validateClassRefs(req); err != nil {
 		return nil, err
 	}
+	advisor, err := s.resolveClassAdvisor(req.DeptID, req)
+	if err != nil {
+		return nil, err
+	}
 	c := &model.Class{
-		DeptID:    req.DeptID,
-		MajorID:   req.MajorID,
-		GradeID:   req.GradeID,
-		Name:      req.Name,
-		AdvisorID: req.AdvisorID,
+		DeptID:  req.DeptID,
+		MajorID: req.MajorID,
+		GradeID: req.GradeID,
+		Name:    req.Name,
 	}
 	if err := s.repo.CreateClass(c); err != nil {
 		return nil, err
 	}
-	resp := dto.ToClassResponse(c)
+	if err := s.advisorSvc.BindClass(advisor, c.ID); err != nil {
+		return nil, err
+	}
+	if saved, err := s.repo.FindClass(c.ID); err == nil {
+		c = saved
+	}
+	resp := dto.ToClassResponseWithAdvisor(c, advisor)
 	return &resp, nil
 }
 
@@ -247,15 +262,24 @@ func (s *OrgService) UpdateClass(id uint, req *dto.ClassRequest) (*dto.ClassResp
 	if err := s.validateClassRefs(req); err != nil {
 		return nil, err
 	}
+	advisor, err := s.resolveClassAdvisor(req.DeptID, req)
+	if err != nil {
+		return nil, err
+	}
 	c.DeptID = req.DeptID
 	c.MajorID = req.MajorID
 	c.GradeID = req.GradeID
 	c.Name = req.Name
-	c.AdvisorID = req.AdvisorID
 	if err := s.repo.SaveClass(c); err != nil {
 		return nil, err
 	}
-	resp := dto.ToClassResponse(c)
+	if err := s.advisorSvc.BindClass(advisor, c.ID); err != nil {
+		return nil, err
+	}
+	if saved, err := s.repo.FindClass(c.ID); err == nil {
+		c = saved
+	}
+	resp := dto.ToClassResponseWithAdvisor(c, advisor)
 	return &resp, nil
 }
 
@@ -272,6 +296,9 @@ func (s *OrgService) DeleteClass(id uint) error {
 	}
 	if students > 0 {
 		return ErrInUse
+	}
+	if err := s.advisors.UnlinkClass(id); err != nil {
+		return err
 	}
 	return s.repo.DeleteClass(id)
 }
@@ -311,16 +338,60 @@ func (s *OrgService) validateClassRefs(req *dto.ClassRequest) error {
 			return ErrInvalidRef
 		}
 	}
-	if req.AdvisorID != nil {
-		exists, err := s.repo.UserExists(*req.AdvisorID)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return ErrInvalidRef
+	return nil
+}
+
+func (s *OrgService) resolveClassAdvisor(deptID uint, req *dto.ClassRequest) (*model.Advisor, error) {
+	staffNo := strings.TrimSpace(req.StaffNo)
+	if staffNo == "" {
+		return nil, NewValidationError("教工号不能为空，请先维护班主任信息")
+	}
+	a, err := s.advisors.FindByStaffNo(staffNo, 0)
+	if repository.IsNotFound(err) {
+		return nil, NewValidationError("教工号不存在：" + staffNo)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if a.DeptID != deptID {
+		return nil, NewValidationError("该班主任不属于所选院系")
+	}
+	return a, nil
+}
+
+func (s *OrgService) toClassResponses(items []model.Class) ([]dto.ClassResponse, error) {
+	ids := make([]uint, 0, len(items))
+	userIDs := make([]uint, 0)
+	for i := range items {
+		ids = append(ids, items[i].ID)
+		if items[i].AdvisorID != nil && *items[i].AdvisorID > 0 {
+			userIDs = append(userIDs, *items[i].AdvisorID)
 		}
 	}
-	return nil
+	byClass, err := s.advisors.FindByClassIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	byUser, err := s.advisors.FindByUserIDs(userIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.ClassResponse, 0, len(items))
+	for i := range items {
+		c := items[i]
+		var a *model.Advisor
+		if found, ok := byClass[c.ID]; ok {
+			cp := found
+			a = &cp
+		} else if c.AdvisorID != nil {
+			if found, ok := byUser[*c.AdvisorID]; ok {
+				cp := found
+				a = &cp
+			}
+		}
+		out = append(out, dto.ToClassResponseWithAdvisor(&c, a))
+	}
+	return out, nil
 }
 
 // ===== 导入用 Upsert（按编码/名称幂等）=====
@@ -408,16 +479,16 @@ func (s *OrgService) UpsertGrade(req *dto.GradeRequest) error {
 	return err
 }
 
-// ClassImportInput 班级导入行（含编码/用户名等可读字段）。
+// ClassImportInput 班级导入行（含编码/教工号等可读字段）。
 type ClassImportInput struct {
-	DeptCode        string
-	MajorCode       string
-	GradeYear       int
-	Name            string
-	AdvisorUsername string
+	DeptCode  string
+	MajorCode string
+	GradeYear int
+	Name      string
+	StaffNo   string
 }
 
-// UpsertClass 按「院系编码 + 班级名称」upsert。
+// UpsertClass 按「院系编码 + 班级名称」upsert；教工号必须已在班主任信息中存在。
 func (s *OrgService) UpsertClass(in *ClassImportInput) error {
 	deptCode := strings.TrimSpace(in.DeptCode)
 	if deptCode == "" {
@@ -435,7 +506,7 @@ func (s *OrgService) UpsertClass(in *ClassImportInput) error {
 		return err
 	}
 
-	req := &dto.ClassRequest{DeptID: dept.ID, Name: name}
+	req := &dto.ClassRequest{DeptID: dept.ID, Name: name, StaffNo: strings.TrimSpace(in.StaffNo)}
 	if mc := strings.TrimSpace(in.MajorCode); mc != "" {
 		major, mErr := s.repo.FindMajorByDeptAndCode(dept.ID, mc)
 		if repository.IsNotFound(mErr) {
@@ -456,23 +527,11 @@ func (s *OrgService) UpsertClass(in *ClassImportInput) error {
 		}
 		req.GradeID = grade.ID
 	}
-	if u := strings.TrimSpace(in.AdvisorUsername); u != "" {
-		user, uErr := s.repo.FindUserByUsername(u)
-		if repository.IsNotFound(uErr) {
-			return NewValidationError("班主任用户名不存在：" + u)
-		}
-		if uErr != nil {
-			return uErr
-		}
-		req.AdvisorID = &user.ID
-	}
 
 	existing, err := s.repo.FindClassByDeptAndName(dept.ID, name)
 	if err == nil {
-		existing.MajorID = req.MajorID
-		existing.GradeID = req.GradeID
-		existing.AdvisorID = req.AdvisorID
-		return s.repo.SaveClass(existing)
+		_, err = s.UpdateClass(existing.ID, req)
+		return err
 	}
 	if !repository.IsNotFound(err) {
 		return err

@@ -45,8 +45,8 @@ func (r *RecognitionRepository) scoped(actor rbac.Actor) *gorm.DB {
 			q = q.Where("1 = 0")
 		}
 	case rbac.ScopeClass:
-		if actor.ClassID != nil {
-			q = q.Where("students.class_id = ?", *actor.ClassID)
+		if ids := actor.ManagedClassIDs(); len(ids) > 0 {
+			q = q.Where("students.class_id IN ?", ids)
 		} else {
 			q = q.Where("1 = 0")
 		}

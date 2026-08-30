@@ -58,6 +58,7 @@ import type {
   UserUpdateInput,
 } from "@/types/user";
 import type { DashboardOverview } from "@/types/dashboard";
+import type { Advisor, AdvisorFilter, AdvisorInput } from "@/types/advisor";
 import { clearSession, loadSession, updateSession } from "@/lib/token-storage";
 
 /** 请求时解析 API 根地址：Docker 同源反代留空 env 即可；本地开发默认 localhost:8080。 */
@@ -455,6 +456,25 @@ export const studentApi = {
 
 // ===== 重点保障人群 SpecialGroup =====
 
+export const advisorApi = {
+  list: (filter?: AdvisorFilter) =>
+    apiFetch<PageResult<Advisor>>(
+      `/advisors${buildParams({
+        page: filter?.page,
+        page_size: filter?.page_size,
+        dept_id: filter?.dept_id,
+        keyword: filter?.keyword,
+      })}`,
+    ),
+  get: (id: number) => apiFetch<Advisor>(`/advisors/${id}`),
+  create: (body: AdvisorInput) =>
+    apiFetch<Advisor>("/advisors", { method: "POST", body }),
+  update: (id: number, body: AdvisorInput) =>
+    apiFetch<Advisor>(`/advisors/${id}`, { method: "PUT", body }),
+  remove: (id: number) =>
+    apiFetch<{ message: string }>(`/advisors/${id}`, { method: "DELETE" }),
+};
+
 export const specialGroupApi = {
   list: (filter?: SpecialGroupFilter) =>
     apiFetch<PageResult<SpecialGroup>>(
@@ -486,6 +506,7 @@ export type OrgSpreadsheetKind =
 export type ImportKind =
   | "students"
   | "special-groups"
+  | "advisors"
   | OrgSpreadsheetKind;
 
 const orgTemplateNames: Record<OrgSpreadsheetKind, string> = {
@@ -509,7 +530,9 @@ export const importApi = {
         ? "students_template.xlsx"
         : type === "special-groups"
           ? "special_groups_template.xlsx"
-          : orgTemplateNames[type as OrgSpreadsheetKind];
+          : type === "advisors"
+            ? "advisors_template.xlsx"
+            : orgTemplateNames[type as OrgSpreadsheetKind];
     return downloadFile(`/import/template/${type}`, fallback);
   },
   importStudents: (file: File) =>
@@ -524,6 +547,8 @@ export const importApi = {
     apiUpload<ImportResult>("/import/grades", file),
   importClasses: (file: File) =>
     apiUpload<ImportResult>("/import/classes", file),
+  importAdvisors: (file: File) =>
+    apiUpload<ImportResult>("/import/advisors", file),
 };
 
 export const exportApi = {
@@ -540,6 +565,7 @@ export const exportApi = {
       })}`,
       "students_export.xlsx",
     ),
+  advisors: () => downloadFile("/export/advisors", "advisors_export.xlsx"),
 };
 
 // ===== 困难认定申请 Recognition =====

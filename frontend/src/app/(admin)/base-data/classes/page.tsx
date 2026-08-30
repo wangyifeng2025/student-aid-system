@@ -7,15 +7,18 @@ import {
   departmentApi,
   majorApi,
   gradeApi,
+  advisorApi,
   ApiError,
 } from "@/lib/api";
 import type { Class, Department, Major, Grade } from "@/types/org";
+import type { Advisor } from "@/types/advisor";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
@@ -32,6 +35,7 @@ export default function ClassesPage() {
   const [depts, setDepts] = React.useState<Department[]>([]);
   const [majors, setMajors] = React.useState<Major[]>([]);
   const [grades, setGrades] = React.useState<Grade[]>([]);
+  const [advisors, setAdvisors] = React.useState<Advisor[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [keyword, setKeyword] = React.useState("");
@@ -43,7 +47,7 @@ export default function ClassesPage() {
   const [majorId, setMajorId] = React.useState("");
   const [gradeId, setGradeId] = React.useState("");
   const [name, setName] = React.useState("");
-  const [advisorId, setAdvisorId] = React.useState("");
+  const [advisorStaffNo, setAdvisorStaffNo] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
   const [deleteTarget, setDeleteTarget] = React.useState<Class | null>(null);
@@ -63,7 +67,13 @@ export default function ClassesPage() {
   );
 
   const filtered = list.filter((c) => {
-    const matchKeyword = c.name.includes(keyword);
+    const kw = keyword.trim();
+    const matchKeyword =
+      !kw ||
+      c.name.includes(kw) ||
+      (c.staff_no ?? "").includes(kw) ||
+      (c.advisor_name ?? "").includes(kw) ||
+      (c.advisor_phone ?? "").includes(kw);
     const matchDept = !filterDept || c.dept_id === Number(filterDept);
     return matchKeyword && matchDept;
   });
@@ -74,16 +84,18 @@ export default function ClassesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [classes, departments, allMajors, allGrades] = await Promise.all([
+      const [classes, departments, allMajors, allGrades, advisorPage] = await Promise.all([
         classApi.list(),
         departmentApi.list(),
         majorApi.list(),
         gradeApi.list(),
+        advisorApi.list({ page: 1, page_size: 100 }),
       ]);
       setList(classes);
       setDepts(departments);
       setMajors(allMajors);
       setGrades(allGrades);
+      setAdvisors(advisorPage.items);
       clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
@@ -96,10 +108,13 @@ export default function ClassesPage() {
     void load();
   }, [load]);
 
-  // 表单内专业按所选院系联动
+  // 表单内专业、班主任按所选院系联动
   const formMajors = deptId
     ? majors.filter((m) => m.dept_id === Number(deptId))
     : majors;
+  const formAdvisors = deptId
+    ? advisors.filter((a) => a.dept_id === Number(deptId))
+    : [];
 
   const openCreate = () => {
     setEditing(null);
@@ -107,7 +122,7 @@ export default function ClassesPage() {
     setMajorId("");
     setGradeId("");
     setName("");
-    setAdvisorId("");
+    setAdvisorStaffNo("");
     setFormOpen(true);
   };
 
@@ -117,7 +132,7 @@ export default function ClassesPage() {
     setMajorId(c.major_id ? String(c.major_id) : "");
     setGradeId(c.grade_id ? String(c.grade_id) : "");
     setName(c.name);
-    setAdvisorId(c.advisor_id ? String(c.advisor_id) : "");
+    setAdvisorStaffNo(c.staff_no ?? "");
     setFormOpen(true);
   };
 
@@ -130,6 +145,10 @@ export default function ClassesPage() {
       toast.error("请填写班级名称");
       return;
     }
+    if (!advisorStaffNo.trim()) {
+      toast.error("请选择班主任（请先维护班主任信息）");
+      return;
+    }
     setSubmitting(true);
     try {
       const body = {
@@ -137,7 +156,7 @@ export default function ClassesPage() {
         major_id: majorId ? Number(majorId) : undefined,
         grade_id: gradeId ? Number(gradeId) : undefined,
         name: name.trim(),
-        advisor_id: advisorId ? Number(advisorId) : undefined,
+        staff_no: advisorStaffNo.trim(),
       };
       if (editing) {
         await classApi.update(editing.id, body);
@@ -179,6 +198,9 @@ export default function ClassesPage() {
     { header: "院系", cell: (c) => deptName(c.dept_id) },
     { header: "专业", cell: (c) => majorName(c.major_id) },
     { header: "年级", cell: (c) => gradeName(c.grade_id) },
+    { header: "班主任", width: "100px", cell: (c) => c.advisor_name || "—" },
+    { header: "教工号", width: "120px", cell: (c) => <span className="font-mono">{c.staff_no || "—"}</span> },
+    { header: "电话", width: "130px", cell: (c) => <span className="font-mono">{c.advisor_phone || "—"}</span> },
     {
       header: "操作",
       width: "140px",
@@ -197,7 +219,7 @@ export default function ClassesPage() {
             <Input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜索班级名称…"
+              placeholder="搜索班级/班主任/教工号…"
               className="h-9 pl-8 text-sm"
             />
           </div>
@@ -221,7 +243,7 @@ export default function ClassesPage() {
             <OrgSpreadsheetActions
               kind="classes"
               importTitle="导入班级"
-              importHint="按模板填写：院系编码、专业编码、入学年份、班级名称、班主任用户名。同一院系下班级名称相同则更新关联信息。请先导入院系/专业/年级。"
+              importHint="请先导入班主任信息。模板列：院系编码、专业编码、入学年份、班级名称、教工号*。教工号必须已在班主任信息中存在，否则该行导入失败。导入后会同步该班主任的管理班级。"
               onDone={load}
             />
             <Button size="sm" onClick={openCreate}>
@@ -239,7 +261,7 @@ export default function ClassesPage() {
         loading={loading}
         error={error}
         onRetry={load}
-        emptyLabel={keyword || filterDept ? "无匹配班级" : "暂无班级，点击右上角新增"}
+        emptyLabel={keyword || filterDept ? "无匹配班级" : "暂无班级。请先维护班主任信息，再新增或导入班级"}
       />
 
       <Modal
@@ -267,6 +289,7 @@ export default function ClassesPage() {
               onChange={(e) => {
                 setDeptId(e.target.value);
                 setMajorId("");
+                setAdvisorStaffNo("");
               }}
             >
               <option value="">请选择院系</option>
@@ -298,8 +321,27 @@ export default function ClassesPage() {
             <Input id="class-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：软工2401班" />
           </div>
           <div>
-            <Label htmlFor="class-advisor">班主任用户 ID</Label>
-            <Input id="class-advisor" type="number" value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} placeholder="（可选）对应用户 ID" />
+            <Label htmlFor="class-advisor">班主任 *</Label>
+            {!deptId ? (
+              <p className="mt-1 text-sm text-ink-mute">请先选择院系</p>
+            ) : formAdvisors.length === 0 ? (
+              <p className="mt-1 text-sm text-ink-mute">该院系暂无班主任，请先在「班主任信息」中维护</p>
+            ) : (
+              <Combobox
+                id="class-advisor"
+                className="w-full"
+                value={advisorStaffNo}
+                onChange={setAdvisorStaffNo}
+                placeholder="输入姓名或教工号搜索"
+                emptyText="无匹配班主任"
+                options={formAdvisors.map((a) => ({
+                  value: a.staff_no,
+                  label: `${a.name}（${a.staff_no}）`,
+                  description: a.phone || undefined,
+                  keywords: `${a.name} ${a.staff_no} ${a.phone ?? ""}`,
+                }))}
+              />
+            )}
           </div>
         </div>
       </Modal>

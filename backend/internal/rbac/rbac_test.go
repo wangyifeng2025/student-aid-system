@@ -36,12 +36,24 @@ func TestActorCanAccessStudent(t *testing.T) {
 		t.Error("学生不应访问他人")
 	}
 
-	advisor := Actor{UserID: 2, Role: model.RoleClassAdvisor, ClassID: &classID}
+	advisor := Actor{UserID: 2, Role: model.RoleClassAdvisor, ClassIDs: []uint{classID}}
 	if !advisor.CanAccessStudent(99, 20, 10) {
 		t.Error("班主任应能访问本班学生")
 	}
 	if advisor.CanAccessStudent(99, 21, 10) {
 		t.Error("班主任不应访问其他班学生")
+	}
+	empty := Actor{UserID: 6, Role: model.RoleClassAdvisor}
+	if empty.CanAccessStudent(99, 20, 10) {
+		t.Error("未绑定班级的班主任不应访问任何班级")
+	}
+
+	multi := Actor{UserID: 5, Role: model.RoleClassAdvisor, ClassIDs: []uint{20, 22}}
+	if !multi.CanAccessStudent(99, 22, 10) {
+		t.Error("多班班主任应能访问所管任一班级")
+	}
+	if multi.CanAccessStudent(99, 21, 10) {
+		t.Error("多班班主任不应访问未管理班级")
 	}
 
 	deptUser := Actor{UserID: 3, Role: model.RoleDepartment, DeptID: &deptID}

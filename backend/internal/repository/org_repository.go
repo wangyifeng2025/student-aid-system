@@ -84,6 +84,15 @@ func (r *OrgRepository) FindDepartmentByCode(code string) (*model.Department, er
 	return &d, nil
 }
 
+// FindDepartmentByName 按院系名称查找。
+func (r *OrgRepository) FindDepartmentByName(name string) (*model.Department, error) {
+	var d model.Department
+	if err := r.db.Where("name = ?", name).First(&d).Error; err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 func (r *OrgRepository) CountMajorsByDept(deptID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&model.Major{}).Where("dept_id = ?", deptID).Count(&count).Error
@@ -189,6 +198,15 @@ func (r *OrgRepository) DeleteGrade(id uint) error {
 func (r *OrgRepository) FindGradeByYear(year int) (*model.Grade, error) {
 	var g model.Grade
 	if err := r.db.Where("year = ?", year).First(&g).Error; err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+// FindGradeByName 按年级名称查找。
+func (r *OrgRepository) FindGradeByName(name string) (*model.Grade, error) {
+	var g model.Grade
+	if err := r.db.Where("name = ?", name).First(&g).Error; err != nil {
 		return nil, err
 	}
 	return &g, nil

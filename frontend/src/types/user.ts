@@ -12,7 +12,7 @@ export interface User {
   role: Role;
   phone: string;
   dept_id?: number | null;
-  class_id?: number | null;
+  class_ids?: number[];
   status: number; // 1 启用 0 禁用
   created_at: string;
 }
@@ -24,7 +24,6 @@ export interface UserCreateInput {
   role: Role;
   phone?: string;
   dept_id?: number | null;
-  class_id?: number | null;
   status?: number;
 }
 
@@ -33,7 +32,6 @@ export interface UserUpdateInput {
   role: Role;
   phone?: string;
   dept_id?: number | null;
-  class_id?: number | null;
   status?: number;
 }
 

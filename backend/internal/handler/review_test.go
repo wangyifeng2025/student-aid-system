@@ -85,23 +85,50 @@ func seedScopedStudent(t *testing.T, db *gorm.DB, userID, classID, deptID uint) 
 	return s
 }
 
-// seedReviewer 创建带数据范围的评审账号。
+// seedReviewer 创建带数据范围的评审账号。班主任范围写入名册（advisor_classes），教学系写 users.dept_id。
 func seedReviewer(t *testing.T, db *gorm.DB, role model.Role, classID, deptID uint) *model.User {
 	t.Helper()
 	u := seedUser(t, db, "pass123", role)
-	updates := map[string]any{}
-	if classID > 0 {
-		updates["class_id"] = classID
-	}
 	if deptID > 0 {
-		updates["dept_id"] = deptID
-	}
-	if len(updates) > 0 {
-		if err := db.Model(u).Updates(updates).Error; err != nil {
-			t.Fatalf("update reviewer scope: %v", err)
+		if err := db.Model(u).Update("dept_id", deptID).Error; err != nil {
+			t.Fatalf("update reviewer dept: %v", err)
 		}
+		u.DeptID = &deptID
+	}
+	if role == model.RoleClassAdvisor && classID > 0 {
+		seedAdvisorScope(t, db, u, classID, deptID)
 	}
 	return u
+}
+
+func seedAdvisorScope(t *testing.T, db *gorm.DB, u *model.User, classID, deptID uint) {
+	t.Helper()
+	var a model.Advisor
+	err := db.Where("user_id = ?", u.ID).First(&a).Error
+	if err == gorm.ErrRecordNotFound {
+		staffNo := u.Username
+		if staffNo == "" {
+			staffNo = fmt.Sprintf("U%d", u.ID)
+		}
+		name := u.RealName
+		if name == "" {
+			name = staffNo
+		}
+		a = model.Advisor{DeptID: deptID, StaffNo: staffNo, Name: name, Phone: u.Phone, UserID: &u.ID}
+		if err := db.Create(&a).Error; err != nil {
+			t.Fatalf("create advisor roster: %v", err)
+		}
+		t.Cleanup(func() {
+			db.Where("advisor_id = ?", a.ID).Delete(&model.AdvisorClass{})
+			db.Unscoped().Where("id = ?", a.ID).Delete(&model.Advisor{})
+		})
+	} else if err != nil {
+		t.Fatalf("find advisor roster: %v", err)
+	}
+	link := model.AdvisorClass{AdvisorID: a.ID, ClassID: classID}
+	if err := db.Where("advisor_id = ? AND class_id = ?", a.ID, classID).FirstOrCreate(&link).Error; err != nil {
+		t.Fatalf("link advisor class: %v", err)
+	}
 }
 
 // submitDraft 由学生创建并提交一份申请，返回申请 ID。

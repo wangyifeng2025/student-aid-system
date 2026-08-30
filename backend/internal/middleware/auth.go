@@ -48,6 +48,7 @@ func JWTAuth(mgr *jwt.Manager) gin.HandlerFunc {
 // LoadCurrentUser 在 JWT 校验后加载完整用户实体与 RBAC Actor。
 func LoadCurrentUser(db *gorm.DB) gin.HandlerFunc {
 	repo := repository.NewUserRepository(db)
+	advisorRepo := repository.NewAdvisorRepository(db)
 	return func(c *gin.Context) {
 		uid := CurrentUserID(c)
 		if uid == 0 {
@@ -71,6 +72,15 @@ func LoadCurrentUser(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		actor := rbac.NewActor(user)
+		if actor.Role == model.RoleClassAdvisor {
+			ids, err := advisorRepo.ListClassIDsByUserID(user.ID)
+			if err != nil {
+				response.ServerError(c, "加载用户信息失败")
+				c.Abort()
+				return
+			}
+			actor.ClassIDs = ids
+		}
 		c.Set(CtxCurrentUser, user)
 		c.Set(CtxActor, actor)
 		c.Set(CtxDataScope, string(actor.Scope()))

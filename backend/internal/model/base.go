@@ -22,6 +22,8 @@ func AllModels() []any {
 		&Major{},
 		&Grade{},
 		&Class{},
+		&Advisor{},
+		&AdvisorClass{},
 		&Student{},
 		&SpecialGroup{},
 		&RecognitionApplication{},

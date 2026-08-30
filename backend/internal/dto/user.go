@@ -16,7 +16,6 @@ type UserCreateRequest struct {
 	Role     string `json:"role" binding:"required"`
 	Phone    string `json:"phone"`
 	DeptID   *uint  `json:"dept_id"`
-	ClassID  *uint  `json:"class_id"`
 	Status   *int   `json:"status"` // 1 启用 0 禁用，缺省为启用
 }
 
@@ -26,7 +25,6 @@ type UserUpdateRequest struct {
 	Role     string `json:"role" binding:"required"`
 	Phone    string `json:"phone"`
 	DeptID   *uint  `json:"dept_id"`
-	ClassID  *uint  `json:"class_id"`
 	Status   *int   `json:"status"`
 }
 
@@ -43,7 +41,7 @@ type UserResponse struct {
 	Role      model.Role `json:"role"`
 	Phone     string     `json:"phone"`
 	DeptID    *uint      `json:"dept_id"`
-	ClassID   *uint      `json:"class_id"`
+	ClassIDs  []uint     `json:"class_ids,omitempty"` // 班主任所管班级（只读，来自名册）
 	Status    int        `json:"status"`
 	CreatedAt time.Time  `json:"created_at"`
 }
@@ -56,7 +54,6 @@ func ToUserResponse(u *model.User) UserResponse {
 		Role:      u.Role,
 		Phone:     u.Phone,
 		DeptID:    u.DeptID,
-		ClassID:   u.ClassID,
 		Status:    u.Status,
 		CreatedAt: u.CreatedAt,
 	}

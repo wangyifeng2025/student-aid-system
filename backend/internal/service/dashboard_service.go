@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
@@ -112,8 +113,8 @@ func (s *DashboardService) applyAffiliation(actor rbac.Actor, out *dto.Dashboard
 	if actor.DeptID != nil {
 		deptID = *actor.DeptID
 	}
-	if actor.ClassID != nil {
-		classID = *actor.ClassID
+	if ids := actor.ManagedClassIDs(); len(ids) == 1 {
+		classID = ids[0]
 	}
 	if actor.Role == model.RoleStudent {
 		stu, err := s.stuRepo.FindByUserID(actor.UserID)
@@ -122,7 +123,7 @@ func (s *DashboardService) applyAffiliation(actor rbac.Actor, out *dto.Dashboard
 			classID = stu.ClassID
 		}
 	}
-	if deptID == 0 && classID == 0 {
+	if deptID == 0 && classID == 0 && len(actor.ManagedClassIDs()) == 0 {
 		return
 	}
 	deptNames, _, classNames, err := buildOrgNameMaps(s.orgRepo)
@@ -130,7 +131,17 @@ func (s *DashboardService) applyAffiliation(actor rbac.Actor, out *dto.Dashboard
 		return
 	}
 	out.DeptName = deptNames[deptID]
-	out.ClassName = classNames[classID]
+	if classID > 0 {
+		out.ClassName = classNames[classID]
+	} else if ids := actor.ManagedClassIDs(); len(ids) > 0 {
+		names := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if n := classNames[id]; n != "" {
+				names = append(names, n)
+			}
+		}
+		out.ClassName = strings.Join(names, "、")
+	}
 }
 
 func (s *DashboardService) fillStudent(

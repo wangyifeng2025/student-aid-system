@@ -173,7 +173,7 @@ func (s *StudentService) ExportList(f repository.StudentFilter) ([]model.Student
 
 // ensureUserForStudent 在事务中维护学生关联的登录账号：
 //   - 无关联账号：创建（用户名=学号，角色=student，初始密码=Stu+身份证后6位），返回初始密码
-//   - 已有关联账号：同步姓名/手机/院系/班级/用户名（学号变更时同步用户名），返回空密码
+//   - 已有关联账号：同步姓名/手机/院系/用户名（学号变更时同步用户名），返回空密码
 func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (string, error) {
 	if st.UserID != nil && *st.UserID > 0 {
 		// 更新已有账号
@@ -181,7 +181,6 @@ func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (s
 			"real_name": st.Name,
 			"phone":     st.Phone,
 			"dept_id":   st.DeptID,
-			"class_id":  st.ClassID,
 			"username":  st.StudentNo,
 		}
 		if err := tx.Model(&model.User{}).Where("id = ?", *st.UserID).Updates(updates).Error; err != nil {
@@ -204,7 +203,6 @@ func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (s
 		return "", err
 	}
 	deptID := st.DeptID
-	classID := st.ClassID
 	u := &model.User{
 		Username:     st.StudentNo,
 		PasswordHash: hash,
@@ -212,7 +210,6 @@ func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (s
 		Role:         model.RoleStudent,
 		Phone:        st.Phone,
 		DeptID:       &deptID,
-		ClassID:      &classID,
 		Status:       1,
 	}
 	if err := tx.Create(u).Error; err != nil {

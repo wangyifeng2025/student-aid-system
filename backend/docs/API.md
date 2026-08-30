@@ -41,7 +41,7 @@
 | 角色 `role` | 说明 | 数据范围 `data_scope` |
 |------|------|------|
 | `student` | 学生 | `self` 本人 |
-| `classadvisor` | 班主任/辅导员 | `class` 本班 |
+| `classadvisor` | 班主任/辅导员 | `class` 所管班级（`advisor_classes`） |
 | `department` | 教学系经办人 | `department` 本系 |
 | `aidcenter` | 资助中心 | `school` 全校 |
 | `admin` | 系统管理员 | `school` 全校 |
@@ -147,7 +147,7 @@
 
 - `permissions`：供前端控制菜单/按钮可见性。各角色权限：
   - `student`：`recognition:own`, `grant:own`
-  - `classadvisor`：`review:class`, `student:view_class`
+  - `classadvisor`：`review:class`, `student:view_class`；`user.class_ids` 为名册中所管班级
   - `department`：`review:department`, `student:view_dept`
   - `aidcenter`：`review:college`, `student:view_school`, `import:export`, `publicity:manage`
   - `admin`：`admin:all`, `user:manage`, `auth:reset_password`
@@ -531,7 +531,7 @@
 | `departments` | 院系名称、院系编码 |
 | `majors` | 院系编码、专业名称、专业编码 |
 | `grades` | 年级名称、入学年份 |
-| `classes` | 院系编码、专业编码、入学年份、班级名称、班主任用户名 |
+| `classes` | 院系编码、专业编码、入学年份、班级名称、教工号（须已在班主任信息中存在） |
 
 - 上传方式：`multipart/form-data`，文件字段名 `file`。
 - 组织机构导入使用**编码/名称**关联（无需记 ID），便于与导出文件往返编辑；建议按 **院系 → 专业 → 年级 → 班级** 顺序导入。
@@ -740,10 +740,10 @@
 **创建请求体** `POST /users`
 ```json
 { "username": "20230001", "password": "abc12345", "real_name": "王老师",
-  "role": "classadvisor", "phone": "13800000000", "dept_id": 1, "class_id": 2, "status": 1 }
+  "role": "classadvisor", "phone": "13800000000", "dept_id": 1, "status": 1 }
 ```
 - `role`：`student` / `classadvisor` / `department` / `aidcenter` / `admin`。
-- `dept_id` / `class_id`：审核角色的数据范围——班主任绑定 `class_id`（+`dept_id`），教学系绑定 `dept_id`；其余角色可省略或传 `null`。
+- `dept_id`：教学系必填（本系范围）；班主任可填所属院系。班主任可审核的班级**不在用户上设置**，由班主任名册 / 班级导入的教工号写入 `advisor_classes`；列表响应对班主任返回只读 `class_ids`。
 - `status`：`1` 启用（默认）/ `0` 禁用。被禁用的账号无法登录。
 
 **修改请求体** `PUT /users/:id`：同上但**不含** `username` / `password`。

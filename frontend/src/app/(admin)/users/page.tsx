@@ -26,10 +26,8 @@ const DEFAULT_PAGE_SIZE = 20;
 
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [Role, string][];
 
-// 需要关联院系的角色（学生/班主任/教学系）。
+// 需要关联院系的角色（学生/班主任/教学系）。班主任班级范围来自名册，不在此编辑。
 const NEEDS_DEPT: Role[] = ["student", "classadvisor", "department"];
-// 需要关联班级的角色（学生/班主任）。
-const NEEDS_CLASS: Role[] = ["student", "classadvisor"];
 
 interface FormState {
   username: string;
@@ -38,7 +36,6 @@ interface FormState {
   role: Role;
   phone: string;
   dept_id: string;
-  class_id: string;
   status: number;
 }
 
@@ -49,7 +46,6 @@ const emptyForm: FormState = {
   role: "student",
   phone: "",
   dept_id: "",
-  class_id: "",
   status: 1,
 };
 
@@ -156,7 +152,6 @@ export default function UsersPage() {
       role: u.role,
       phone: u.phone ?? "",
       dept_id: u.dept_id ? String(u.dept_id) : "",
-      class_id: u.class_id ? String(u.class_id) : "",
       status: u.status,
     });
     setFormOpen(true);
@@ -179,9 +174,7 @@ export default function UsersPage() {
     }
 
     const needsDept = NEEDS_DEPT.includes(form.role);
-    const needsClass = NEEDS_CLASS.includes(form.role);
     const deptId = needsDept && form.dept_id ? Number(form.dept_id) : null;
-    const classId = needsClass && form.class_id ? Number(form.class_id) : null;
 
     setSubmitting(true);
     try {
@@ -191,7 +184,6 @@ export default function UsersPage() {
           role: form.role,
           phone: form.phone.trim() || undefined,
           dept_id: deptId,
-          class_id: classId,
           status: form.status,
         };
         await userApi.update(editing.id, body);
@@ -204,7 +196,6 @@ export default function UsersPage() {
           role: form.role,
           phone: form.phone.trim() || undefined,
           dept_id: deptId,
-          class_id: classId,
           status: form.status,
         };
         await userApi.create(body);
@@ -254,9 +245,15 @@ export default function UsersPage() {
   };
 
   const scopeText = (u: User) => {
-    if (NEEDS_CLASS.includes(u.role)) {
-      const parts = [deptName(u.dept_id), className(u.class_id)].filter(Boolean);
+    if (u.role === "classadvisor") {
+      const names = (u.class_ids ?? [])
+        .map((id) => className(id))
+        .filter(Boolean);
+      const parts = [deptName(u.dept_id), names.length ? names.join("、") : ""].filter(Boolean);
       return parts.length ? parts.join(" / ") : "—";
+    }
+    if (u.role === "student") {
+      return deptName(u.dept_id) || "—";
     }
     if (NEEDS_DEPT.includes(u.role)) {
       return deptName(u.dept_id) || "—";
@@ -338,7 +335,6 @@ export default function UsersPage() {
   ];
 
   const showDept = NEEDS_DEPT.includes(form.role);
-  const showClass = NEEDS_CLASS.includes(form.role);
 
   return (
     <div>
@@ -537,32 +533,16 @@ export default function UsersPage() {
               </Select>
             </div>
           )}
-
-          {showClass && (
-            <div>
-              <Label htmlFor="u-class">所属班级（数据范围）</Label>
-              <Select
-                id="u-class"
-                value={form.class_id}
-                onChange={(e) => patch({ class_id: e.target.value })}
-                className="w-full"
-              >
-                <option value="">未设置</option>
-                {classes
-                  .filter((c) => !form.dept_id || c.dept_id === Number(form.dept_id))
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </Select>
-            </div>
-          )}
         </div>
 
-        {(showDept || showClass) && (
+        {form.role === "classadvisor" && (
           <p className="mt-3 text-xs text-ink-mute">
-            学生与班主任关联到院系/班级，教学系关联到院系，资助中心/管理员默认全校。
+            班主任可审核的班级由「班主任信息」或班级导入中的教工号决定，不在用户管理中设置。
+          </p>
+        )}
+        {showDept && form.role !== "classadvisor" && (
+          <p className="mt-3 text-xs text-ink-mute">
+            学生学籍班级在学生信息中维护；教学系关联到院系，资助中心/管理员默认全校。
           </p>
         )}
       </Modal>

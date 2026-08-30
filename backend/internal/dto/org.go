@@ -57,17 +57,21 @@ type ClassRequest struct {
 	MajorID   uint   `json:"major_id"`
 	GradeID   uint   `json:"grade_id"`
 	Name      string `json:"name" binding:"required"`
-	AdvisorID *uint  `json:"advisor_id"`
+	StaffNo   string `json:"staff_no"`
+	AdvisorID *uint  `json:"advisor_id"` // 兼容旧字段：登录用户 ID，优先使用 staff_no
 }
 
 // ClassResponse 班级响应。
 type ClassResponse struct {
-	ID        uint   `json:"id"`
-	DeptID    uint   `json:"dept_id"`
-	MajorID   uint   `json:"major_id"`
-	GradeID   uint   `json:"grade_id"`
-	Name      string `json:"name"`
-	AdvisorID *uint  `json:"advisor_id"`
+	ID           uint   `json:"id"`
+	DeptID       uint   `json:"dept_id"`
+	MajorID      uint   `json:"major_id"`
+	GradeID      uint   `json:"grade_id"`
+	Name         string `json:"name"`
+	AdvisorID    *uint  `json:"advisor_id"`
+	StaffNo      string `json:"staff_no"`
+	AdvisorName  string `json:"advisor_name"`
+	AdvisorPhone string `json:"advisor_phone"`
 }
 
 // ===== 转换器 =====
@@ -109,7 +113,11 @@ func ToGradeResponses(items []model.Grade) []GradeResponse {
 }
 
 func ToClassResponse(c *model.Class) ClassResponse {
-	return ClassResponse{
+	return ToClassResponseWithAdvisor(c, nil)
+}
+
+func ToClassResponseWithAdvisor(c *model.Class, a *model.Advisor) ClassResponse {
+	resp := ClassResponse{
 		ID:        c.ID,
 		DeptID:    c.DeptID,
 		MajorID:   c.MajorID,
@@ -117,6 +125,12 @@ func ToClassResponse(c *model.Class) ClassResponse {
 		Name:      c.Name,
 		AdvisorID: c.AdvisorID,
 	}
+	if a != nil {
+		resp.StaffNo = a.StaffNo
+		resp.AdvisorName = a.Name
+		resp.AdvisorPhone = a.Phone
+	}
+	return resp
 }
 
 func ToClassResponses(items []model.Class) []ClassResponse {

@@ -220,8 +220,8 @@ func (s *RecognitionSummaryExportService) headerClassName(actor rbac.Actor, filt
 	if filterClassID > 0 {
 		return classNames[filterClassID]
 	}
-	if actor.ClassID != nil && *actor.ClassID > 0 {
-		return classNames[*actor.ClassID]
+	if ids := actor.ManagedClassIDs(); len(ids) == 1 {
+		return classNames[ids[0]]
 	}
 	return uniqueRowField(rows, func(r recognitionSummaryRow) string { return r.ClassName })
 }

@@ -129,6 +129,7 @@ export function canAccessPath(role: Role | undefined, pathname: string): boolean
   if (path.startsWith("/base-data")) return isAdmin(role);
   if (path.startsWith("/students")) return isAdmin(role);
   if (path.startsWith("/special-groups")) return isAdmin(role);
+  if (path.startsWith("/advisors")) return isAdmin(role);
   if (path.startsWith("/users")) return isAdmin(role);
 
   return false;

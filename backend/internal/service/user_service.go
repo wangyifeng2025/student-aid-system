@@ -13,11 +13,15 @@ import (
 
 // UserService 用户管理业务逻辑（模块 10，仅管理员）。
 type UserService struct {
-	repo *repository.UserRepository
+	repo     *repository.UserRepository
+	advisors *repository.AdvisorRepository
 }
 
 func NewUserService(db *gorm.DB) *UserService {
-	return &UserService{repo: repository.NewUserRepository(db)}
+	return &UserService{
+		repo:     repository.NewUserRepository(db),
+		advisors: repository.NewAdvisorRepository(db),
+	}
 }
 
 // List 分页列出用户。
@@ -26,8 +30,12 @@ func (s *UserService) List(f repository.UserFilter) (*dto.PageResult[dto.UserRes
 	if err != nil {
 		return nil, err
 	}
+	out := dto.ToUserResponses(items)
+	if err := s.attachClassIDs(out); err != nil {
+		return nil, err
+	}
 	return &dto.PageResult[dto.UserResponse]{
-		Items:    dto.ToUserResponses(items),
+		Items:    out,
 		Total:    total,
 		Page:     f.Page,
 		PageSize: f.PageSize,
@@ -43,8 +51,7 @@ func (s *UserService) Get(id uint) (*dto.UserResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp := dto.ToUserResponse(u)
-	return &resp, nil
+	return s.toResponse(u)
 }
 
 // Create 新建用户。
@@ -70,7 +77,6 @@ func (s *UserService) Create(req *dto.UserCreateRequest) (*dto.UserResponse, err
 		Role:     req.Role,
 		Phone:    req.Phone,
 		DeptID:   req.DeptID,
-		ClassID:  req.ClassID,
 		Status:   req.Status,
 	}); err != nil {
 		return nil, err
@@ -87,8 +93,7 @@ func (s *UserService) Create(req *dto.UserCreateRequest) (*dto.UserResponse, err
 	if err := s.repo.Create(u); err != nil {
 		return nil, err
 	}
-	resp := dto.ToUserResponse(u)
-	return &resp, nil
+	return s.toResponse(u)
 }
 
 // Update 修改用户（不含用户名与密码）。
@@ -130,7 +135,6 @@ func (s *UserService) Update(actorID, id uint, req *dto.UserUpdateRequest) (*dto
 		Role:     req.Role,
 		Phone:    req.Phone,
 		DeptID:   req.DeptID,
-		ClassID:  req.ClassID,
 		Status:   req.Status,
 	}); err != nil {
 		return nil, err
@@ -138,8 +142,7 @@ func (s *UserService) Update(actorID, id uint, req *dto.UserUpdateRequest) (*dto
 	if err := s.repo.Save(u); err != nil {
 		return nil, err
 	}
-	resp := dto.ToUserResponse(u)
-	return &resp, nil
+	return s.toResponse(u)
 }
 
 // Delete 删除用户（禁止删除自己与最后一名管理员）。
@@ -190,7 +193,6 @@ type commonUserInput struct {
 	Role     string
 	Phone    string
 	DeptID   *uint
-	ClassID  *uint
 	Status   *int
 }
 
@@ -212,16 +214,11 @@ func (s *UserService) applyCommon(u *model.User, in commonUserInput) error {
 	if err != nil {
 		return err
 	}
-	classID, err := s.normalizeClass(in.ClassID)
-	if err != nil {
-		return err
-	}
 
 	u.RealName = realName
 	u.Role = model.Role(in.Role)
 	u.Phone = phone
 	u.DeptID = deptID
-	u.ClassID = classID
 	if in.Status != nil {
 		if *in.Status != 0 && *in.Status != 1 {
 			return NewValidationError("状态取值无效（0 禁用 / 1 启用）")
@@ -246,17 +243,29 @@ func (s *UserService) normalizeDept(id *uint) (*uint, error) {
 	return id, nil
 }
 
-// normalizeClass 校验班级存在性；空或 0 视为不设置（返回 nil）。
-func (s *UserService) normalizeClass(id *uint) (*uint, error) {
-	if id == nil || *id == 0 {
-		return nil, nil
-	}
-	ok, err := s.repo.ClassExists(*id)
-	if err != nil {
+func (s *UserService) toResponse(u *model.User) (*dto.UserResponse, error) {
+	out := []dto.UserResponse{dto.ToUserResponse(u)}
+	if err := s.attachClassIDs(out); err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, NewValidationError("所属班级不存在")
+	return &out[0], nil
+}
+
+func (s *UserService) attachClassIDs(items []dto.UserResponse) error {
+	ids := make([]uint, 0, len(items))
+	for i := range items {
+		if items[i].Role == model.RoleClassAdvisor {
+			ids = append(ids, items[i].ID)
+		}
 	}
-	return id, nil
+	m, err := s.advisors.ListClassIDsByUserIDs(ids)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if cs := m[items[i].ID]; len(cs) > 0 {
+			items[i].ClassIDs = cs
+		}
+	}
+	return nil
 }

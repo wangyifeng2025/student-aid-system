@@ -33,19 +33,23 @@ func DataScopeForRole(role model.Role) DataScope {
 
 // Actor 当前操作者上下文（用于数据范围过滤）。
 type Actor struct {
-	UserID  uint
-	Role    model.Role
-	DeptID  *uint
-	ClassID *uint
+	UserID   uint
+	Role     model.Role
+	DeptID   *uint
+	ClassIDs []uint // 班主任数据范围，来自 advisor_classes；空则不可见任何班级
 }
 
-// NewActor 从 User 构建 Actor。
+// ManagedClassIDs 班主任数据范围内的班级。
+func (a Actor) ManagedClassIDs() []uint {
+	return a.ClassIDs
+}
+
+// NewActor 从 User 构建 Actor（班主任班级范围须由调用方从名册填入 ClassIDs）。
 func NewActor(u *model.User) Actor {
 	return Actor{
-		UserID:  u.ID,
-		Role:    u.Role,
-		DeptID:  u.DeptID,
-		ClassID: u.ClassID,
+		UserID: u.ID,
+		Role:   u.Role,
+		DeptID: u.DeptID,
 	}
 }
 
@@ -65,10 +69,12 @@ func (a Actor) CanAccessStudent(targetUserID uint, targetClassID, targetDeptID u
 		}
 		return targetDeptID == *a.DeptID
 	case ScopeClass:
-		if a.ClassID == nil {
-			return false
+		for _, id := range a.ManagedClassIDs() {
+			if targetClassID == id {
+				return true
+			}
 		}
-		return targetClassID == *a.ClassID
+		return false
 	case ScopeSelf:
 		return targetUserID == a.UserID
 	default:
@@ -89,10 +95,11 @@ func ApplyStudentScope(actor Actor) func(db *gorm.DB) *gorm.DB {
 			}
 			return db.Where("1 = 0")
 		case ScopeClass:
-			if actor.ClassID != nil {
-				return db.Where("class_id = ?", *actor.ClassID)
+			ids := actor.ManagedClassIDs()
+			if len(ids) == 0 {
+				return db.Where("1 = 0")
 			}
-			return db.Where("1 = 0")
+			return db.Where("class_id IN ?", ids)
 		case ScopeSelf:
 			return db.Where("user_id = ?", actor.UserID)
 		default:

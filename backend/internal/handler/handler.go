@@ -27,6 +27,7 @@ type Handler struct {
 	GrantReview        *service.GrantReviewService
 	GrantPDF           *service.GrantPDFService
 	User               *service.UserService
+	Advisor            *service.AdvisorService
 	RegionCode         *service.RegionCodeService
 	Dashboard          *service.DashboardService
 }
@@ -51,6 +52,7 @@ func New(db *gorm.DB, cfg *config.Config, jwtMgr *jwt.Manager) *Handler {
 		GrantReview:        service.NewGrantReviewService(db),
 		GrantPDF:           service.NewGrantPDFService(db, cfg),
 		User:               service.NewUserService(db),
+		Advisor:            service.NewAdvisorService(db),
 		RegionCode:         service.NewRegionCodeService(db),
 		Dashboard:          service.NewDashboardService(db),
 	}

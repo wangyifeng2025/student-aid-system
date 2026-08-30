@@ -24,14 +24,16 @@ var (
 
 // AuthService 认证业务逻辑。
 type AuthService struct {
-	users *repository.UserRepository
-	jwt   *jwt.Manager
+	users    *repository.UserRepository
+	advisors *repository.AdvisorRepository
+	jwt      *jwt.Manager
 }
 
 func NewAuthService(db *gorm.DB, jwtMgr *jwt.Manager) *AuthService {
 	return &AuthService{
-		users: repository.NewUserRepository(db),
-		jwt:   jwtMgr,
+		users:    repository.NewUserRepository(db),
+		advisors: repository.NewAdvisorRepository(db),
+		jwt:      jwtMgr,
 	}
 }
 
@@ -148,7 +150,7 @@ func (s *AuthService) GetMe(userID uint) (*dto.MeResponse, error) {
 	}
 	actor := rbac.NewActor(user)
 	return &dto.MeResponse{
-		UserBrief:   dto.ToUserBrief(user),
+		UserBrief:   dto.ToUserBrief(user, s.classIDsFor(user)),
 		DataScope:   string(actor.Scope()),
 		Permissions: permissionsForRole(user.Role),
 	}, nil
@@ -163,8 +165,19 @@ func (s *AuthService) buildTokenResponse(user *model.User) (*dto.TokenResponse, 
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
 		ExpiresIn:    pair.ExpiresIn,
-		User:         dto.ToUserBrief(user),
+		User:         dto.ToUserBrief(user, s.classIDsFor(user)),
 	}, nil
+}
+
+func (s *AuthService) classIDsFor(u *model.User) []uint {
+	if u == nil || u.Role != model.RoleClassAdvisor {
+		return nil
+	}
+	ids, err := s.advisors.ListClassIDsByUserID(u.ID)
+	if err != nil {
+		return nil
+	}
+	return ids
 }
 
 // permissionsForRole 返回角色对应的权限标识列表（供前端菜单/按钮控制）。

@@ -70,6 +70,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 
 			// 模块 10：用户管理 — 仅管理员。
 			registerUserRoutes(adminOnly, h)
+			registerAdvisorRoutes(adminOnly, h)
 
 			// 模块 4：困难认定申请。所有登录角色可访问，
 			// 具体读写权限由 service 按角色 + 数据范围（本人/本班/本系/全校）控制。
@@ -263,10 +264,23 @@ func registerImportRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		imp.POST("/majors", h.ImportMajors)
 		imp.POST("/grades", h.ImportGrades)
 		imp.POST("/classes", h.ImportClasses)
+		imp.POST("/advisors", h.ImportAdvisors)
 	}
 	exp := g.Group("/export")
 	{
 		exp.GET("/students", h.ExportStudents)
+		exp.GET("/advisors", h.ExportAdvisors)
 		exp.GET("/:type", h.ExportOrg)
+	}
+}
+
+func registerAdvisorRoutes(g *gin.RouterGroup, h *handler.Handler) {
+	advisors := g.Group("/advisors")
+	{
+		advisors.GET("", h.ListAdvisors)
+		advisors.POST("", h.CreateAdvisor)
+		advisors.GET("/:id", h.GetAdvisor)
+		advisors.PUT("/:id", h.UpdateAdvisor)
+		advisors.DELETE("/:id", h.DeleteAdvisor)
 	}
 }

@@ -47,7 +47,7 @@ type UserBrief struct {
 	RealName string     `json:"real_name"`
 	Role     model.Role `json:"role"`
 	DeptID   *uint      `json:"dept_id,omitempty"`
-	ClassID  *uint      `json:"class_id,omitempty"`
+	ClassIDs []uint     `json:"class_ids,omitempty"` // 班主任所管班级，来自名册
 	Phone    string     `json:"phone,omitempty"`
 }
 
@@ -58,15 +58,15 @@ type MeResponse struct {
 	Permissions []string  `json:"permissions"`
 }
 
-// ToUserBrief 从 model.User 转换。
-func ToUserBrief(u *model.User) UserBrief {
+// ToUserBrief 从 model.User 转换；classIDs 为班主任名下班级（可空）。
+func ToUserBrief(u *model.User, classIDs []uint) UserBrief {
 	return UserBrief{
 		ID:       u.ID,
 		Username: u.Username,
 		RealName: u.RealName,
 		Role:     u.Role,
 		DeptID:   u.DeptID,
-		ClassID:  u.ClassID,
+		ClassIDs: classIDs,
 		Phone:    u.Phone,
 	}
 }
