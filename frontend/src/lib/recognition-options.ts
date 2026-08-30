@@ -140,6 +140,19 @@ export function statusMeta(status: ApplicationStatus): {
   return STATUS_META[status] ?? { label: status, tone: "neutral" };
 }
 
+/** 学生名册：认定进度（空=该学年未提交）。 */
+export function rosterRecognitionMeta(status?: string): { label: string; tone: Tone } {
+  if (!status) return { label: "未提交", tone: "neutral" };
+  return statusMeta(status as ApplicationStatus);
+}
+
+/** 学生名册：助学金进度（空=该学年未申请）。 */
+export function rosterGrantMeta(status?: string): { label: string; tone: Tone } {
+  if (!status) return { label: "未申请", tone: "neutral" };
+  if (status === "approved") return { label: "已通过", tone: "success" };
+  return statusMeta(status as ApplicationStatus);
+}
+
 // 困难等级徽章色调。
 export function difficultyTone(v: DifficultyLevel | string): Tone {
   switch (v) {

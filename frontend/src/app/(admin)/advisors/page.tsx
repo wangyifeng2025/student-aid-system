@@ -249,7 +249,7 @@ export default function AdvisorsPage() {
               onDone={load}
               entityLabel="班主任"
               canWrite={canWrite}
-              hint={`确定删除选中的 ${selected.size} 位班主任吗？将同时删除其登录账号。`}
+              hint={`确定删除选中的 ${selected.size} 位班主任吗？将彻底删除其登录账号；已有评审记录的无法删除，将自动跳过。`}
             />
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload size={16} />
@@ -375,7 +375,7 @@ export default function AdvisorsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="删除班主任"
-        description={deleteTarget ? `确定删除「${deleteTarget.name}」？将同时删除其登录账号。` : ""}
+        description={deleteTarget ? `确定删除「${deleteTarget.name}」？将彻底删除其登录账号；已有评审记录则无法删除。` : ""}
         confirmLabel="删除"
         loading={deleting}
         onConfirm={handleDelete}
@@ -386,7 +386,7 @@ export default function AdvisorsPage() {
         open={importOpen}
         kind="advisors"
         title="导入班主任"
-        hint="模板列为：系部、教工号*、姓名*、电话、班级名称、专业、年级。请先维护班主任再导入班级；此处班级名称须已存在，可留空。教工号全校唯一，并作为登录用户名。"
+        hint="模板列为：系部、教工号*、姓名*、电话、班级名称、专业、年级。教工号为登录用户名。每次导入会把登录密码重置为 Adv＋手机号后 6 位（A 大写，如 19908596061 → Adv596061）；电话不足 6 位则为 Adv123456。"
         onClose={() => setImportOpen(false)}
         onImported={() => {
           void classApi.list().then(setClasses).catch(() => undefined);

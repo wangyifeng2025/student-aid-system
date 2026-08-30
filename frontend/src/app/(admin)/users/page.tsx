@@ -227,14 +227,18 @@ export default function UsersPage() {
 
   const handleReset = async () => {
     if (!resetTarget) return;
-    if (!newPassword.trim()) {
+    if (!newPassword.trim() && resetTarget.role !== "classadvisor") {
       toast.error("请输入新密码");
       return;
     }
     setResetting(true);
     try {
-      await userApi.resetPassword(resetTarget.id, { new_password: newPassword });
-      toast.success(`已重置 ${resetTarget.real_name || resetTarget.username} 的密码`);
+      await userApi.resetPassword(resetTarget.id, { new_password: newPassword.trim() });
+      toast.success(
+        resetTarget.role === "classadvisor" && !newPassword.trim()
+          ? `已将 ${resetTarget.real_name || resetTarget.username} 的密码重置为 Adv＋手机后 6 位`
+          : `已重置 ${resetTarget.real_name || resetTarget.username} 的密码`,
+      );
       setResetTarget(null);
       setNewPassword("");
     } catch (e) {
@@ -565,6 +569,9 @@ export default function UsersPage() {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-ink-soft">
             为用户「{resetTarget?.real_name || resetTarget?.username}」设置新密码，用户下次可用新密码登录。
+            {resetTarget?.role === "classadvisor"
+              ? " 班主任可留空，按规则重置为 Adv＋手机号后 6 位（A 大写）。"
+              : ""}
           </p>
           <div>
             <Label htmlFor="u-newpass">新密码</Label>
@@ -572,7 +579,11 @@ export default function UsersPage() {
               id="u-newpass"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="≥6 位，含字母和数字"
+              placeholder={
+                resetTarget?.role === "classadvisor"
+                  ? "留空则 Adv＋手机后6位，如 Adv596061"
+                  : "≥6 位，含字母和数字"
+              }
             />
           </div>
         </div>

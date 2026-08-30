@@ -441,6 +441,8 @@ export const studentApi = {
         class_id: filter?.class_id,
         keyword: filter?.keyword,
         is_key_group: filter?.is_key_group,
+        year: filter?.year,
+        recognition_status: filter?.recognition_status,
       })}`,
     ),
   /** 学生本人获取关联学籍档案 */

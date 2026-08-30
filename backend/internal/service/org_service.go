@@ -295,7 +295,7 @@ func (s *OrgService) DeleteClass(id uint) error {
 		return err
 	}
 	if students > 0 {
-		return ErrInUse
+		return CannotDelete("该班级下仍有学生，无法删除")
 	}
 	if err := s.advisors.UnlinkClass(id); err != nil {
 		return err
@@ -528,8 +528,13 @@ func (s *OrgService) UpsertClass(in *ClassImportInput) error {
 		req.GradeID = grade.ID
 	}
 
-	existing, err := s.repo.FindClassByDeptAndName(dept.ID, name)
+	existing, err := s.repo.FindClassByDeptAndNameUnscoped(dept.ID, name)
 	if err == nil {
+		if existing.DeletedAt.Valid {
+			if rerr := s.repo.RestoreClass(existing); rerr != nil {
+				return rerr
+			}
+		}
 		_, err = s.UpdateClass(existing.ID, req)
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
+	"github.com/wangyifeng2025/student-aid-system/internal/rbac"
 	"github.com/wangyifeng2025/student-aid-system/internal/repository"
 	"github.com/wangyifeng2025/student-aid-system/pkg/password"
 	"github.com/wangyifeng2025/student-aid-system/pkg/validate"
@@ -15,7 +16,7 @@ import (
 // StudentService 学生信息业务逻辑（含重点人群自动匹配）。
 // 新增/导入学生时会自动创建登录账号（用户名=学号，角色=student，初始密码=Stu+身份证后6位），
 // 并将 student.user_id 关联到该账号；更新时同步账号姓名/手机/院系/班级/用户名；
-// 删除时一并清理登录账号，认定与助学金申报记录保留备查。
+// 无认定/助学金申报时物理删除学籍与登录账号；已有申报则拒绝删除。
 type StudentService struct {
 	db       *gorm.DB
 	repo     *repository.StudentRepository
@@ -34,20 +35,26 @@ func NewStudentService(db *gorm.DB) *StudentService {
 	}
 }
 
-func (s *StudentService) List(f repository.StudentFilter) (*dto.PageResult[dto.StudentResponse], error) {
-	items, total, err := s.repo.ListStudents(f)
+func (s *StudentService) List(f repository.StudentFilter, actor rbac.Actor) (*dto.PageResult[dto.StudentResponse], error) {
+	year := progressYear(f.Year)
+	f.Year = year
+	items, total, err := s.repo.ListStudents(f, actor)
 	if err != nil {
 		return nil, err
 	}
+	resps := dto.ToStudentResponses(items)
+	if err := s.attachProgress(resps, items, year, actor.Role != model.RoleAdmin); err != nil {
+		return nil, err
+	}
 	return &dto.PageResult[dto.StudentResponse]{
-		Items:    dto.ToStudentResponses(items),
+		Items:    resps,
 		Total:    total,
 		Page:     f.Page,
 		PageSize: f.PageSize,
 	}, nil
 }
 
-func (s *StudentService) Get(id uint) (*dto.StudentResponse, error) {
+func (s *StudentService) Get(id uint, actor rbac.Actor, year int) (*dto.StudentResponse, error) {
 	st, err := s.repo.FindStudent(id)
 	if repository.IsNotFound(err) {
 		return nil, ErrNotFound
@@ -55,9 +62,20 @@ func (s *StudentService) Get(id uint) (*dto.StudentResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	var targetUserID uint
+	if st.UserID != nil {
+		targetUserID = *st.UserID
+	}
+	if !actor.CanAccessStudent(targetUserID, st.ClassID, st.DeptID) {
+		return nil, ErrForbidden
+	}
 	resp := dto.ToStudentResponse(st)
 	s.attachOrgNames(&resp, st)
-	return &resp, nil
+	resps := []dto.StudentResponse{resp}
+	if err := s.attachProgress(resps, []model.Student{*st}, progressYear(year), actor.Role != model.RoleAdmin); err != nil {
+		return nil, err
+	}
+	return &resps[0], nil
 }
 
 // GetByUserID 学生本人按登录用户 ID 获取档案。
@@ -81,8 +99,89 @@ func (s *StudentService) attachOrgNames(resp *dto.StudentResponse, st *model.Stu
 	resp.DeptName, resp.ClassName = studentOrgNames(s.orgRepo, st)
 }
 
+func progressYear(year int) int {
+	if year > 0 {
+		return year
+	}
+	return time.Now().Year()
+}
+
+func maskIDCard(s string) string {
+	if s == "" {
+		return ""
+	}
+	if len(s) < 8 {
+		return "****"
+	}
+	return s[:4] + "**********" + s[len(s)-4:]
+}
+
+func pickGrant(grants []model.GrantApplication) *model.GrantApplication {
+	var fallback *model.GrantApplication
+	for i := range grants {
+		g := &grants[i]
+		if g.GrantType == model.GrantNationalAid {
+			return g
+		}
+		if fallback == nil {
+			fallback = g
+		}
+	}
+	return fallback
+}
+
+func (s *StudentService) attachProgress(resps []dto.StudentResponse, items []model.Student, year int, maskID bool) error {
+	if len(resps) == 0 || len(resps) != len(items) {
+		return nil
+	}
+	ids := make([]uint, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+	}
+	recs, err := s.repo.ListRecognitionsForYear(ids, year)
+	if err != nil {
+		return err
+	}
+	grants, err := s.repo.ListGrantsForYear(ids, year)
+	if err != nil {
+		return err
+	}
+	recByStu := make(map[uint]model.RecognitionApplication, len(recs))
+	for i := range recs {
+		recByStu[recs[i].StudentID] = recs[i]
+	}
+	grantsByStu := make(map[uint][]model.GrantApplication, len(grants))
+	for i := range grants {
+		sid := grants[i].StudentID
+		grantsByStu[sid] = append(grantsByStu[sid], grants[i])
+	}
+	for i := range resps {
+		resps[i].ProgressYear = year
+		if r, ok := recByStu[items[i].ID]; ok {
+			resps[i].RecognitionStatus = string(r.Status)
+			resps[i].RecognitionID = r.ID
+		}
+		if g := pickGrant(grantsByStu[items[i].ID]); g != nil {
+			resps[i].GrantStatus = string(g.Status)
+			resps[i].GrantID = g.ID
+		}
+		if maskID {
+			resps[i].IDCard = maskIDCard(resps[i].IDCard)
+		}
+	}
+	return nil
+}
+
 // Create 新增学生：在事务中创建登录账号与学生档案，返回带初始密码的响应。
 func (s *StudentService) Create(req *dto.StudentRequest) (*dto.StudentResponse, error) {
+	if existing, err := s.findExistingForWrite(req); err != nil {
+		return nil, err
+	} else if existing != nil && existing.DeletedAt.Valid {
+		if err := s.restoreStudent(existing); err != nil {
+			return nil, err
+		}
+		return s.Update(existing.ID, req)
+	}
 	st := &model.Student{}
 	if err := s.apply(st, req, 0); err != nil {
 		return nil, err
@@ -130,21 +229,24 @@ func (s *StudentService) Update(id uint, req *dto.StudentRequest) (*dto.StudentR
 	return &resp, nil
 }
 
-// Upsert 按学号增量导入：已存在则更新，否则新增。返回是否为新增。
+// Upsert 按学号/身份证增量导入（含软删复活）：已存在则更新，否则新增。
 func (s *StudentService) Upsert(req *dto.StudentRequest) (created bool, err error) {
-	existing, ferr := s.repo.FindByStudentNo(strings.TrimSpace(req.StudentNo))
-	if ferr == nil {
+	existing, ferr := s.findExistingForWrite(req)
+	if ferr != nil {
+		return false, ferr
+	}
+	if existing != nil {
+		if err := s.restoreStudent(existing); err != nil {
+			return false, err
+		}
 		_, uerr := s.Update(existing.ID, req)
 		return false, uerr
-	}
-	if !repository.IsNotFound(ferr) {
-		return false, ferr
 	}
 	_, cerr := s.Create(req)
 	return true, cerr
 }
 
-// Delete 删除学生：同时软删除关联登录账号，认定/助学金申报记录保留备查。
+// Delete 无申报时物理删除学生及登录账号；已有认定/助学金申报则拒绝。
 func (s *StudentService) Delete(id uint) error {
 	st, err := s.repo.FindStudent(id)
 	if err != nil {
@@ -153,50 +255,118 @@ func (s *StudentService) Delete(id uint) error {
 		}
 		return err
 	}
+	has, herr := s.repo.HasApplications(id)
+	if herr != nil {
+		return herr
+	}
+	if has {
+		return CannotDelete("该学生已有认定或助学金申报，无法删除")
+	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := repository.NewStudentRepository(tx).DeleteStudent(id); err != nil {
 			return err
 		}
 		if st.UserID != nil && *st.UserID > 0 {
-			return tx.Delete(&model.User{}, *st.UserID).Error
+			return tx.Unscoped().Delete(&model.User{}, *st.UserID).Error
 		}
 		return nil
 	})
 }
 
+func (s *StudentService) findExistingForWrite(req *dto.StudentRequest) (*model.Student, error) {
+	if req == nil {
+		return nil, nil
+	}
+	if no := strings.TrimSpace(req.StudentNo); no != "" {
+		st, err := s.repo.FindByStudentNoUnscoped(no)
+		if err == nil {
+			return st, nil
+		}
+		if !repository.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	if card := strings.ToUpper(strings.TrimSpace(req.IDCard)); card != "" {
+		st, err := s.repo.FindByIDCardUnscoped(card)
+		if err == nil {
+			return st, nil
+		}
+		if !repository.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func (s *StudentService) restoreStudent(st *model.Student) error {
+	if st == nil || !st.DeletedAt.Valid {
+		return nil
+	}
+	if err := s.repo.Restore(st); err != nil {
+		return err
+	}
+	if st.UserID == nil || *st.UserID == 0 {
+		return nil
+	}
+	found, err := s.userRepo.Restore(*st.UserID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		st.UserID = nil
+		return s.repo.SaveStudent(st)
+	}
+	return nil
+}
+
 // ExportList 导出用：按筛选条件返回全部学生（不分页）。
-func (s *StudentService) ExportList(f repository.StudentFilter) ([]model.Student, error) {
+func (s *StudentService) ExportList(f repository.StudentFilter, actor rbac.Actor) ([]model.Student, error) {
 	f.PageSize = 0
-	items, _, err := s.repo.ListStudents(f)
+	items, _, err := s.repo.ListStudents(f, actor)
 	return items, err
 }
 
 // ensureUserForStudent 在事务中维护学生关联的登录账号：
 //   - 无关联账号：创建（用户名=学号，角色=student，初始密码=Stu+身份证后6位），返回初始密码
 //   - 已有关联账号：同步姓名/手机/院系/用户名（学号变更时同步用户名），返回空密码
+//   - 学号对应用户已软删：复活并挂回
 func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (string, error) {
-	if st.UserID != nil && *st.UserID > 0 {
-		// 更新已有账号
-		updates := map[string]any{
-			"real_name": st.Name,
-			"phone":     st.Phone,
-			"dept_id":   st.DeptID,
-			"username":  st.StudentNo,
+	users := repository.NewUserRepository(tx)
+	if no := strings.TrimSpace(st.StudentNo); no != "" {
+		u, err := users.FindByUsernameUnscoped(no)
+		if err == nil {
+			if u.Role != model.RoleStudent {
+				return "", NewValidationError("登录账号「" + no + "」已存在，无法为学生自动创建账号")
+			}
+			if u.DeletedAt.Valid {
+				if _, rerr := users.Restore(u.ID); rerr != nil {
+					return "", rerr
+				}
+			}
+			st.UserID = &u.ID
+			return "", syncStudentUser(tx, u.ID, st)
 		}
-		if err := tx.Model(&model.User{}).Where("id = ?", *st.UserID).Updates(updates).Error; err != nil {
+		if !repository.IsNotFound(err) {
 			return "", err
 		}
-		return "", nil
 	}
 
-	// 创建新账号：学号作为用户名，须唯一
-	var count int64
-	if err := tx.Model(&model.User{}).Where("username = ?", st.StudentNo).Count(&count).Error; err != nil {
-		return "", err
+	if st.UserID != nil && *st.UserID > 0 {
+		u, err := users.FindByIDUnscoped(*st.UserID)
+		if err == nil {
+			if u.DeletedAt.Valid {
+				if _, rerr := users.Restore(u.ID); rerr != nil {
+					return "", rerr
+				}
+			}
+			return "", syncStudentUser(tx, u.ID, st)
+		}
+		if !repository.IsNotFound(err) {
+			return "", err
+		}
+		st.UserID = nil
 	}
-	if count > 0 {
-		return "", NewValidationError("登录账号「" + st.StudentNo + "」已存在，无法为学生自动创建账号")
-	}
+
 	pwd := defaultStudentPassword(st.IDCard)
 	hash, err := password.Hash(pwd)
 	if err != nil {
@@ -217,6 +387,17 @@ func (s *StudentService) ensureUserForStudent(tx *gorm.DB, st *model.Student) (s
 	}
 	st.UserID = &u.ID
 	return pwd, nil
+}
+
+func syncStudentUser(tx *gorm.DB, userID uint, st *model.Student) error {
+	updates := map[string]any{
+		"real_name": st.Name,
+		"phone":     st.Phone,
+		"dept_id":   st.DeptID,
+		"username":  st.StudentNo,
+		"role":      model.RoleStudent,
+	}
+	return tx.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error
 }
 
 // defaultStudentPassword 生成初始密码：Stu + 身份证后 6 位；长度不足时回退固定值。

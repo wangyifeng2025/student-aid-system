@@ -10,6 +10,18 @@ var (
 	ErrInvalidRef = errors.New("关联数据不存在")
 )
 
+type cannotDeleteError struct {
+	reason string
+}
+
+func (e *cannotDeleteError) Error() string { return e.reason }
+func (e *cannotDeleteError) Unwrap() error { return ErrInUse }
+
+// CannotDelete 返回带原因的删除冲突（仍映射为 409）。
+func CannotDelete(reason string) error {
+	return &cannotDeleteError{reason: reason}
+}
+
 // ValidationError 字段校验错误，携带可直接展示给用户的中文信息（映射为 400）。
 type ValidationError struct {
 	Msg string

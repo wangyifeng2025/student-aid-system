@@ -170,15 +170,24 @@ func (s *UserService) Delete(actorID, id uint) error {
 }
 
 // ResetPassword 管理员重置指定用户密码。
+// 班主任且新密码为空时，重置为 Adv+手机号后 6 位。
 func (s *UserService) ResetPassword(id uint, newPassword string) error {
-	if err := password.Validate(newPassword); err != nil {
-		return NewValidationError(err.Error())
-	}
-	if _, err := s.repo.FindByID(id); err != nil {
+	u, err := s.repo.FindByID(id)
+	if err != nil {
 		if repository.IsNotFound(err) {
 			return ErrNotFound
 		}
 		return err
+	}
+	newPassword = strings.TrimSpace(newPassword)
+	if newPassword == "" {
+		if u.Role != model.RoleClassAdvisor {
+			return NewValidationError("请填写新密码")
+		}
+		newPassword = advisorInitialPassword(u.Phone)
+	}
+	if err := password.Validate(newPassword); err != nil {
+		return NewValidationError(err.Error())
 	}
 	hash, err := password.Hash(newPassword)
 	if err != nil {

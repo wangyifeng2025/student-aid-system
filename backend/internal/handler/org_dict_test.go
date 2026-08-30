@@ -101,9 +101,13 @@ func setupOrgDictRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	writeRegs.PUT("/:code", h.UpdateRegionCode)
 	writeRegs.DELETE("/:code", h.DeleteRegionCode)
 
+	roster := []model.Role{model.RoleClassAdvisor, model.RoleDepartment, model.RoleAidCenter, model.RoleAdmin}
+	studentsRead := secured.Group("/students")
+	studentsRead.Use(middleware.RequireRoles(roster...))
+	studentsRead.GET("", h.ListStudents)
+	studentsRead.GET("/:id", h.GetStudent)
+
 	students := admin.Group("/students")
-	students.GET("", h.ListStudents)
-	students.GET("/:id", h.GetStudent)
 	students.POST("", h.CreateStudent)
 	students.PUT("/:id", h.UpdateStudent)
 	students.DELETE("/:id", h.DeleteStudent)
@@ -465,6 +469,26 @@ func TestOrgImportExport(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("same advisor should manage 2 classes after second import, got %d", n)
+	}
+
+	if err := db.Delete(&cls).Error; err != nil {
+		t.Fatalf("soft-delete class: %v", err)
+	}
+	xlsx = buildXLSX(t, [][]any{
+		{"院系编码", "专业编码", "入学年份", "班级名称", "教工号"},
+		{deptCode, majorCode, year, className, staffNo},
+	})
+	w = uploadXLSX(t, r, "/api/v1/import/classes", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reimport deleted class status %d, body %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &impResp)
+	if impResp.Data.Failed != 0 || impResp.Data.Success != 1 {
+		t.Fatalf("reimport deleted class result: %+v", impResp.Data)
+	}
+	var restored model.Class
+	if err := db.First(&restored, cls.ID).Error; err != nil {
+		t.Fatalf("class should be restored: %v", err)
 	}
 
 	xlsx = buildXLSX(t, [][]any{

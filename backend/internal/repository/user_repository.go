@@ -24,6 +24,14 @@ func (r *UserRepository) FindByID(id uint) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *UserRepository) FindByIDUnscoped(id uint) (*model.User, error) {
+	var user model.User
+	if err := r.db.Unscoped().First(&user, id).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 // FindNamesByIDs 批量按 ID 返回用户姓名映射（评审记录展示评审人姓名）。
 func (r *UserRepository) FindNamesByIDs(ids []uint) (map[uint]string, error) {
 	out := make(map[uint]string, len(ids))
@@ -64,6 +72,14 @@ func (r *UserRepository) FindUsernamesByIDs(ids []uint) (map[uint]string, error)
 func (r *UserRepository) FindByUsername(username string) (*model.User, error) {
 	var user model.User
 	if err := r.db.Where("username = ?", username).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepository) FindByUsernameUnscoped(username string) (*model.User, error) {
+	var user model.User
+	if err := r.db.Unscoped().Where("username = ?", username).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -151,9 +167,28 @@ func (r *UserRepository) Save(user *model.User) error {
 	return r.db.Save(user).Error
 }
 
-// Delete 软删除用户。
+// Delete 软删除用户（用户管理）。
 func (r *UserRepository) Delete(id uint) error {
 	return deleteByID(r.db, &model.User{}, id)
+}
+
+// Restore 恢复软删除用户；记录不存在返回 found=false。
+func (r *UserRepository) Restore(id uint) (found bool, err error) {
+	if id == 0 {
+		return false, nil
+	}
+	var u model.User
+	if err := r.db.Unscoped().First(&u, id).Error; err != nil {
+		if IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !u.DeletedAt.Valid {
+		return true, nil
+	}
+	u.DeletedAt = gorm.DeletedAt{}
+	return true, r.db.Unscoped().Save(&u).Error
 }
 
 // CountByRole 统计某角色的启用用户数（用于保护最后一名管理员）。

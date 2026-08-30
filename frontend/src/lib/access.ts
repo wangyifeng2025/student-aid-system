@@ -3,6 +3,7 @@ import {
   FileText,
   ClipboardCheck,
   Wallet,
+  GraduationCap,
 } from "lucide-react";
 import type { Role } from "@/types/auth";
 import type { NavItem } from "@/lib/nav";
@@ -74,6 +75,13 @@ export function getNavForRole(role?: Role): NavItem[] {
       },
       {
         type: "leaf",
+        key: "students",
+        label: "学生信息",
+        href: "/students",
+        icon: GraduationCap,
+      },
+      {
+        type: "leaf",
         key: "review",
         label: "困难认定审核",
         href: "/reviews",
@@ -125,9 +133,9 @@ export function canAccessPath(role: Role | undefined, pathname: string): boolean
     return isReviewer(role) || isAdmin(role);
   }
 
-  // 基础数据、学生管理：页面入口仅管理员（API 读取已对其他角色开放）。
+  // 基础数据与账号管理仅管理员；学生名册对评审角色只读开放。
   if (path.startsWith("/base-data")) return isAdmin(role);
-  if (path.startsWith("/students")) return isAdmin(role);
+  if (path.startsWith("/students")) return isAdmin(role) || isReviewer(role);
   if (path.startsWith("/special-groups")) return isAdmin(role);
   if (path.startsWith("/advisors")) return isAdmin(role);
   if (path.startsWith("/users")) return isAdmin(role);

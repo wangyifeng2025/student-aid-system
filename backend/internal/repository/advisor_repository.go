@@ -78,6 +78,39 @@ func (r *AdvisorRepository) FindByStaffNo(staffNo string, excludeID uint) (*mode
 	return &a, nil
 }
 
+func (r *AdvisorRepository) FindByStaffNoUnscoped(staffNo string) (*model.Advisor, error) {
+	var a model.Advisor
+	if err := r.db.Unscoped().Where("staff_no = ?", staffNo).First(&a).Error; err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func (r *AdvisorRepository) Restore(a *model.Advisor) error {
+	if a == nil || a.ID == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	a.DeletedAt = gorm.DeletedAt{}
+	return r.db.Unscoped().Save(a).Error
+}
+
+func (r *AdvisorRepository) ReviewerHasRecords(userID uint) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	var n int64
+	if err := r.db.Model(&model.ReviewRecord{}).Where("reviewer_id = ?", userID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	if err := r.db.Model(&model.GrantReviewRecord{}).Where("reviewer_id = ?", userID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func (r *AdvisorRepository) StaffNoExists(staffNo string, excludeID uint) (bool, error) {
 	var count int64
 	q := r.db.Model(&model.Advisor{}).Where("staff_no = ?", staffNo)
@@ -112,9 +145,9 @@ func (r *AdvisorRepository) Delete(a *model.Advisor) error {
 				return err
 			}
 			var u model.User
-			if err := tx.First(&u, uid).Error; err == nil {
+			if err := tx.Unscoped().First(&u, uid).Error; err == nil {
 				if u.Role == model.RoleClassAdvisor {
-					if err := tx.Delete(&model.User{}, uid).Error; err != nil {
+					if err := tx.Unscoped().Delete(&model.User{}, uid).Error; err != nil {
 						return err
 					}
 				}
@@ -122,7 +155,7 @@ func (r *AdvisorRepository) Delete(a *model.Advisor) error {
 				return err
 			}
 		}
-		return deleteByID(tx, &model.Advisor{}, a.ID)
+		return hardDeleteByID(tx, &model.Advisor{}, a.ID)
 	})
 }
 

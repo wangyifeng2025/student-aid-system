@@ -127,6 +127,10 @@ func (h *Handler) ExportOrg(c *gin.Context) {
 
 // ExportStudents 导出学生信息 Excel（支持与列表相同的筛选条件，不分页）。
 func (h *Handler) ExportStudents(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
 	f := repository.StudentFilter{
 		DeptID:     parseUintQuery(c, "dept_id"),
 		MajorID:    parseUintQuery(c, "major_id"),
@@ -134,7 +138,7 @@ func (h *Handler) ExportStudents(c *gin.Context) {
 		Keyword:    c.Query("keyword"),
 		IsKeyGroup: parseBoolQuery(c, "is_key_group"),
 	}
-	data, filename, err := h.Import.ExportStudents(f)
+	data, filename, err := h.Import.ExportStudents(f, actor)
 	if err != nil {
 		mapCommonError(c, err)
 		return

@@ -57,6 +57,13 @@ type StudentResponse struct {
 	IsKeyGroup      bool   `json:"is_key_group"`
 	// InitialPassword 仅在新建学生时返回，用于提示管理员初始密码；其余场景为空。
 	InitialPassword string `json:"initial_password,omitempty"`
+
+	// 指定学年的申报进度（列表/详情按 year 查询参数，默认当年）。
+	ProgressYear       int    `json:"progress_year"`
+	RecognitionStatus  string `json:"recognition_status"`
+	RecognitionID      uint   `json:"recognition_id,omitempty"`
+	GrantStatus        string `json:"grant_status"`
+	GrantID            uint   `json:"grant_id,omitempty"`
 }
 
 func fmtDate(t *time.Time) string {

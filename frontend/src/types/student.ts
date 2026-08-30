@@ -30,6 +30,12 @@ export interface Student {
   is_key_group: boolean;
   // 仅新建时返回，用于提示初始密码；其余场景为空
   initial_password?: string;
+  // 指定学年的申报进度（空串表示该学年尚未提交）
+  progress_year?: number;
+  recognition_status?: string;
+  recognition_id?: number;
+  grant_status?: string;
+  grant_id?: number;
 }
 
 export interface StudentInput {
@@ -55,6 +61,8 @@ export interface StudentFilter {
   class_id?: number;
   keyword?: string;
   is_key_group?: boolean;
+  year?: number;
+  recognition_status?: string;
 }
 
 // ===== 重点人群 SpecialGroup =====

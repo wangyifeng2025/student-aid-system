@@ -62,6 +62,25 @@ func (s *AdvisorService) Get(id uint) (*dto.AdvisorResponse, error) {
 }
 
 func (s *AdvisorService) Create(req *dto.AdvisorRequest) (*dto.AdvisorResponse, error) {
+	if req != nil {
+		if existing, err := s.repo.FindByStaffNoUnscoped(strings.TrimSpace(req.StaffNo)); err == nil && existing.DeletedAt.Valid {
+			if err := s.restoreAdvisor(existing); err != nil {
+				return nil, err
+			}
+			resp, uerr := s.Update(existing.ID, req)
+			if uerr != nil {
+				return nil, uerr
+			}
+			if saved, ferr := s.repo.FindByID(existing.ID); ferr == nil {
+				if pwd, perr := s.applyInitialLoginPassword(saved); perr == nil {
+					resp.InitialPassword = pwd
+				}
+			}
+			return resp, nil
+		} else if err != nil && !repository.IsNotFound(err) {
+			return nil, err
+		}
+	}
 	a := &model.Advisor{}
 	if err := s.applyFields(a, req); err != nil {
 		return nil, err
@@ -120,6 +139,15 @@ func (s *AdvisorService) Delete(id uint) error {
 	}
 	if err != nil {
 		return err
+	}
+	if a.UserID != nil && *a.UserID > 0 {
+		has, herr := s.repo.ReviewerHasRecords(*a.UserID)
+		if herr != nil {
+			return herr
+		}
+		if has {
+			return CannotDelete("该班主任已有评审记录，无法删除")
+		}
 	}
 	return s.repo.Delete(a)
 }
@@ -243,21 +271,11 @@ func (s *AdvisorService) BindClass(a *model.Advisor, classID uint) error {
 
 // ensureLoginUser 保证班主任有 classadvisor 登录账号（班级范围以名册为准，不写 users.class_id）。
 func (s *AdvisorService) ensureLoginUser(a *model.Advisor, classIDs []uint) (string, error) {
-	if a.UserID != nil && *a.UserID > 0 {
-		u, err := s.user.FindByID(*a.UserID)
-		if err == nil {
-			if err := s.syncLinkedUser(u, a); err != nil {
-				return "", err
-			}
-			s.syncClassAdvisorIDs(u.ID, classIDs)
-			return "", nil
-		}
-		if !repository.IsNotFound(err) {
-			return "", err
-		}
+	u, err := s.resolveAdvisorLoginUser(a)
+	if err != nil {
+		return "", err
 	}
-
-	if u, err := s.findExistingAdvisorUser(a); err == nil && u != nil {
+	if u != nil {
 		if err := s.syncLinkedUser(u, a); err != nil {
 			return "", err
 		}
@@ -271,20 +289,13 @@ func (s *AdvisorService) ensureLoginUser(a *model.Advisor, classIDs []uint) (str
 	}
 
 	username := advisorUsername(a)
-	exists, err := s.user.ExistsByUsername(username)
-	if err != nil {
-		return "", err
-	}
-	if exists {
-		return "", NewValidationError("教工号已被其他账号使用")
-	}
 	plain := advisorInitialPassword(a.Phone)
 	hash, err := password.Hash(plain)
 	if err != nil {
 		return "", err
 	}
 	dept := a.DeptID
-	u := &model.User{
+	created := &model.User{
 		Username:     username,
 		PasswordHash: hash,
 		RealName:     a.Name,
@@ -293,26 +304,74 @@ func (s *AdvisorService) ensureLoginUser(a *model.Advisor, classIDs []uint) (str
 		DeptID:       &dept,
 		Status:       1,
 	}
-	if err := s.user.Create(u); err != nil {
+	if err := s.user.Create(created); err != nil {
 		return "", err
 	}
-	uid := u.ID
+	uid := created.ID
 	a.UserID = &uid
 	if err := s.repo.Save(a); err != nil {
 		return "", err
 	}
-	s.syncClassAdvisorIDs(u.ID, classIDs)
+	s.syncClassAdvisorIDs(created.ID, classIDs)
 	return plain, nil
+}
+
+func (s *AdvisorService) resolveAdvisorLoginUser(a *model.Advisor) (*model.User, error) {
+	if a.StaffNo != "" {
+		u, err := s.restoreAdvisorUserByUsername(a.StaffNo)
+		if err != nil || u != nil {
+			return u, err
+		}
+	}
+	if a.UserID != nil && *a.UserID > 0 {
+		u, err := s.user.FindByIDUnscoped(*a.UserID)
+		if err == nil {
+			if u.DeletedAt.Valid {
+				if _, rerr := s.user.Restore(u.ID); rerr != nil {
+					return nil, rerr
+				}
+				u.DeletedAt = gorm.DeletedAt{}
+			}
+			return u, nil
+		}
+		if !repository.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	if a.Phone != "" && a.Phone != a.StaffNo {
+		return s.restoreAdvisorUserByUsername(a.Phone)
+	}
+	return nil, nil
+}
+
+func (s *AdvisorService) restoreAdvisorUserByUsername(username string) (*model.User, error) {
+	u, err := s.user.FindByUsernameUnscoped(username)
+	if repository.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if u.Role != model.RoleClassAdvisor {
+		return nil, NewValidationError("教工号已被其他账号使用")
+	}
+	if u.DeletedAt.Valid {
+		if _, err := s.user.Restore(u.ID); err != nil {
+			return nil, err
+		}
+		u.DeletedAt = gorm.DeletedAt{}
+	}
+	return u, nil
 }
 
 func (s *AdvisorService) syncLinkedUser(u *model.User, a *model.Advisor) error {
 	if a.StaffNo != "" && u.Username != a.StaffNo {
-		taken, err := s.user.UsernameExists(a.StaffNo, u.ID)
-		if err != nil {
-			return err
-		}
-		if taken {
+		taken, err := s.user.FindByUsernameUnscoped(a.StaffNo)
+		if err == nil && taken.ID != u.ID {
 			return NewValidationError("教工号已被其他账号使用")
+		}
+		if err != nil && !repository.IsNotFound(err) {
+			return err
 		}
 		u.Username = a.StaffNo
 	}
@@ -322,24 +381,6 @@ func (s *AdvisorService) syncLinkedUser(u *model.User, a *model.Advisor) error {
 	u.DeptID = &dept
 	u.Role = model.RoleClassAdvisor
 	return s.user.Save(u)
-}
-
-func (s *AdvisorService) findExistingAdvisorUser(a *model.Advisor) (*model.User, error) {
-	if a.StaffNo != "" {
-		if u, err := s.user.FindByUsername(a.StaffNo); err == nil && u.Role == model.RoleClassAdvisor {
-			return u, nil
-		} else if err != nil && !repository.IsNotFound(err) {
-			return nil, err
-		}
-	}
-	if a.Phone != "" {
-		if u, err := s.user.FindByUsername(a.Phone); err == nil && u.Role == model.RoleClassAdvisor {
-			return u, nil
-		} else if err != nil && !repository.IsNotFound(err) {
-			return nil, err
-		}
-	}
-	return nil, gorm.ErrRecordNotFound
 }
 
 func (s *AdvisorService) syncClassAdvisorIDs(userID uint, classIDs []uint) {
@@ -436,16 +477,36 @@ func advisorUsername(a *model.Advisor) string {
 }
 
 func advisorInitialPassword(phone string) string {
-	digits := ""
-	for _, r := range phone {
-		if r >= '0' && r <= '9' {
-			digits += string(r)
-		}
-	}
+	digits := digitsOnly(phone)
 	if len(digits) >= 6 {
 		return "Adv" + digits[len(digits)-6:]
 	}
-	return "adv123456"
+	return "Adv123456"
+}
+
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func (s *AdvisorService) applyInitialLoginPassword(a *model.Advisor) (string, error) {
+	if a == nil || a.UserID == nil || *a.UserID == 0 {
+		return "", nil
+	}
+	plain := advisorInitialPassword(a.Phone)
+	hash, err := password.Hash(plain)
+	if err != nil {
+		return "", err
+	}
+	if err := s.user.UpdatePassword(*a.UserID, hash); err != nil {
+		return "", err
+	}
+	return plain, nil
 }
 
 func uniqUints(ids []uint) []uint {
@@ -502,17 +563,54 @@ func (s *AdvisorService) UpsertImported(deptID uint, staffNo, name, phone string
 	if staffNo == "" {
 		return NewValidationError("教工号不能为空")
 	}
-	existing, err := s.repo.FindByStaffNo(staffNo, 0)
+	existing, err := s.repo.FindByStaffNoUnscoped(staffNo)
 	if err != nil && !repository.IsNotFound(err) {
 		return err
 	}
 	req := &dto.AdvisorRequest{DeptID: deptID, StaffNo: staffNo, Name: name, Phone: phone, ClassIDs: classIDs}
+	var id uint
 	if existing != nil {
+		if err := s.restoreAdvisor(existing); err != nil {
+			return err
+		}
 		old, _ := s.repo.ListClassIDs(existing.ID)
 		req.ClassIDs = uniqUints(append(old, classIDs...))
-		_, err = s.Update(existing.ID, req)
+		if _, err = s.Update(existing.ID, req); err != nil {
+			return err
+		}
+		id = existing.ID
+	} else {
+		created, cerr := s.Create(req)
+		if cerr != nil {
+			return cerr
+		}
+		id = created.ID
+	}
+	saved, err := s.repo.FindByID(id)
+	if err != nil {
 		return err
 	}
-	_, err = s.Create(req)
+	_, err = s.applyInitialLoginPassword(saved)
 	return err
+}
+
+func (s *AdvisorService) restoreAdvisor(a *model.Advisor) error {
+	if a == nil || !a.DeletedAt.Valid {
+		return nil
+	}
+	if err := s.repo.Restore(a); err != nil {
+		return err
+	}
+	if a.UserID == nil || *a.UserID == 0 {
+		return nil
+	}
+	found, err := s.user.Restore(*a.UserID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		a.UserID = nil
+		return s.repo.Save(a)
+	}
+	return nil
 }

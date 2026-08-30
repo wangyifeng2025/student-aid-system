@@ -54,6 +54,7 @@ func setupAdvisorRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	adminOnly.GET("/advisors/:id", h.GetAdvisor)
 	adminOnly.PUT("/advisors/:id", h.UpdateAdvisor)
 	adminOnly.DELETE("/advisors/:id", h.DeleteAdvisor)
+	adminOnly.POST("/import/advisors", h.ImportAdvisors)
 	return r, db
 }
 
@@ -154,10 +155,174 @@ func TestAdvisorCRUDMultiClass(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete advisor %d, body %s", w.Code, w.Body.String())
 	}
+	if err := db.Unscoped().First(&model.Advisor{}, created.Data.ID).Error; err != gorm.ErrRecordNotFound {
+		t.Fatalf("advisor should be hard-deleted, err=%v", err)
+	}
 	if created.Data.UserID != nil {
 		var u model.User
-		if err := db.First(&u, *created.Data.UserID).Error; err != gorm.ErrRecordNotFound {
-			t.Fatalf("linked user should be deleted, err=%v id=%d", err, *created.Data.UserID)
+		if err := db.Unscoped().First(&u, *created.Data.UserID).Error; err != gorm.ErrRecordNotFound {
+			t.Fatalf("linked user should be hard-deleted, err=%v id=%d", err, *created.Data.UserID)
 		}
+	}
+}
+
+func TestAdvisorDeleteBlockedByReviews(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, class := seedStudentOrgRefs(t, db)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	staffNo := fmt.Sprintf("R%s", suffix)
+	phone := fmt.Sprintf("138%08d", time.Now().UnixNano()%100000000)
+	w := doJSON(t, r, http.MethodPost, "/api/v1/advisors", token, dto.AdvisorRequest{
+		DeptID:   dept.ID,
+		StaffNo:  staffNo,
+		Name:     "有评审班主任",
+		Phone:    phone,
+		ClassIDs: []uint{class.ID},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create advisor %d, body %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		Data dto.AdvisorResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Data.UserID == nil {
+		t.Fatal("expected login user")
+	}
+	stu := model.Student{DeptID: dept.ID, ClassID: class.ID, StudentNo: "ST" + suffix, Name: "占位", Gender: "男", IDCard: uniqueValidIDCard()}
+	if err := db.Create(&stu).Error; err != nil {
+		t.Fatalf("create student: %v", err)
+	}
+	rec := model.RecognitionApplication{StudentID: stu.ID, Year: 2098, Status: model.StatusPendingClass}
+	if err := db.Create(&rec).Error; err != nil {
+		t.Fatalf("create recognition: %v", err)
+	}
+	review := model.ReviewRecord{ApplicationID: rec.ID, ReviewerID: *created.Data.UserID, Action: model.ActionPass}
+	if err := db.Create(&review).Error; err != nil {
+		t.Fatalf("create review: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Unscoped().Where("id = ?", review.ID).Delete(&model.ReviewRecord{})
+		db.Unscoped().Where("id = ?", rec.ID).Delete(&model.RecognitionApplication{})
+		db.Unscoped().Where("id = ?", stu.ID).Delete(&model.Student{})
+		db.Where("advisor_id = ?", created.Data.ID).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("id = ?", created.Data.ID).Delete(&model.Advisor{})
+		db.Unscoped().Where("id = ?", *created.Data.UserID).Delete(&model.User{})
+	})
+
+	w = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/v1/advisors/%d", created.Data.ID), token, nil)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("delete with reviews expect 409, got %d body %s", w.Code, w.Body.String())
+	}
+	if err := db.First(&model.Advisor{}, created.Data.ID).Error; err != nil {
+		t.Fatalf("advisor should remain: %v", err)
+	}
+}
+
+func TestImportAdvisorsRestoresDeleted(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, _ := seedStudentOrgRefs(t, db)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	staffNo := fmt.Sprintf("I%s", suffix)
+	adv := model.Advisor{DeptID: dept.ID, StaffNo: staffNo, Name: "旧班主任", Phone: "13900002222"}
+	if err := db.Create(&adv).Error; err != nil {
+		t.Fatalf("create advisor: %v", err)
+	}
+	if err := db.Delete(&adv).Error; err != nil {
+		t.Fatalf("soft-delete advisor: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Where("advisor_id = ?", adv.ID).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("id = ?", adv.ID).Delete(&model.Advisor{})
+	})
+
+	xlsx := buildXLSX(t, [][]any{
+		{"系部", "教工号", "姓名", "电话", "班级名称", "专业", "年级"},
+		{dept.Name, staffNo, "复活班主任", "13900002222", "", "", ""},
+	})
+	w := uploadXLSX(t, r, "/api/v1/import/advisors", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import status %d, body %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data dto.ImportResult `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data.Failed != 0 || resp.Data.Success != 1 {
+		t.Fatalf("import should restore deleted advisor, got %+v", resp.Data)
+	}
+	var restored model.Advisor
+	if err := db.First(&restored, adv.ID).Error; err != nil {
+		t.Fatalf("advisor should be restored: %v", err)
+	}
+	if restored.Name != "复活班主任" {
+		t.Fatalf("restored name want 复活班主任, got %s", restored.Name)
+	}
+}
+
+func TestImportAdvisorsRestoresDeletedUsername(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, _ := seedStudentOrgRefs(t, db)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	staffNo := fmt.Sprintf("U%s", suffix)
+	u := model.User{
+		Username: staffNo, PasswordHash: "x", RealName: "旧登录",
+		Role: model.RoleClassAdvisor, Status: 1,
+	}
+	if err := db.Create(&u).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := db.Delete(&u).Error; err != nil {
+		t.Fatalf("soft-delete user: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Where("staff_no = ?", staffNo).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("staff_no = ?", staffNo).Delete(&model.Advisor{})
+		db.Unscoped().Where("id = ?", u.ID).Delete(&model.User{})
+	})
+
+	xlsx := buildXLSX(t, [][]any{
+		{"系部", "教工号", "姓名", "电话", "班级名称", "专业", "年级"},
+		{dept.Name, staffNo, "新导班主任", "13900003333", "", "", ""},
+	})
+	w := uploadXLSX(t, r, "/api/v1/import/advisors", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import status %d, body %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data dto.ImportResult `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Failed != 0 || resp.Data.Success != 1 {
+		t.Fatalf("import should restore deleted username, got %+v", resp.Data)
+	}
+	var live model.User
+	if err := db.Where("username = ?", staffNo).First(&live).Error; err != nil {
+		t.Fatalf("username should be restored: %v", err)
+	}
+	if live.ID != u.ID {
+		t.Fatalf("should reuse soft-deleted user %d, got %d", u.ID, live.ID)
+	}
+	if live.RealName != "新导班主任" {
+		t.Fatalf("restored user name want 新导班主任, got %s", live.RealName)
+	}
+	w = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "", dto.LoginRequest{
+		Username: staffNo, Password: "Adv003333",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login with initial password Adv003333 expect 200, got %d body %s", w.Code, w.Body.String())
 	}
 }

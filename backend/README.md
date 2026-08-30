@@ -95,11 +95,11 @@ curl http://localhost:8080/health
 | GET | `/api/v1/region-codes` `/lookup` `/:code` | 行政区划列表 / 身份证解析 / 详情 | 是（登录用户） |
 | POST/PUT/DELETE | `/api/v1/region-codes` | 增删改、导入 JSON / 内置数据 | 是（admin） |
 
-### 学生与重点人群 API（模块 3，全部仅 admin）
+### 学生与重点人群 API（模块 3）
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/api/v1/students` `/students/:id` | 学生列表（分页/筛选）/详情 | 是（admin） |
+| GET | `/api/v1/students` `/students/:id` | 学生名册（分页/筛选，含学年申报进度） | 是（班主任/系部/资助中心/admin，按数据范围） |
 | POST/PUT/DELETE | `/api/v1/students[/:id]` | 学生增删改 | 是（admin） |
 | GET | `/api/v1/special-groups` `/special-groups/:id` | 重点人群列表/详情 | 是（admin） |
 | POST/PUT/DELETE | `/api/v1/special-groups[/:id]` | 重点人群增删改 | 是（admin） |

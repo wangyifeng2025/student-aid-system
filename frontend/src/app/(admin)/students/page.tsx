@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Plus, Search, Upload, Download } from "lucide-react";
 import {
   studentApi,
@@ -30,13 +31,41 @@ import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { ImportDialog } from "@/components/student/import-dialog";
+import {
+  RECORDS_STATUS_OPTIONS,
+  rosterGrantMeta,
+  rosterRecognitionMeta,
+} from "@/lib/recognition-options";
 
 const DEFAULT_PAGE_SIZE = 20;
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
 type KeyFilter = "" | "true" | "false";
 
+function ProgressLink({
+  href,
+  status,
+  kind,
+}: {
+  href: string | null;
+  status?: string;
+  kind: "recognition" | "grant";
+}) {
+  const meta = kind === "recognition" ? rosterRecognitionMeta(status) : rosterGrantMeta(status);
+  const badge = <Badge tone={meta.tone}>{meta.label}</Badge>;
+  if (!href) return badge;
+  return (
+    <Link href={href} className="inline-flex hover:opacity-80" title="查看申请">
+      {badge}
+    </Link>
+  );
+}
+
 export default function StudentsPage() {
-  const canWrite = useAuthStore((s) => s.user?.role === "admin");
+  const user = useAuthStore((s) => s.user);
+  const canWrite = user?.role === "admin";
+  const role = user?.role;
 
   // 列表与分页
   const [list, setList] = React.useState<Student[]>([]);
@@ -52,6 +81,8 @@ export default function StudentsPage() {
   const [filterDept, setFilterDept] = React.useState("");
   const [filterClass, setFilterClass] = React.useState("");
   const [filterKey, setFilterKey] = React.useState<KeyFilter>("");
+  const [filterYear, setFilterYear] = React.useState(String(CURRENT_YEAR));
+  const [filterRecStatus, setFilterRecStatus] = React.useState("");
 
   // 基础数据（用于筛选与名称解析、表单联动）
   const [depts, setDepts] = React.useState<Department[]>([]);
@@ -136,6 +167,8 @@ export default function StudentsPage() {
         dept_id: filterDept ? Number(filterDept) : undefined,
         class_id: filterClass ? Number(filterClass) : undefined,
         is_key_group: filterKey === "" ? undefined : filterKey === "true",
+        year: filterYear ? Number(filterYear) : CURRENT_YEAR,
+        recognition_status: filterRecStatus || undefined,
       });
       setList(res.items);
       setTotal(res.total);
@@ -145,7 +178,7 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, keyword, filterDept, filterClass, filterKey, clearSelection]);
+  }, [page, pageSize, keyword, filterDept, filterClass, filterKey, filterYear, filterRecStatus, clearSelection]);
 
   React.useEffect(() => {
     void load();
@@ -171,9 +204,25 @@ export default function StudentsPage() {
   const formClasses = form.dept_id
     ? classes.filter((c) => c.dept_id === form.dept_id)
     : classes;
-  const filterClasses = filterDept
-    ? classes.filter((c) => c.dept_id === Number(filterDept))
-    : classes;
+  const scopedDepts = React.useMemo(() => {
+    if ((role === "classadvisor" || role === "department") && user?.dept_id) {
+      return depts.filter((d) => d.id === user.dept_id);
+    }
+    return depts;
+  }, [depts, role, user?.dept_id]);
+
+  const scopedClasses = React.useMemo(() => {
+    let list = classes;
+    if (role === "classadvisor" && user?.class_ids?.length) {
+      list = list.filter((c) => user.class_ids!.includes(c.id));
+    } else if (role === "department" && user?.dept_id) {
+      list = list.filter((c) => c.dept_id === user.dept_id);
+    }
+    if (filterDept) {
+      list = list.filter((c) => c.dept_id === Number(filterDept));
+    }
+    return list;
+  }, [classes, role, user?.class_ids, user?.dept_id, filterDept]);
 
   const openCreate = () => {
     setEditing(null);
@@ -311,12 +360,50 @@ export default function StudentsPage() {
         s.is_key_group ? <Badge tone="warning">重点</Badge> : <span className="text-ink-mute">否</span>,
     },
     {
-      header: "操作",
-      width: "120px",
+      header: "认定",
+      width: "128px",
       cell: (s) => (
-        <RowActions canWrite={canWrite} onEdit={() => openEdit(s)} onDelete={() => setDeleteTarget(s)} />
+        <ProgressLink
+          kind="recognition"
+          status={s.recognition_status}
+          href={
+            s.recognition_id
+              ? s.recognition_status === "draft"
+                ? `/recognitions/${s.recognition_id}`
+                : `/reviews/${s.recognition_id}`
+              : null
+          }
+        />
       ),
     },
+    {
+      header: "助学金",
+      width: "112px",
+      cell: (s) => (
+        <ProgressLink
+          kind="grant"
+          status={s.grant_status}
+          href={
+            s.grant_id
+              ? s.grant_status === "draft"
+                ? `/grants/${s.grant_id}`
+                : `/grant-reviews/${s.grant_id}`
+              : null
+          }
+        />
+      ),
+    },
+    ...(canWrite
+      ? [
+          {
+            header: "操作",
+            width: "120px",
+            cell: (s: Student) => (
+              <RowActions canWrite={canWrite} onEdit={() => openEdit(s)} onDelete={() => setDeleteTarget(s)} />
+            ),
+          } satisfies Column<Student>,
+        ]
+      : []),
   ];
 
   return (
@@ -342,7 +429,7 @@ export default function StudentsPage() {
             }}
           >
             <option value="">全部院系</option>
-            {depts.map((d) => (
+            {scopedDepts.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </Select>
@@ -354,9 +441,34 @@ export default function StudentsPage() {
             }}
           >
             <option value="">全部班级</option>
-            {filterClasses.map((c) => (
+            {scopedClasses.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
+          </Select>
+          <Select
+            value={filterYear}
+            onChange={(e) => {
+              setFilterYear(e.target.value);
+              resetToFirst();
+            }}
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>{y} 学年</option>
+            ))}
+          </Select>
+          <Select
+            value={filterRecStatus}
+            onChange={(e) => {
+              setFilterRecStatus(e.target.value);
+              resetToFirst();
+            }}
+          >
+            <option value="">认定：全部</option>
+            <option value="none">未提交</option>
+            {RECORDS_STATUS_OPTIONS.filter((o) => o.value !== "pending_final").map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+            <option value="draft">草稿</option>
           </Select>
           <Select
             value={filterKey}
@@ -381,7 +493,7 @@ export default function StudentsPage() {
               onDone={load}
               entityLabel="学生"
               canWrite={canWrite}
-              hint={`确定删除选中的 ${selected.size} 名学生吗？关联的登录账号将一并删除，认定与助学金申报记录会保留备查。`}
+              hint={`确定删除选中的 ${selected.size} 名学生吗？无申报的将彻底删除登录账号；已有认定或助学金申报的无法删除，将自动跳过。`}
             />
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
               <Download size={16} />
@@ -399,6 +511,12 @@ export default function StudentsPage() {
         )}
       </Toolbar>
 
+      {!canWrite && (
+        <p className="mb-3 text-xs text-ink-mute">
+          仅显示您数据范围内的学生。认定 / 助学金列为所选学年进度，未提交的学生也会列出。
+        </p>
+      )}
+
       <DataTable
         columns={columns}
         data={list}
@@ -406,7 +524,7 @@ export default function StudentsPage() {
         loading={loading}
         error={error}
         onRetry={load}
-        emptyLabel={keyword || filterDept || filterClass || filterKey ? "无匹配学生" : "暂无学生，可新增或导入名单"}
+        emptyLabel={keyword || filterDept || filterClass || filterKey || filterRecStatus ? "无匹配学生" : "暂无学生，可新增或导入名单"}
       />
 
       {!loading && !error && total > 0 && (
@@ -538,7 +656,7 @@ export default function StudentsPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除学生"
-        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？关联的登录账号将一并删除，认定与助学金申报记录会保留备查。`}
+        description={`确定删除学生「${deleteTarget?.name}（${deleteTarget?.student_no}）」吗？无申报时将彻底删除学籍和登录账号；已有认定或助学金申报则无法删除。`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

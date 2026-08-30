@@ -64,8 +64,8 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			registerDictRoutes(secured, adminOnly, h)
 			registerRegionCodeRoutes(secured, adminOnly, h)
 
-			// 模块 3：学生与重点人群 — 仍仅管理员。
-			registerStudentRoutes(adminOnly, h)
+			// 模块 3：学生名册读取按数据范围开放给评审角色；增删改与重点人群仍仅管理员。
+			registerStudentRoutes(secured, adminOnly, h)
 			registerImportRoutes(adminOnly, h)
 
 			// 模块 10：用户管理 — 仅管理员。
@@ -181,18 +181,29 @@ func registerRegionCodeRoutes(read, write *gin.RouterGroup, h *handler.Handler) 
 	}
 }
 
-// registerStudentRoutes 挂载学生与重点人群管理路由（仅管理员）。
-func registerStudentRoutes(g *gin.RouterGroup, h *handler.Handler) {
-	students := g.Group("/students")
+// registerStudentRoutes 挂载学生与重点人群路由。
+// 名册读取：班主任 / 系部 / 资助中心 / 管理员（列表按数据范围过滤）；写入与重点人群仅管理员。
+func registerStudentRoutes(read, write *gin.RouterGroup, h *handler.Handler) {
+	roster := []model.Role{
+		model.RoleClassAdvisor,
+		model.RoleDepartment,
+		model.RoleAidCenter,
+		model.RoleAdmin,
+	}
+	studentsRead := read.Group("/students")
+	studentsRead.Use(middleware.RequireRoles(roster...))
 	{
-		students.GET("", h.ListStudents)
-		students.GET("/:id", h.GetStudent)
-		students.POST("", h.CreateStudent)
-		students.PUT("/:id", h.UpdateStudent)
-		students.DELETE("/:id", h.DeleteStudent)
+		studentsRead.GET("", h.ListStudents)
+		studentsRead.GET("/:id", h.GetStudent)
+	}
+	studentsWrite := write.Group("/students")
+	{
+		studentsWrite.POST("", h.CreateStudent)
+		studentsWrite.PUT("/:id", h.UpdateStudent)
+		studentsWrite.DELETE("/:id", h.DeleteStudent)
 	}
 
-	sg := g.Group("/special-groups")
+	sg := write.Group("/special-groups")
 	{
 		sg.GET("", h.ListSpecialGroups)
 		sg.GET("/:id", h.GetSpecialGroup)

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
@@ -11,17 +13,23 @@ import (
 // ===== 学生 Student =====
 
 func (h *Handler) ListStudents(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
 	page, pageSize := parsePagination(c)
 	f := repository.StudentFilter{
-		DeptID:     parseUintQuery(c, "dept_id"),
-		MajorID:    parseUintQuery(c, "major_id"),
-		ClassID:    parseUintQuery(c, "class_id"),
-		Keyword:    c.Query("keyword"),
-		IsKeyGroup: parseBoolQuery(c, "is_key_group"),
-		Page:       page,
-		PageSize:   pageSize,
+		DeptID:            parseUintQuery(c, "dept_id"),
+		MajorID:           parseUintQuery(c, "major_id"),
+		ClassID:           parseUintQuery(c, "class_id"),
+		Keyword:           c.Query("keyword"),
+		IsKeyGroup:        parseBoolQuery(c, "is_key_group"),
+		Year:              parseIntQuery(c, "year"),
+		RecognitionStatus: strings.TrimSpace(c.Query("recognition_status")),
+		Page:              page,
+		PageSize:          pageSize,
 	}
-	res, err := h.Student.List(f)
+	res, err := h.Student.List(f, actor)
 	if err != nil {
 		mapCommonError(c, err)
 		return
@@ -30,11 +38,15 @@ func (h *Handler) ListStudents(c *gin.Context) {
 }
 
 func (h *Handler) GetStudent(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
 	id, ok := parseIDParam(c, "id")
 	if !ok {
 		return
 	}
-	res, err := h.Student.Get(id)
+	res, err := h.Student.Get(id, actor, parseIntQuery(c, "year"))
 	if err != nil {
 		mapCommonError(c, err)
 		return

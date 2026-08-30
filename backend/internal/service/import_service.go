@@ -10,6 +10,7 @@ import (
 
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
+	"github.com/wangyifeng2025/student-aid-system/internal/rbac"
 	"github.com/wangyifeng2025/student-aid-system/internal/repository"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
@@ -148,6 +149,21 @@ func cell(row []string, idx int) string {
 		return strings.TrimSpace(row[idx])
 	}
 	return ""
+}
+
+// normalizeExcelIdentifier 把教工号/电话从 Excel 数字或科学计数法还原为整数字符串。
+func normalizeExcelIdentifier(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	s = strings.TrimSuffix(s, ".0")
+	if strings.ContainsAny(s, "eE") {
+		if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
+			return strconv.FormatInt(int64(f+0.5), 10)
+		}
+	}
+	return s
 }
 
 // ImportStudents 导入录取/新生名单，按学号增量 upsert，逐行回显错误。
@@ -603,8 +619,8 @@ func (s *ImportService) Export(kind string) ([]byte, string, error) {
 
 // ExportStudents 导出学生信息（列与导入模板一致；支持列表同款筛选，不分页）。
 // 内部 code/ID 在导出时转换为中文名称（民族、政治面貌、院系、专业、班级）。
-func (s *ImportService) ExportStudents(f repository.StudentFilter) ([]byte, string, error) {
-	items, err := s.stu.ExportList(f)
+func (s *ImportService) ExportStudents(f repository.StudentFilter, actor rbac.Actor) ([]byte, string, error) {
+	items, err := s.stu.ExportList(f, actor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -774,9 +790,9 @@ func (s *ImportService) ImportAdvisors(r io.Reader) (*dto.ImportResult, error) {
 		result.Total++
 		excelRow := i + 1
 		deptKey := cell(row, 0)
-		staffNo := cell(row, 1)
+		staffNo := normalizeExcelIdentifier(cell(row, 1))
 		name := cell(row, 2)
-		phone := cell(row, 3)
+		phone := normalizeExcelIdentifier(cell(row, 3))
 		classRaw := cell(row, 4)
 		if staffNo == "" {
 			result.Fail(dto.ImportRowError{Row: excelRow, Column: "教工号", Message: "教工号不能为空"})

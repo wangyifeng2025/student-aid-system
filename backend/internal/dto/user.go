@@ -29,8 +29,9 @@ type UserUpdateRequest struct {
 }
 
 // ResetPasswordRequest 管理员重置指定用户密码（RESTful 形式）。
+// 班主任可将 new_password 留空，按 Adv+手机后 6 位重置。
 type ResetPasswordRequest struct {
-	NewPassword string `json:"new_password" binding:"required"`
+	NewPassword string `json:"new_password"`
 }
 
 // UserResponse 用户详情响应（用于管理列表/详情）。

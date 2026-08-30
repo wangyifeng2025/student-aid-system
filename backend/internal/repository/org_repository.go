@@ -34,6 +34,17 @@ func deleteByID(db *gorm.DB, dest any, id uint) error {
 	return nil
 }
 
+func hardDeleteByID(db *gorm.DB, dest any, id uint) error {
+	result := db.Unscoped().Delete(dest, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // ===== 院系 Department =====
 
 func (r *OrgRepository) ListDepartments() ([]model.Department, error) {
@@ -260,7 +271,7 @@ func (r *OrgRepository) SaveClass(c *model.Class) error {
 }
 
 func (r *OrgRepository) DeleteClass(id uint) error {
-	return deleteByID(r.db, &model.Class{}, id)
+	return hardDeleteByID(r.db, &model.Class{}, id)
 }
 
 // FindClassByDeptAndName 按院系 + 班级名称查找。
@@ -270,6 +281,30 @@ func (r *OrgRepository) FindClassByDeptAndName(deptID uint, name string) (*model
 		return nil, err
 	}
 	return &c, nil
+}
+
+// FindClassByDeptAndNameUnscoped 含软删除；优先返回未删除记录。
+func (r *OrgRepository) FindClassByDeptAndNameUnscoped(deptID uint, name string) (*model.Class, error) {
+	if c, err := r.FindClassByDeptAndName(deptID, name); err == nil {
+		return c, nil
+	} else if !IsNotFound(err) {
+		return nil, err
+	}
+	var c model.Class
+	if err := r.db.Unscoped().
+		Where("dept_id = ? AND name = ? AND deleted_at IS NOT NULL", deptID, name).
+		First(&c).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *OrgRepository) RestoreClass(c *model.Class) error {
+	if c == nil || c.ID == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	c.DeletedAt = gorm.DeletedAt{}
+	return r.db.Unscoped().Save(c).Error
 }
 
 func (r *OrgRepository) MajorExists(id uint) (bool, error) {

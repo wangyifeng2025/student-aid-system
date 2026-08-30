@@ -224,7 +224,7 @@
 
 ## 四、组织机构（模块 2）
 
-> 院系 / 专业 / 年级 / 班级。**读取**（GET）所有登录用户可用；**写入**（POST/PUT/DELETE）仅 `admin`。删除带关联保护：院系下有专业/班级、专业/年级下有班级、班级下有学生时返回 `409`。
+> 院系 / 专业 / 年级 / 班级。**读取**（GET）所有登录用户可用；**写入**（POST/PUT/DELETE）仅 `admin`。删除带关联保护：院系下有专业/班级、专业/年级下有班级、班级下有学生时返回 `409`。班级无学生时为物理删除。
 
 ### 院系 Department
 
@@ -434,20 +434,22 @@
 
 ## 六、学生与重点人群（模块 3）
 
-> 学生信息管理 + 重点保障人群名单 + Excel 导入。**全部接口仅 `admin`**。
+> 学生名册读取对班主任 / 系部管理员 / 资助中心 / 管理员开放（按数据范围：本班 / 本系 / 全校）；增删改、导入导出与重点人群仍仅 `admin`。
 > 录入/导入学生时会按 `student_no` 或 `id_card` 自动匹配重点人群名单，命中则将学生 `is_key_group` 置为 `true`；名单变更（增删改/导入）会同步重算被影响学生的标记。
 
 ### 学生 Student
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/students` | 分页列出学生，支持过滤 |
-| GET | `/api/v1/students/:id` | 学生详情 |
+| GET | `/api/v1/students` | 分页列出数据范围内的学生，含指定学年申报进度 |
+| GET | `/api/v1/students/:id` | 学生详情（须在数据范围内） |
 | POST | `/api/v1/students` | 新增（自动创建登录账号：用户名=学号，初始密码=Stu＋身份证后 6 位） |
 | PUT | `/api/v1/students/:id` | 修改（同步更新关联账号的姓名/手机/院系/班级/用户名） |
-| DELETE | `/api/v1/students/:id` | 删除（同时删除关联登录账号） |
+| DELETE | `/api/v1/students/:id` | 无认定/助学金申报时物理删除学籍与登录账号；已有申报返回 `409` |
 
-**列表查询参数**：`page`（默认 1）、`page_size`（默认 20，上限 100）、`dept_id`、`major_id`、`class_id`、`keyword`（姓名/学号/身份证模糊）、`is_key_group`（`true`/`false`）。
+**列表查询参数**：`page`（默认 1）、`page_size`（默认 20，上限 100）、`dept_id`、`major_id`、`class_id`、`keyword`（姓名/学号/身份证模糊）、`is_key_group`（`true`/`false`）、`year`（认定/助学金学年，默认当年）、`recognition_status`（空=不限；`none`=该学年未提交认定；其余为认定状态如 `pending_class`）。
+
+列表/详情会附带该学年进度：`progress_year`、`recognition_status` / `recognition_id`（空表示未提交）、`grant_status` / `grant_id`（空表示未申请；一年多笔助学金时优先国家助学金）。非管理员查看时身份证号脱敏。
 
 **列表成功响应 `data`**（分页结构，后续学生类列表统一此格式）
 ```json
@@ -513,12 +515,13 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/v1/import/template/:type` | 下载导入模板，返回 `.xlsx` 文件 |
-| POST | `/api/v1/import/students` | 上传 Excel 导入录取/新生名单（按学号增量 upsert） |
+| POST | `/api/v1/import/students` | 上传 Excel 导入录取/新生名单（按学号/身份证 upsert，含软删复活） |
 | POST | `/api/v1/import/special-groups` | 上传 Excel 导入重点人群名单（同身份+类型+年度幂等跳过） |
 | POST | `/api/v1/import/departments` | 上传 Excel 导入院系（按编码 upsert） |
 | POST | `/api/v1/import/majors` | 上传 Excel 导入专业（按院系编码 + 专业编码/名称 upsert） |
 | POST | `/api/v1/import/grades` | 上传 Excel 导入年级（按入学年份 upsert） |
-| POST | `/api/v1/import/classes` | 上传 Excel 导入班级（按院系编码 + 班级名称 upsert） |
+| POST | `/api/v1/import/classes` | 上传 Excel 导入班级（按院系编码 + 班级名称 upsert，含软删复活） |
+| POST | `/api/v1/import/advisors` | 上传 Excel 导入班主任（按教工号 upsert，含软删复活） |
 | GET | `/api/v1/export/students` | 导出学生信息（查询参数同列表：`dept_id`、`major_id`、`class_id`、`keyword`、`is_key_group`；不分页） |
 | GET | `/api/v1/export/:type` | 导出组织机构 Excel（`type` = `departments` / `majors` / `grades` / `classes`） |
 
@@ -532,6 +535,7 @@
 | `majors` | 院系编码、专业名称、专业编码 |
 | `grades` | 年级名称、入学年份 |
 | `classes` | 院系编码、专业编码、入学年份、班级名称、教工号（须已在班主任信息中存在） |
+| `advisors` | 系部、教工号、姓名、电话、班级名称、专业、年级 |
 
 - 上传方式：`multipart/form-data`，文件字段名 `file`。
 - 组织机构导入使用**编码/名称**关联（无需记 ID），便于与导出文件往返编辑；建议按 **院系 → 专业 → 年级 → 班级** 顺序导入。
@@ -784,14 +788,14 @@
 | GET | `/api/v1/region-codes` `/region-codes/lookup` `/region-codes/:code` | 是 | 登录用户 |
 | POST | `/api/v1/region-codes` `/import` `/import-default` | 是 | admin |
 | PUT/DELETE | `/api/v1/region-codes/:code` | 是 | admin |
-| GET | `/api/v1/students` `/students/:id` | 是 | admin |
+| GET | `/api/v1/students` `/students/:id` | 是 | 班主任 / 系部 / 资助中心 / admin（按数据范围） |
 | POST/PUT/DELETE | `/api/v1/students[/:id]` | 是 | admin |
 | GET | `/api/v1/special-groups` `/special-groups/:id` | 是 | admin |
 | POST/PUT/DELETE | `/api/v1/special-groups[/:id]` | 是 | admin |
 | GET | `/api/v1/import/template/:type` | 是 | admin |
-| POST | `/api/v1/import/students` `/special-groups` `/departments` `/majors` `/grades` `/classes` | 是 | admin |
+| POST | `/api/v1/import/students` `/special-groups` `/departments` `/majors` `/grades` `/classes` `/advisors` | 是 | admin |
 | GET | `/api/v1/export/students` | 是 | admin |
-| GET | `/api/v1/export/:type` | 是 | admin（departments/majors/grades/classes） |
+| GET | `/api/v1/export/:type` | 是 | admin（departments/majors/grades/classes/advisors） |
 | GET | `/api/v1/recognitions` `/recognitions/:id` | 是 | 按数据范围 |
 | POST/PUT/DELETE | `/api/v1/recognitions[/:id]` | 是 | 学生本人 |
 | POST | `/api/v1/recognitions/:id/submit` | 是 | 学生本人 |

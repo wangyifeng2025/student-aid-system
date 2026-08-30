@@ -91,7 +91,7 @@ func ApplyStudentScope(actor Actor) func(db *gorm.DB) *gorm.DB {
 			return db
 		case ScopeDepartment:
 			if actor.DeptID != nil {
-				return db.Where("dept_id = ?", *actor.DeptID)
+				return db.Where("students.dept_id = ?", *actor.DeptID)
 			}
 			return db.Where("1 = 0")
 		case ScopeClass:
@@ -99,9 +99,9 @@ func ApplyStudentScope(actor Actor) func(db *gorm.DB) *gorm.DB {
 			if len(ids) == 0 {
 				return db.Where("1 = 0")
 			}
-			return db.Where("class_id IN ?", ids)
+			return db.Where("students.class_id IN ?", ids)
 		case ScopeSelf:
-			return db.Where("user_id = ?", actor.UserID)
+			return db.Where("students.user_id = ?", actor.UserID)
 		default:
 			return db.Where("1 = 0")
 		}
