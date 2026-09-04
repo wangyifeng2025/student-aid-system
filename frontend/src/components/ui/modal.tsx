@@ -18,6 +18,8 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: ModalSize;
+  /** 为 false 时禁止遮罩、ESC、右上角关闭（长任务进行中）。 */
+  closable?: boolean;
 }
 
 export function Modal({

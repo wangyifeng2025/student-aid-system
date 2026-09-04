@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -29,6 +32,51 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
+  const passwordFieldRef = useRef<View>(null);
+  const passwordInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const height = e.endCoordinates.height;
+      keyboardHeightRef.current = height;
+      setKeyboardHeight(height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardHeightRef.current = 0;
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  function ensurePasswordVisible() {
+    const field = passwordFieldRef.current;
+    const scroll = scrollRef.current;
+    if (!field || !scroll) return;
+    field.measureInWindow((_x, y, _w, h) => {
+      const kb = keyboardHeightRef.current;
+      const visibleBottom = Dimensions.get('window').height - kb - 16;
+      const overflow = y + h - visibleBottom;
+      if (overflow > 0) {
+        scroll.scrollTo({ y: scrollYRef.current + overflow, animated: true });
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!error && keyboardHeight === 0) return;
+    const timer = setTimeout(ensurePasswordVisible, Platform.OS === 'ios' ? 50 : 80);
+    return () => clearTimeout(timer);
+  }, [error, keyboardHeight]);
 
   async function handleSubmit() {
     const u = username.trim();
@@ -53,22 +101,44 @@ export default function LoginScreen() {
     }
   }
 
+  const keyboardOpen = keyboardHeight > 0;
+  // Android edge-to-edge 时窗口经常不随键盘缩小，需自行留出键盘高度；iOS 由 KeyboardAvoidingView 处理。
+  const bottomPad =
+    Platform.OS === 'android' && keyboardOpen ? keyboardHeight + 16 : insets.bottom + 24;
+
   return (
     <KeyboardAvoidingView
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.content, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 }]}>
-        <View style={styles.brandArea}>
-          <View style={styles.logo}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: keyboardOpen ? insets.top + 16 : insets.top + 48,
+            paddingBottom: bottomPad,
+            justifyContent: keyboardOpen ? 'flex-start' : 'space-between',
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}>
+        <View style={[styles.brandArea, keyboardOpen && styles.brandAreaCompact]}>
+          <View style={[styles.logo, keyboardOpen && styles.logoCompact]}>
             <Image
               source={require('@/assets/images/splash-icon.png')}
-              style={styles.logoImage}
+              style={[styles.logoImage, keyboardOpen && styles.logoImageCompact]}
               resizeMode="contain"
               accessibilityLabel="黔西南民族职业技术学院校徽"
             />
           </View>
           <Text style={styles.appName}>{AppCopy.schoolName}</Text>
-          <Text style={styles.appSubtitle}>请使用学号或工号登录</Text>
+          {keyboardOpen ? null : <Text style={styles.appSubtitle}>请使用学号或工号登录</Text>}
         </View>
 
         <View style={styles.form}>
@@ -92,15 +162,17 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
               />
             </View>
           </View>
 
-          <View style={styles.field}>
+          <View ref={passwordFieldRef} collapsable={false} style={styles.field}>
             <Text style={styles.label}>密码</Text>
             <View style={styles.inputRow}>
               <Ionicons name="lock-closed-outline" size={18} color={Brand.mutedForeground} />
               <TextInput
+                ref={passwordInputRef}
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
@@ -111,6 +183,7 @@ export default function LoginScreen() {
                 autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={handleSubmit}
+                onFocus={() => setTimeout(ensurePasswordVisible, 80)}
               />
               <Pressable
                 hitSlop={8}
@@ -145,8 +218,8 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.footer}>如需帮助，请联系管理员</Text>
-      </View>
+        {keyboardOpen ? null : <Text style={styles.footer}>如需帮助，请联系管理员</Text>}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -157,12 +230,14 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.background,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 28,
-    justifyContent: 'space-between',
   },
   brandArea: {
     alignItems: 'center',
+  },
+  brandAreaCompact: {
+    marginBottom: 20,
   },
   logo: {
     width: 88,
@@ -171,9 +246,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
+  logoCompact: {
+    width: 56,
+    height: 56,
+    marginBottom: 8,
+  },
   logoImage: {
     width: 88,
     height: 88,
+  },
+  logoImageCompact: {
+    width: 56,
+    height: 56,
   },
   appName: {
     fontSize: 19,

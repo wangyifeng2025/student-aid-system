@@ -10,18 +10,30 @@ type Props = {
 export function ServiceGrid({ onPressService }: Props) {
   return (
     <View style={styles.grid}>
-      {HOME_SERVICES.map((item) => (
-        <Pressable
-          key={item.key}
-          style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-          accessibilityLabel={item.label}
-          onPress={() => onPressService?.(item)}>
-          <View style={styles.iconWrap}>
-            <Ionicons name={item.icon} size={24} color={Brand.primary} />
-          </View>
-          <Text style={styles.label}>{item.label}</Text>
-        </Pressable>
-      ))}
+      {HOME_SERVICES.map((item) => {
+        const soon = !!item.comingSoon;
+        return (
+          <Pressable
+            key={item.key}
+            style={({ pressed }) => [
+              styles.cell,
+              soon && styles.cellSoon,
+              pressed && styles.cellPressed,
+            ]}
+            accessibilityLabel={soon ? `${item.label}，建设中` : item.label}
+            onPress={() => onPressService?.(item)}>
+            <View style={styles.iconWrap}>
+              <Ionicons
+                name={item.icon}
+                size={24}
+                color={soon ? Brand.mutedForeground : Brand.primary}
+              />
+            </View>
+            <Text style={[styles.label, soon && styles.labelSoon]}>{item.label}</Text>
+            {soon ? <Text style={styles.soonText}>建设中</Text> : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -37,8 +49,8 @@ const styles = StyleSheet.create({
     width: '23%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
+    gap: 4,
+    paddingVertical: 10,
     paddingHorizontal: 4,
     borderRadius: Brand.radius,
     backgroundColor: Brand.card,
@@ -49,9 +61,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+    minHeight: 96,
   },
   cellPressed: {
     transform: [{ scale: 0.97 }],
+  },
+  cellSoon: {
+    backgroundColor: Brand.secondary,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   iconWrap: {
     width: 44,
@@ -62,5 +80,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     color: Brand.foreground,
+  },
+  labelSoon: {
+    color: Brand.mutedForeground,
+  },
+  soonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Brand.warning,
   },
 });

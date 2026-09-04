@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "stuaidapp",
+    "name": "黔西南职院",
     "slug": "stuaidapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,6 @@
       },
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
-      "usesCleartextTraffic": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.wangyifeng2026.stuaidapp"
     },
@@ -41,6 +40,14 @@
             "backgroundColor": "#1e40af"
           }
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
@@ -50,8 +57,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6282aea5-5db7-4d40-abcb-a5ebefb06a71"
+        "projectId": "f71b8de6-45b0-4ddd-874b-accbb65f6ff2"
       }
-    }
+    },
+    "owner": "wangyifeng2026"
   }
 }

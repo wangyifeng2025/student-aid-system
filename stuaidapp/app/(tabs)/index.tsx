@@ -96,7 +96,9 @@ export default function HomeScreen() {
   function handlePressService(item: HomeServiceItem) {
     if (item.key === 'aid') {
       goToAid();
+      return;
     }
+    Alert.alert('建设中', `「${item.label}」功能正在建设，敬请期待。`);
   }
 
   const isReviewer =

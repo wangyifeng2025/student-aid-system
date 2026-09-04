@@ -41,19 +41,20 @@ export type HomeServiceItem = {
   key: string;
   label: string;
   icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
+  comingSoon?: boolean;
 };
 
 export const HOME_SERVICES: HomeServiceItem[] = [
   { key: 'aid', label: '资助', icon: 'heart-outline' },
-  { key: 'academic', label: '教务', icon: 'calendar-outline' },
-  { key: 'grades', label: '成绩', icon: 'trending-up-outline' },
-  { key: 'schedule', label: '课表', icon: 'calendar-number-outline' },
-  { key: 'attendance', label: '考勤', icon: 'checkmark-circle-outline' },
-  { key: 'payment', label: '缴费', icon: 'card-outline' },
-  { key: 'library', label: '图书馆', icon: 'book-outline' },
-  { key: 'campus-card', label: '校园卡', icon: 'card-outline' },
-  { key: 'notice', label: '通知', icon: 'mail-outline' },
-  { key: 'hall', label: '办事大厅', icon: 'folder-open-outline' },
-  { key: 'dorm', label: '宿舍', icon: 'home-outline' },
-  { key: 'more', label: '更多', icon: 'grid-outline' },
+  { key: 'academic', label: '教务', icon: 'calendar-outline', comingSoon: true },
+  { key: 'grades', label: '成绩', icon: 'trending-up-outline', comingSoon: true },
+  { key: 'schedule', label: '课表', icon: 'calendar-number-outline', comingSoon: true },
+  { key: 'attendance', label: '考勤', icon: 'checkmark-circle-outline', comingSoon: true },
+  { key: 'payment', label: '缴费', icon: 'card-outline', comingSoon: true },
+  { key: 'library', label: '图书馆', icon: 'book-outline', comingSoon: true },
+  { key: 'campus-card', label: '校园卡', icon: 'card-outline', comingSoon: true },
+  { key: 'notice', label: '通知', icon: 'mail-outline', comingSoon: true },
+  { key: 'hall', label: '办事大厅', icon: 'folder-open-outline', comingSoon: true },
+  { key: 'dorm', label: '宿舍', icon: 'home-outline', comingSoon: true },
+  { key: 'more', label: '更多', icon: 'grid-outline', comingSoon: true },
 ];

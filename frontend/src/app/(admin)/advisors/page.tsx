@@ -376,7 +376,7 @@ export default function AdvisorsPage() {
         open={!!deleteTarget}
         title="删除班主任"
         description={deleteTarget ? `确定删除「${deleteTarget.name}」？将彻底删除其登录账号；已有评审记录则无法删除。` : ""}
-        confirmLabel="删除"
+        confirmText="删除"
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
