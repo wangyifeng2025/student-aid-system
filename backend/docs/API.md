@@ -320,7 +320,7 @@
 ```json
 [
   { "id": 1, "type": "difficulty_level", "code": "special", "label": "特别困难", "sort": 0 },
-  { "id": 2, "type": "difficulty_level", "code": "hard", "label": "比较困难", "sort": 1 },
+  { "id": 2, "type": "difficulty_level", "code": "hard", "label": "困难", "sort": 1 },
   { "id": 3, "type": "difficulty_level", "code": "general", "label": "一般困难", "sort": 2 }
 ]
 ```
@@ -694,7 +694,7 @@
 ```json
 { "difficulty_level": "general", "opinion": "属实，建议一般困难" }
 ```
-- `difficulty_level`：`special`（特别困难）/ `hard`（比较困难）/ `general`（一般困难）。班级级通过**必填**；上级可省略（维持现有等级）或调整。
+- `difficulty_level`：`special`（特别困难）/ `hard`（困难）/ `general`（一般困难）。班级级通过**必填**；上级可省略（维持现有等级）或调整。
 - `opinion`：评审意见，可选。
 - 成功响应 `data` 为该申请详情（含更新后的 `status` / `current_level` / `difficulty_level` / `reviews`）。
 

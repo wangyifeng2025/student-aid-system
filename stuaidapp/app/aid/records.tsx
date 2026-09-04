@@ -105,7 +105,7 @@ export default function AidRecordsScreen() {
                 kind="recognition"
                 status={item.status}
                 title={`${item.year} 年度困难认定`}
-                subtitle={`人均年收入 ¥${formatCurrency(item.per_capita_annual_income)}`}
+                subtitle={`人均年收入 ¥${formatCurrency(item.per_capita_annual_income)}${(item.proof_count ?? 0) > 0 ? ` · 证明材料 ${item.proof_count} 份` : ''}`}
                 onPress={() => openRecognition(item)}
               />
             ))

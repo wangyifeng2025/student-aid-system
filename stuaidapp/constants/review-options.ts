@@ -11,7 +11,7 @@ export interface Option {
 
 export const DIFFICULTY_OPTIONS: Option[] = [
   { value: 'special', label: '特别困难' },
-  { value: 'hard', label: '比较困难' },
+  { value: 'hard', label: '困难' },
   { value: 'general', label: '一般困难' },
 ];
 

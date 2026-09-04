@@ -19,6 +19,7 @@ type ReviewService struct {
 	stuRepo  *repository.StudentRepository
 	orgRepo  *repository.OrgRepository
 	userRepo *repository.UserRepository
+	attRepo  *repository.AttachmentRepository
 }
 
 func NewReviewService(db *gorm.DB) *ReviewService {
@@ -27,6 +28,7 @@ func NewReviewService(db *gorm.DB) *ReviewService {
 		stuRepo:  repository.NewStudentRepository(db),
 		orgRepo:  repository.NewOrgRepository(db),
 		userRepo: repository.NewUserRepository(db),
+		attRepo:  repository.NewAttachmentRepository(db),
 	}
 }
 
@@ -248,6 +250,9 @@ func (s *ReviewService) buildRecognitionListItems(items []model.RecognitionAppli
 			PerCapitaAnnualIncome: a.PerCapitaAnnualIncome,
 			SpecialTypes:          dto.SplitSpecialTypes(a.SpecialTypes),
 		})
+	}
+	if err := fillRecognitionProofCounts(s.attRepo, list); err != nil {
+		return nil, err
 	}
 	return list, nil
 }

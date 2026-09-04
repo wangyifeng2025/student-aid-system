@@ -11,14 +11,43 @@ import type { RecognitionListItem } from '@/types/recognition';
 type Props = {
   item: RecognitionListItem;
   onPress: (item: RecognitionListItem) => void;
+  onPreviewProof?: (item: RecognitionListItem) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (item: RecognitionListItem) => void;
 };
 
-export function ReviewListItem({ item, onPress }: Props) {
+export function ReviewListItem({
+  item,
+  onPress,
+  onPreviewProof,
+  selectable,
+  selected,
+  onToggleSelect,
+}: Props) {
+  const proofCount = item.proof_count ?? 0;
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed, selected && styles.cardSelected]}
       onPress={() => onPress(item)}>
       <View style={styles.top}>
+        {selectable ? (
+          <Pressable
+            hitSlop={8}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onToggleSelect?.(item);
+            }}
+            style={styles.checkHit}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: !!selected }}>
+            <Ionicons
+              name={selected ? 'checkbox' : 'square-outline'}
+              size={20}
+              color={selected ? Brand.primary : Brand.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
         <View style={styles.nameRow}>
           <Text style={styles.name}>{item.student_name}</Text>
           <Text style={styles.no}>{item.student_no}</Text>
@@ -43,6 +72,20 @@ export function ReviewListItem({ item, onPress }: Props) {
           <Text style={styles.difficulty}>{difficultyLabel(item.difficulty_level)}</Text>
         ) : null}
         <View style={styles.spacer} />
+        {proofCount > 0 && onPreviewProof ? (
+          <Pressable
+            hitSlop={8}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onPreviewProof(item);
+            }}
+            style={styles.proofBtn}>
+            <Ionicons name="eye-outline" size={14} color={Brand.primary} />
+            <Text style={styles.proofText}>材料 {proofCount}</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.noProof}>{proofCount > 0 ? `材料 ${proofCount}` : '无材料'}</Text>
+        )}
         <Ionicons name="chevron-forward" size={16} color={Brand.mutedForeground} />
       </View>
     </Pressable>
@@ -69,11 +112,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
+  },
+  checkHit: {
+    paddingRight: 2,
+  },
+  cardSelected: {
+    borderColor: Brand.primary,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 6,
+    flex: 1,
     flexShrink: 1,
   },
   name: {
@@ -114,5 +165,23 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+  },
+  proofBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginRight: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  proofText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Brand.primary,
+  },
+  noProof: {
+    marginRight: 8,
+    fontSize: 11,
+    color: Brand.mutedForeground,
   },
 });

@@ -25,6 +25,7 @@ import {
   INCOME_SOURCE_OPTIONS,
   HOUSEHOLD_OPTIONS,
   SPECIAL_GROUP_OPTIONS,
+  needsLowIncomeProof,
 } from "@/lib/recognition-options";
 import { StudentIdentity } from "@/components/recognition/student-identity";
 import { FamilyMembersEditor } from "@/components/recognition/family-members-editor";
@@ -34,6 +35,7 @@ import {
   loadSignatureDataUrls,
   syncSignatureAttachments,
 } from "@/lib/signature-upload";
+import { isSignatureAttachment } from "@/lib/signature";
 import type { Recognition, RecognitionInput } from "@/types/recognition";
 
 // ===== 校验工具（与后端 pkg/validate 对齐）=====
@@ -171,6 +173,7 @@ export function RecognitionForm({ mode, initial }: Props) {
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [signatureDataUrl, setSignatureDataUrl] = React.useState("");
   const [signatureDirty, setSignatureDirty] = React.useState(false);
+  const [proofCount, setProofCount] = React.useState(0);
   const [regionLabel, setRegionLabel] = React.useState("");
   const [regionLooking, setRegionLooking] = React.useState(false);
   const [regionLookupFailed, setRegionLookupFailed] = React.useState(false);
@@ -371,6 +374,8 @@ export function RecognitionForm({ mode, initial }: Props) {
       return "未勾选特殊群体类型时，请在「其他情况说明」中说明家庭经济困难原因";
     if (!form.commitment_agreed) return "请先勾选个人承诺";
     if (!signatureDataUrl) return "请完成学生本人（或监护人）签字";
+    if (needsLowIncomeProof(form.special_types) && proofCount < 1)
+      return "勾选低收入家庭相关类型后，请上传至少一份证明材料（低保证、特困证等）";
     return null;
   }
 
@@ -453,6 +458,15 @@ export function RecognitionForm({ mode, initial }: Props) {
     try {
       await syncSignatureAttachments(id, signatureDataUrl);
       setSignatureDirty(false);
+      if (needsLowIncomeProof(form.special_types)) {
+        const atts = await recognitionApi.listAttachments(id);
+        const proofs = atts.filter((a) => !isSignatureAttachment(a.file_name));
+        if (proofs.length < 1) {
+          toast.error("勾选低收入家庭相关类型后，请上传至少一份证明材料（低保证、特困证等）");
+          setSubmitting(false);
+          return;
+        }
+      }
       const res = await recognitionApi.submit(id);
       toast.success("申请已提交，进入班级评审");
       for (const w of res.warnings ?? []) toast.info(w);
@@ -799,6 +813,11 @@ export function RecognitionForm({ mode, initial }: Props) {
               </label>
             ))}
           </div>
+          {needsLowIncomeProof(form.special_types) ? (
+            <p className="mb-4 text-xs" style={{ color: "var(--state-warning)" }}>
+              已勾选低收入相关类型，请在「提交确认」步骤上传低保证、特困证等证明材料。
+            </p>
+          ) : null}
 
           <Label>其他情况说明</Label>
           <textarea
@@ -906,9 +925,14 @@ export function RecognitionForm({ mode, initial }: Props) {
             </dl>
           </SectionCard>
 
-          <SectionCard title="附件材料">
+          <SectionCard title="低收入证明材料">
             {savedId ? (
-              <AttachmentsPanel recognitionId={savedId} editable />
+              <AttachmentsPanel
+                recognitionId={savedId}
+                editable
+                required={needsLowIncomeProof(form.special_types)}
+                onCountChange={setProofCount}
+              />
             ) : (
               <p className="text-sm text-ink-mute">请先「保存草稿」，保存后即可上传证明材料。</p>
             )}

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import {
-  columnPinningFeature,
   columnVisibilityFeature,
   createColumnHelper,
   tableFeatures,
@@ -12,7 +11,6 @@ import {
 import { cn } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -22,7 +20,6 @@ import {
 
 /** v9：按需注册能力。分页在后端，不注册 rowPaginationFeature。 */
 const features = tableFeatures({
-  columnPinningFeature,
   columnVisibilityFeature,
   columnMeta: {} as {
     align: "left" | "right" | "center";
@@ -50,6 +47,10 @@ interface DataTableProps<T> {
   error?: string | null;
   onRetry?: () => void;
   emptyLabel?: string;
+  /** 左侧固定列数。默认 1；认定 / 审核列表设为 2，把姓名一并钉住。 */
+  pinStartCount?: number;
+  /** 右侧固定列数。默认 1（操作列）；认定列表可设为 2，把「证明材料」一并钉住以免被挡住。 */
+  pinEndCount?: number;
 }
 
 function parsePx(width: string | undefined, fallback: number): number {
@@ -58,17 +59,56 @@ function parsePx(width: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function pinClass(
-  pinned: "start" | "end" | false,
-  isHead: boolean,
-): string {
-  if (!pinned) return "bg-surface";
+type PinSide = "start" | "end" | false;
+
+function pinSide(
+  colIndex: number,
+  colCount: number,
+  pinStartCount: number,
+  pinEndCount: number,
+): PinSide {
+  if (colCount < 2) return false;
+  if (colIndex < pinStartCount) return "start";
+  if (colIndex >= colCount - pinEndCount) return "end";
+  return false;
+}
+
+function pinClass(pinned: PinSide, isHead: boolean, isInnerEdge: boolean): string {
+  if (!pinned) return isHead ? "bg-surface" : "bg-inherit";
   return cn(
-    "sticky bg-surface",
-    pinned === "start" && "left-0 shadow-[4px_0_8px_-6px_rgba(15,23,42,0.18)]",
-    pinned === "end" && "right-0 shadow-[-4px_0_8px_-6px_rgba(15,23,42,0.18)]",
-    isHead ? "z-[4]" : "z-[2]",
+    "sticky",
+    // 不透明底 + 高于中间列，避免后绘的单元格把左侧固定列盖住
+    "bg-surface",
+    !isHead && "group-hover:bg-brand-subtle",
+    pinned === "start" && isInnerEdge && "shadow-[4px_0_8px_-6px_rgba(15,23,42,0.18)]",
+    pinned === "end" && isInnerEdge && "shadow-[-4px_0_8px_-6px_rgba(15,23,42,0.18)]",
+    pinned === "start" && (isHead ? "z-30" : "z-20"),
+    pinned === "end" && (isHead ? "z-30" : "z-20"),
   );
+}
+
+/** 计算 sticky 列的 left/right 偏移，避免多列钉在同一侧时互相叠住。 */
+function pinBox<T>(
+  columns: Column<T>[],
+  colIndex: number,
+  pinned: PinSide,
+  pinStartCount: number,
+  pinEndCount: number,
+): { style: React.CSSProperties; isInnerEdge: boolean } {
+  if (pinned === "start") {
+    const left = columns
+      .slice(0, colIndex)
+      .reduce((sum, col) => sum + parsePx(col.width, 96), 0);
+    return { style: { left }, isInnerEdge: colIndex === pinStartCount - 1 };
+  }
+  if (pinned === "end") {
+    const right = columns
+      .slice(colIndex + 1)
+      .reduce((sum, col) => sum + parsePx(col.width, 96), 0);
+    const endStart = columns.length - pinEndCount;
+    return { style: { right }, isInnerEdge: colIndex === endStart };
+  }
+  return { style: {}, isInnerEdge: false };
 }
 
 /** 单元格内单行省略，悬停可看全文。 */
@@ -97,6 +137,8 @@ export function DataTable<T>({
   error,
   onRetry,
   emptyLabel,
+  pinStartCount = 1,
+  pinEndCount = 1,
 }: DataTableProps<T>) {
   const columnDefs = React.useMemo(
     () =>
@@ -116,21 +158,23 @@ export function DataTable<T>({
     [columns],
   );
 
-  const columnPinning = React.useMemo(() => {
-    const firstId = columnDefs[0]?.id;
-    const lastId = columnDefs[columnDefs.length - 1]?.id;
-    if (!firstId || !lastId || firstId === lastId) {
-      return { start: [] as string[], end: [] as string[] };
-    }
-    return { start: [firstId], end: [lastId] };
-  }, [columnDefs]);
+  const startN = React.useMemo(() => {
+    const n = columns.length;
+    if (n < 2) return 0;
+    return Math.min(Math.max(pinStartCount, 1), n - 1);
+  }, [columns.length, pinStartCount]);
+
+  const endN = React.useMemo(() => {
+    const n = columns.length;
+    if (n < 2) return 0;
+    return Math.min(Math.max(pinEndCount, 1), n - startN);
+  }, [columns.length, pinEndCount, startN]);
 
   const table = useTable({
     features,
     data: data as RowData[],
     columns: columnDefs,
     getRowId: (row) => String(rowKey(row as T)),
-    state: { columnPinning },
   });
 
   const tableMinWidth = columns.reduce(
@@ -139,7 +183,7 @@ export function DataTable<T>({
   );
 
   return (
-    <div className="min-w-0 w-full overflow-hidden rounded-md border border-line bg-surface">
+    <div className="relative isolate min-w-0 w-full overflow-x-auto overflow-y-hidden rounded-md border border-line bg-surface">
       {loading ? (
         <LoadingState />
       ) : error ? (
@@ -147,32 +191,37 @@ export function DataTable<T>({
       ) : data.length === 0 ? (
         <EmptyState label={emptyLabel} />
       ) : (
-        <Table
+        <table
+          className="caption-bottom text-sm"
           style={{
             borderCollapse: "separate",
             borderSpacing: 0,
             tableLayout: "fixed",
-            minWidth: tableMinWidth,
+            width: tableMinWidth,
+            minWidth: "100%",
           }}
         >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => {
+                {headerGroup.headers.map((header, colIndex) => {
                   const meta = header.column.columnDef.meta;
-                  const pinned = header.column.getIsPinned();
+                  const pinned = pinSide(colIndex, columns.length, startN, endN);
+                  const pin = pinBox(columns, colIndex, pinned, startN, endN);
                   return (
                     <TableHead
                       key={header.id}
                       className={cn(
-                        "overflow-hidden text-[0.8125rem]",
-                        pinClass(pinned, true),
+                        "text-[0.8125rem]",
+                        !pinned && "overflow-hidden",
+                        pinClass(pinned, true, pin.isInnerEdge),
                       )}
                       style={{
                         width: meta?.width,
                         minWidth: meta?.width ?? 96,
                         textAlign: meta?.align ?? "left",
                         borderBottom: "1px solid var(--color-border)",
+                        ...pin.style,
                       }}
                     >
                       {header.isPlaceholder ? null : (
@@ -187,21 +236,23 @@ export function DataTable<T>({
           <TableBody>
             {table.getRowModel().rows.map((row) => (
               <TableRow key={row.id} className="group hover:bg-transparent">
-                {row.getVisibleCells().map((cell) => {
+                {row.getVisibleCells().map((cell, colIndex) => {
                   const meta = cell.column.columnDef.meta;
-                  const pinned = cell.column.getIsPinned();
+                  const pinned = pinSide(colIndex, columns.length, startN, endN);
+                  const pin = pinBox(columns, colIndex, pinned, startN, endN);
                   return (
                     <TableCell
                       key={cell.id}
                       className={cn(
-                        "overflow-hidden group-hover:bg-brand-subtle",
-                        pinClass(pinned, false),
+                        !pinned && "overflow-hidden group-hover:bg-brand-subtle",
+                        pinClass(pinned, false, pin.isInnerEdge),
                       )}
                       style={{
                         width: meta?.width,
                         minWidth: meta?.width ?? 96,
                         textAlign: meta?.align ?? "left",
                         borderBottom: "1px solid var(--color-border-light)",
+                        ...pin.style,
                       }}
                     >
                       <table.FlexRender cell={cell} />
@@ -211,7 +262,7 @@ export function DataTable<T>({
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </table>
       )}
     </div>
   );

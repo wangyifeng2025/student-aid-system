@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChipMultiSelect } from '@/components/recognition-form/chip-multi-select';
 import { CheckboxRow } from '@/components/recognition-form/checkbox-row';
 import { CommitmentSignatureBlock } from '@/components/recognition-form/commitment-signature-block';
+import { AttachmentsPanel } from '@/components/recognition-form/attachments-panel';
 import { FamilyMemberCard } from '@/components/recognition-form/family-member-card';
 import { FormHeader } from '@/components/recognition-form/form-header';
 import { PickerField } from '@/components/recognition-form/picker-field';
@@ -31,8 +32,10 @@ import {
   INCOME_SOURCE_OPTIONS,
   NATION_OPTIONS,
   SPECIAL_GROUP_OPTIONS,
+  needsLowIncomeProof,
 } from '@/constants/recognition-options';
 import { canEditRecognition } from '@/constants/review-options';
+import { isSignatureAttachment } from '@/constants/signature';
 import { ApiError, recognitionApi, regionCodeApi, studentApi } from '@/lib/api';
 import { joinRegionDetail, splitRegionDetail } from '@/lib/id-card-region';
 import { loadSignatureDataUrls, syncSignatureAttachments } from '@/lib/signature-upload';
@@ -63,6 +66,7 @@ export default function RecognitionApplyScreen() {
   const [recordLoading, setRecordLoading] = useState(!!editingId);
   const [signatureDataUrl, setSignatureDataUrl] = useState('');
   const [signatureDirty, setSignatureDirty] = useState(false);
+  const [proofCount, setProofCount] = useState(0);
   const [regionLabel, setRegionLabel] = useState('');
   const [regionLooking, setRegionLooking] = useState(false);
   const [regionLookupFailed, setRegionLookupFailed] = useState(false);
@@ -335,6 +339,8 @@ export default function RecognitionApplyScreen() {
       return '未勾选特殊群体类型时，请在「其他情况说明」中说明家庭经济困难原因';
     if (!form.commitment_agreed) return '请先勾选个人承诺';
     if (!signatureDataUrl) return '请完成学生本人（或监护人）签字';
+    if (needsLowIncomeProof(form.special_types) && proofCount < 1)
+      return '勾选低收入家庭相关类型后，请上传至少一份证明材料（低保证、特困证等）';
     return null;
   }
 
@@ -412,6 +418,17 @@ export default function RecognitionApplyScreen() {
       }
       await syncSignatureAttachments(currentId, signatureDataUrl);
       setSignatureDirty(false);
+      if (needsLowIncomeProof(form.special_types)) {
+        const atts = await recognitionApi.listAttachments(currentId);
+        const proofs = atts.filter((a) => !isSignatureAttachment(a.file_name));
+        if (proofs.length < 1) {
+          Alert.alert(
+            '无法提交',
+            '勾选低收入家庭相关类型后，请上传至少一份证明材料（低保证、特困证等）',
+          );
+          return;
+        }
+      }
       const result = await recognitionApi.submit(currentId);
       const message = ['申请已提交，进入班级评审。', ...(result.warnings ?? [])].join('\n');
       Alert.alert('提交成功', message, [{ text: '好的', onPress: () => router.back() }]);
@@ -695,6 +712,11 @@ export default function RecognitionApplyScreen() {
                   selected={form.special_types}
                   onToggle={toggleSpecialType}
                 />
+                {needsLowIncomeProof(form.special_types) ? (
+                  <Text style={styles.proofHint}>
+                    已勾选低收入相关类型，请在「提交确认」步骤上传低保证、特困证等证明材料。
+                  </Text>
+                ) : null}
                 <TextField
                   style={styles.otherInfoField}
                   label="其他情况说明"
@@ -787,6 +809,17 @@ export default function RecognitionApplyScreen() {
                     value={form.special_types.length ? `${form.special_types.length} 项` : '未勾选'}
                   />
                 </View>
+              </SectionCard>
+
+              <SectionCard
+                title="低收入证明材料"
+                subtitle="低收入家庭请上传低保证、特困证等">
+                <AttachmentsPanel
+                  recognitionId={savedId}
+                  editable={!submitting && !savingDraft}
+                  required={needsLowIncomeProof(form.special_types)}
+                  onCountChange={setProofCount}
+                />
               </SectionCard>
 
               <CommitmentSignatureBlock
@@ -1018,6 +1051,12 @@ const styles = StyleSheet.create({
   selectedCount: {
     fontSize: 12,
     color: Brand.info,
+  },
+  proofHint: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Brand.warning,
   },
   otherInfoField: {
     marginTop: 14,

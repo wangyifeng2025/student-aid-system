@@ -315,14 +315,14 @@ export default function ReviewDetailPage() {
             <SignaturePreview recognitionId={id} />
           </Card>
 
-          <Card title="附件材料">
+          <Card title="低收入证明材料">
             <AttachmentsPanel recognitionId={id} editable={false} />
           </Card>
         </div>
 
         {/* Right (sticky) */}
         <div className="w-full shrink-0 lg:w-85">
-          <div className="lg:sticky lg:top-18">
+          <div className="lg:sticky lg:top-6">
             <Card title="评审信息">
               <div className="flex flex-col gap-3 text-sm">
                 <div className="flex items-center justify-between">

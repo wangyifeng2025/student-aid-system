@@ -94,3 +94,16 @@ export function specialTypesText(types?: string[]): string {
   if (!types?.length) return '';
   return types.map(specialGroupLabel).join('、');
 }
+
+/** 勾选后提交须上传低收入证明材料的特殊群体类型。 */
+export const LOW_INCOME_PROOF_TYPES = [
+  'low_income',
+  'low_income_margin',
+  'other_low_income',
+  'extreme_poverty',
+] as const;
+
+export function needsLowIncomeProof(types?: string[]): boolean {
+  if (!types?.length) return false;
+  return types.some((t) => (LOW_INCOME_PROOF_TYPES as readonly string[]).includes(t));
+}

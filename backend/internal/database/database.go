@@ -71,8 +71,21 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := dropUsersClassID(db); err != nil {
 		return err
 	}
+	if err := renameDifficultyHardLabel(db); err != nil {
+		return err
+	}
 	log.Println("数据库迁移完成")
 	return nil
+}
+
+// renameDifficultyHardLabel 将困难档次 hard 的展示名从「比较困难」改为「困难」（幂等）。
+func renameDifficultyHardLabel(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&model.Dict{}) {
+		return nil
+	}
+	return db.Model(&model.Dict{}).
+		Where("type = ? AND code = ? AND label = ?", "difficulty_level", "hard", "比较困难").
+		Update("label", "困难").Error
 }
 
 // ensureAdvisorStaffNo 为已有 advisors 表补教工号列及存量值（幂等）。

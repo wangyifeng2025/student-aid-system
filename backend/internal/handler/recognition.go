@@ -178,8 +178,10 @@ func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
 		SpecialType: c.Query("special_type"),
 		DeptID:      parseUintQuery(c, "dept_id"),
 		ClassID:     parseUintQuery(c, "class_id"),
+		Status:      c.Query("status"),
+		IDs:         parseUintListQuery(c, "ids"),
 	}
-	data, filename, asciiName, err := h.RecognitionSummary.Export(actor, f)
+	data, filename, asciiName, err := h.RecognitionSummary.Export(actor, f, c.Query("scope"))
 	if err != nil {
 		mapCommonError(c, err)
 		return

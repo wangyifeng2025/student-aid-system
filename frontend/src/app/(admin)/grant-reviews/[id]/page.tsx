@@ -162,7 +162,7 @@ export default function GrantReviewDetailPage() {
           </section>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           <section className="rounded-md border border-line bg-surface p-5 text-sm">
             <div className="mb-2 flex justify-between"><span className="text-ink-soft">当前级别</span><span>{levelName(data.current_level)}</span></div>
             {reviewable ? (

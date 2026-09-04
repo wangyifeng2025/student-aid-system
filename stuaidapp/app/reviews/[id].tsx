@@ -19,6 +19,7 @@ import { FamilyMemberView } from '@/components/reviews/family-member-view';
 import { ReviewActionModal, type ReviewActionMode } from '@/components/reviews/review-action-modal';
 import { ReviewTimeline } from '@/components/reviews/review-timeline';
 import { SignaturePreview } from '@/components/reviews/signature-preview';
+import { AttachmentsPanel } from '@/components/recognition-form/attachments-panel';
 import { StatusBadge } from '@/components/reviews/status-badge';
 import { Brand } from '@/constants/brand';
 import {
@@ -236,6 +237,10 @@ export default function ReviewDetailScreen() {
 
             <SectionCard title="个人承诺与签字">
               <SignaturePreview recognitionId={numericId} />
+            </SectionCard>
+
+            <SectionCard title="低收入证明材料" subtitle="低保证、特困证等支撑材料">
+              <AttachmentsPanel recognitionId={numericId} editable={false} />
             </SectionCard>
 
             <SectionCard title="评审记录">

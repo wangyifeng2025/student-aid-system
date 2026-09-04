@@ -396,6 +396,98 @@ func TestExportRecognitionSummary(t *testing.T) {
 	}
 }
 
+func TestExportRecognitionSummaryTodoAndIDs(t *testing.T) {
+	r, db := setupRecognitionRouter(t)
+	seedRecognitionDicts(db)
+
+	dept, major, class := seedStudentOrgRefs(t, db)
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	stu := seedScopedStudent(t, db, stuUser.ID, class.ID, dept.ID)
+	if err := db.Model(stu).Updates(map[string]any{
+		"name": "待审学生", "gender": "女", "nation": "han", "major_id": major.ID,
+	}).Error; err != nil {
+		t.Fatalf("update student: %v", err)
+	}
+
+	pending := model.RecognitionApplication{
+		StudentID: stu.ID,
+		Year:      2026,
+		Nation:    "han",
+		IDCard:    stu.IDCard,
+		Phone:     "13800002222",
+		Address:   "兴义市待审路1号",
+		Status:    model.StatusPendingClass,
+	}
+	if err := db.Create(&pending).Error; err != nil {
+		t.Fatalf("create pending app: %v", err)
+	}
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, class.ID, dept.ID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/recognitions/summary-export?year=2026&scope=todo", nil)
+	req.Header.Set("Authorization", "Bearer "+advisorToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("todo export status %d, body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Header().Get("Content-Disposition"), url.PathEscape(class.Name+"-困难认定待审名单.xlsx")) {
+		t.Fatalf("todo filename missing, disposition %s", w.Header().Get("Content-Disposition"))
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer f.Close()
+	name, _ := f.GetCellValue("Sheet1", "C4")
+	if name != "待审学生" {
+		t.Fatalf("todo export name want 待审学生, got %q", name)
+	}
+
+	approved := model.RecognitionApplication{
+		StudentID:       stu.ID,
+		Year:            2026,
+		Nation:          "han",
+		IDCard:          stu.IDCard,
+		Status:          model.StatusApproved,
+		DifficultyLevel: model.DifficultyGeneral,
+	}
+	if err := db.Create(&approved).Error; err != nil {
+		t.Fatalf("create approved app: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/recognitions/summary-export?ids=%d", pending.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+advisorToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ids export status %d, body %s", w.Code, w.Body.String())
+	}
+	f2, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open ids xlsx: %v", err)
+	}
+	defer f2.Close()
+	gotRows, err := f2.GetRows("Sheet1")
+	if err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	var dataRows int
+	for i := 3; i < len(gotRows); i++ {
+		if len(gotRows[i]) > 2 && strings.TrimSpace(gotRows[i][2]) != "" && !strings.Contains(strings.Join(gotRows[i], ""), "认定依据") {
+			dataRows++
+		}
+	}
+	if dataRows != 1 {
+		t.Fatalf("ids export should contain 1 data row, got %d rows=%#v", dataRows, gotRows)
+	}
+	selName, _ := f2.GetCellValue("Sheet1", "C4")
+	if selName != "待审学生" {
+		t.Fatalf("ids export want 待审学生, got %q", selName)
+	}
+}
+
 func TestListRecognitionsBySpecialType(t *testing.T) {
 	r, db := setupRecognitionRouter(t)
 	seedRecognitionDicts(db)

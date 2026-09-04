@@ -129,6 +129,8 @@ type RecognitionListItem struct {
 	DifficultyLevel       string   `json:"difficulty_level"`
 	PerCapitaAnnualIncome float64  `json:"per_capita_annual_income"`
 	SpecialTypes          []string `json:"special_types"`
+	// ProofCount 低收入证明材料份数（不含签字图）。
+	ProofCount int `json:"proof_count"`
 }
 
 // SubmitResult 提交评审结果：申请快照 + 非阻断性提示（单亲/单薪等）。

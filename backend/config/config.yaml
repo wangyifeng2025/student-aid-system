@@ -23,7 +23,7 @@ jwt:
 upload:
   dir: ./uploads
   max_size_mb: 20
-  allowed_exts: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx"
+  allowed_exts: ".jpg,.jpeg,.png,.pdf"
 
 export:
   # pdf_font_path 为历史 fpdf 配置，当前导出已改用 Word 模板，可留空

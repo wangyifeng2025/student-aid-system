@@ -149,11 +149,15 @@ func TestRecognitionSummaryDownloadNames(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.role)+tc.utf8, func(t *testing.T) {
 			t.Parallel()
-			utf8, ascii := recognitionSummaryDownloadNames(tc.role, tc.className, tc.deptName)
+			utf8, ascii := recognitionSummaryDownloadNames(tc.role, tc.className, tc.deptName, "", false)
 			if utf8 != tc.utf8 || ascii != tc.ascii {
 				t.Fatalf("got (%q, %q), want (%q, %q)", utf8, ascii, tc.utf8, tc.ascii)
 			}
 		})
+	}
+	utf8, ascii := recognitionSummaryDownloadNames(model.RoleClassAdvisor, "护理2401班", "护理系", "todo", false)
+	if utf8 != "护理2401班-困难认定待审名单.xlsx" || ascii != "class_todo.xlsx" {
+		t.Fatalf("todo name got (%q, %q)", utf8, ascii)
 	}
 }
 

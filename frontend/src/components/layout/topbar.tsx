@@ -34,7 +34,7 @@ export function Topbar() {
 
   return (
     <header
-      className="sticky top-0 z-30 flex shrink-0 items-center justify-between px-6"
+      className="z-30 flex shrink-0 items-center justify-between px-6"
       style={{
         height: "var(--header-height)",
         backgroundColor: "var(--color-bg-card)",

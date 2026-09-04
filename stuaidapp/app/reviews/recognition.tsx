@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -14,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FormHeader } from '@/components/recognition-form/form-header';
+import { AttachmentsPanel } from '@/components/recognition-form/attachments-panel';
 import {
   ReviewFilterBar,
   type ReviewFilterValue,
@@ -58,6 +60,8 @@ export default function RecognitionReviewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [previewItem, setPreviewItem] = useState<RecognitionListItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const canExport = canExportRecognitionSummary(role);
 
   const statusOptions = useMemo(
@@ -90,6 +94,7 @@ export default function RecognitionReviewsScreen() {
               : await reviewApi.records({ ...common, tab: 'done' });
         setItems(res.items);
         setTotal(res.total);
+        if (!silent) setSelectedIds(new Set());
       } catch (e) {
         setError(e instanceof ApiError ? e.message : '加载失败，请稍后重试');
       } finally {
@@ -106,6 +111,11 @@ export default function RecognitionReviewsScreen() {
 
   async function handleExportSummary() {
     if (exporting) return;
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 && tab === 'mine' && total === 0) {
+      Alert.alert('暂无数据', '当前没有本级待审记录');
+      return;
+    }
     setExporting(true);
     try {
       await recognitionApi.exportSummary({
@@ -113,6 +123,9 @@ export default function RecognitionReviewsScreen() {
         deptId: filter.deptId || undefined,
         classId: filter.classId || undefined,
         specialType: filter.specialType || undefined,
+        status: filter.status || undefined,
+        ids: ids.length ? ids : undefined,
+        scope: ids.length ? undefined : tab === 'mine' ? 'todo' : 'approved',
       });
     } catch (e) {
       Alert.alert('导出失败', e instanceof ApiError ? e.message : '请稍后重试');
@@ -137,7 +150,9 @@ export default function RecognitionReviewsScreen() {
               ) : (
                 <>
                   <Ionicons name="download-outline" size={16} color={Brand.primary} />
-                  <Text style={styles.exportText}>导出</Text>
+                  <Text style={styles.exportText}>
+                    {selectedIds.size > 0 ? `导出${selectedIds.size}` : '导出'}
+                  </Text>
                 </>
               )}
             </Pressable>
@@ -146,9 +161,30 @@ export default function RecognitionReviewsScreen() {
       />
 
       <View style={styles.tabs}>
-        <TabButton label="本级待办" active={tab === 'mine'} onPress={() => setTab('mine')} />
-        <TabButton label="在途" active={tab === 'pipeline'} onPress={() => setTab('pipeline')} />
-        <TabButton label="已审核" active={tab === 'done'} onPress={() => setTab('done')} />
+        <TabButton
+          label="本级待办"
+          active={tab === 'mine'}
+          onPress={() => {
+            setTab('mine');
+            setSelectedIds(new Set());
+          }}
+        />
+        <TabButton
+          label="在途"
+          active={tab === 'pipeline'}
+          onPress={() => {
+            setTab('pipeline');
+            setSelectedIds(new Set());
+          }}
+        />
+        <TabButton
+          label="已审核"
+          active={tab === 'done'}
+          onPress={() => {
+            setTab('done');
+            setSelectedIds(new Set());
+          }}
+        />
       </View>
 
       <ReviewFilterBar
@@ -164,7 +200,11 @@ export default function RecognitionReviewsScreen() {
         </Text>
       ) : null}
       {canExport ? (
-        <Text style={styles.hint}>导出为已认定通过学生的官方汇总表，可用当前院系/班级/关键字/特殊群体筛选。</Text>
+        <Text style={styles.hint}>
+          {tab === 'mine'
+            ? '未勾选时导出本级待审名单；勾选后仅导出选中记录。'
+            : '未勾选时导出已认定通过名单；勾选后仅导出选中记录。'}
+        </Text>
       ) : null}
 
       {loading ? (
@@ -200,7 +240,18 @@ export default function RecognitionReviewsScreen() {
           renderItem={({ item }) => (
             <ReviewListItem
               item={item}
+              selectable={canExport}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={(row) => {
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(row.id)) next.delete(row.id);
+                  else next.add(row.id);
+                  return next;
+                });
+              }}
               onPress={(row) => router.push(`/reviews/${row.id}` as Href)}
+              onPreviewProof={setPreviewItem}
             />
           )}
           ListEmptyComponent={
@@ -216,6 +267,23 @@ export default function RecognitionReviewsScreen() {
           }
         />
       )}
+
+      <Modal
+        visible={previewItem !== null}
+        animationType="slide"
+        onRequestClose={() => setPreviewItem(null)}>
+        <View style={[styles.previewScreen, { paddingTop: insets.top }]}>
+          <FormHeader
+            title={previewItem ? `${previewItem.student_name} · 证明材料` : '证明材料'}
+            onBack={() => setPreviewItem(null)}
+          />
+          <View style={styles.previewBody}>
+            {previewItem ? (
+              <AttachmentsPanel recognitionId={previewItem.id} editable={false} />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -325,5 +393,14 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     color: Brand.mutedForeground,
+  },
+  previewScreen: {
+    flex: 1,
+    backgroundColor: Brand.background,
+  },
+  previewBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
 });

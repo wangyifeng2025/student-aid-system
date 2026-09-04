@@ -146,6 +146,8 @@ export interface RecognitionListItem {
   difficulty_level: DifficultyLevel;
   per_capita_annual_income: number;
   special_types: string[];
+  /** 低收入证明材料份数（不含签字图）。 */
+  proof_count: number;
 }
 
 // 提交结果：申请快照 + 非阻断性提示
@@ -176,4 +178,6 @@ export interface RecognitionFilter {
   dept_id?: number;
   class_id?: number;
   tab?: "todo" | "done" | "all";
+  ids?: number[];
+  scope?: "todo" | "approved";
 }

@@ -597,7 +597,9 @@ export const recognitionApi = {
     apiFetch<Recognition>(`/recognitions/${id}/withdraw`, { method: "POST" }),
   exportDocx: (id: number, fallbackName = `recognition_${id}.docx`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
-  exportSummary: (filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type">) =>
+  exportSummary: (
+    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "status" | "ids" | "scope">,
+  ) =>
     downloadFile(
       `/recognitions/summary-export${buildParams({
         year: filter?.year,
@@ -605,6 +607,9 @@ export const recognitionApi = {
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
         special_type: filter?.special_type,
+        status: filter?.status,
+        ids: filter?.ids?.length ? filter.ids.join(",") : undefined,
+        scope: filter?.scope,
       })}`,
       "recognition_summary.xlsx",
     ),

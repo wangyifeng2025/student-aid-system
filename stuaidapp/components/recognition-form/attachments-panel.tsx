@@ -1,0 +1,408 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import { Brand } from '@/constants/brand';
+import { isSignatureAttachment } from '@/constants/signature';
+import { ApiError, attachmentApi, recognitionApi, type Attachment } from '@/lib/api';
+
+const MAX_PROOF_FILES = 8;
+
+type Props = {
+  recognitionId: number | null;
+  editable: boolean;
+  required?: boolean;
+  onCountChange?: (count: number) => void;
+};
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isImage(mime: string, name: string): boolean {
+  return mime.startsWith('image/') || /\.(png|jpe?g)$/i.test(name);
+}
+
+function isPdf(mime: string, name: string): boolean {
+  return mime === 'application/pdf' || /\.pdf$/i.test(name);
+}
+
+function mimeOf(name: string, fallback = 'application/octet-stream'): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return fallback;
+}
+
+function normalizeProofFile(name: string, mime?: string): { name: string; mime: string } | null {
+  const lower = (name || '').toLowerCase();
+  if (/\.(heic|heif)$/.test(lower) || mime === 'image/heic' || mime === 'image/heif') {
+    return { name: `proof_${Date.now()}.jpg`, mime: 'image/jpeg' };
+  }
+  if (/\.png$/.test(lower)) return { name, mime: mime && mime !== 'image/heic' ? mime : 'image/png' };
+  if (/\.jpe?g$/.test(lower)) return { name, mime: mime || 'image/jpeg' };
+  if (/\.pdf$/.test(lower)) return { name, mime: mime || 'application/pdf' };
+  if (mime === 'application/pdf') return { name: name.endsWith('.pdf') ? name : `${name}.pdf`, mime };
+  if (mime?.startsWith('image/jpeg')) return { name: /\.jpe?g$/.test(lower) ? name : `${name}.jpg`, mime };
+  if (mime?.startsWith('image/png')) return { name: lower.endsWith('.png') ? name : `${name}.png`, mime };
+  return null;
+}
+
+function safeFileName(name: string): string {
+  const cleaned = name.replace(/[^\w.\-]+/g, '_');
+  return cleaned || `proof_${Date.now()}.jpg`;
+}
+
+async function copyToCache(uri: string, fileName: string): Promise<string> {
+  const dest = `${FileSystem.cacheDirectory}${fileName}`;
+  await FileSystem.copyAsync({ from: uri, to: dest });
+  return dest;
+}
+
+export function AttachmentsPanel({ recognitionId, editable, required, onCountChange }: Props) {
+  const [items, setItems] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(!!recognitionId);
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<Attachment | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const onCountChangeRef = useRef(onCountChange);
+  onCountChangeRef.current = onCountChange;
+
+  const load = useCallback(async () => {
+    if (!recognitionId) {
+      setItems([]);
+      onCountChangeRef.current?.(0);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await recognitionApi.listAttachments(recognitionId);
+      const proofs = res.filter((a) => !isSignatureAttachment(a.file_name));
+      setItems(proofs);
+      onCountChangeRef.current?.(proofs.length);
+    } catch (e) {
+      Alert.alert('加载附件失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  }, [recognitionId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function uploadLocal(uri: string, fileName: string, mime: string) {
+    if (!recognitionId) return;
+    const normalized = normalizeProofFile(fileName, mime);
+    if (!normalized) {
+      Alert.alert('无法上传', '仅支持 JPG、PNG 图片或 PDF');
+      return;
+    }
+    if (items.length >= MAX_PROOF_FILES) {
+      Alert.alert('无法上传', `最多上传 ${MAX_PROOF_FILES} 份证明材料`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const cached = await copyToCache(uri, safeFileName(normalized.name));
+      await recognitionApi.uploadAttachment(recognitionId, cached, normalized.name, normalized.mime);
+      await load();
+    } catch (e) {
+      Alert.alert('上传失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function pickCamera() {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('需要相机权限', '请在系统设置中允许访问相机，以便拍摄证明材料。');
+      return;
+    }
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (res.canceled || !res.assets[0]) return;
+    const asset = res.assets[0];
+    const name = asset.fileName || `proof_${Date.now()}.jpg`;
+    await uploadLocal(asset.uri, name, asset.mimeType || mimeOf(name, 'image/jpeg'));
+  }
+
+  async function pickAlbum() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('需要相册权限', '请在系统设置中允许访问相册，以便选择证明材料照片。');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (res.canceled || !res.assets[0]) return;
+    const asset = res.assets[0];
+    const name = asset.fileName || `proof_${Date.now()}.jpg`;
+    await uploadLocal(asset.uri, name, asset.mimeType || mimeOf(name, 'image/jpeg'));
+  }
+
+  async function pickDocument() {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['image/jpeg', 'image/png', 'application/pdf'],
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled || !res.assets[0]) return;
+    const asset = res.assets[0];
+    await uploadLocal(asset.uri, asset.name, asset.mimeType || mimeOf(asset.name));
+  }
+
+  function handlePick() {
+    if (!recognitionId) return;
+    Alert.alert('上传证明材料', '请选择来源', [
+      { text: '拍照', onPress: () => void pickCamera() },
+      { text: '相册', onPress: () => void pickAlbum() },
+      { text: '文件（PDF / 图片）', onPress: () => void pickDocument() },
+      { text: '取消', style: 'cancel' },
+    ]);
+  }
+
+  function handleDelete(item: Attachment) {
+    Alert.alert('删除附件', `确定删除「${item.file_name}」吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await attachmentApi.remove(item.id);
+              await load();
+            } catch (e) {
+              Alert.alert('删除失败', e instanceof ApiError ? e.message : '请稍后重试');
+            }
+          })();
+        },
+      },
+    ]);
+  }
+
+  async function handleOpen(item: Attachment) {
+    try {
+      await attachmentApi.download(item.id, item.file_name);
+    } catch (e) {
+      Alert.alert('打开失败', e instanceof ApiError ? e.message : '请稍后重试');
+    }
+  }
+
+  async function handlePreview(item: Attachment) {
+    if (isPdf(item.mime, item.file_name)) {
+      await handleOpen(item);
+      return;
+    }
+    setPreview(item);
+    setPreviewLoading(true);
+    setPreviewUri(null);
+    try {
+      const uri = await attachmentApi.fetchDataUrl(item.id);
+      setPreviewUri(uri);
+    } catch (e) {
+      setPreview(null);
+      Alert.alert('预览失败', e instanceof ApiError ? e.message : '请稍后重试');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  if (!recognitionId) {
+    return (
+      <Text style={styles.hint}>请先「保存草稿」，保存后即可上传低收入家庭证明材料。</Text>
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      {editable ? (
+        <View style={styles.uploadBlock}>
+          <Pressable
+            style={[styles.uploadBtn, uploading && styles.btnDisabled]}
+            disabled={uploading}
+            onPress={handlePick}>
+            {uploading ? (
+              <ActivityIndicator color={Brand.primary} size="small" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={16} color={Brand.primary} />
+            )}
+            <Text style={styles.uploadBtnText}>{uploading ? '上传中…' : '上传附件'}</Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            {required
+              ? '低收入家庭须上传至少一份证明（低保证、特困证等），仅支持 JPG / PNG / PDF。'
+              : '可上传低保证、特困证等支撑材料，仅支持 JPG / PNG / PDF。'}
+          </Text>
+        </View>
+      ) : null}
+
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={Brand.primary} size="small" />
+        </View>
+      ) : items.length === 0 ? (
+        <Text style={styles.empty}>
+          {required
+            ? '尚未上传证明材料，勾选低收入相关类型后提交前须至少上传一份。'
+            : '暂无证明材料。'}
+        </Text>
+      ) : (
+        items.map((a) => (
+          <View key={a.id} style={styles.row}>
+            <Ionicons
+              name={isImage(a.mime, a.file_name) ? 'image-outline' : 'document-text-outline'}
+              size={18}
+              color={isImage(a.mime, a.file_name) ? Brand.warning : Brand.primary}
+            />
+            <Pressable style={styles.rowBody} onPress={() => void handlePreview(a)}>
+              <Text style={styles.fileName} numberOfLines={1}>
+                {a.file_name}
+              </Text>
+              <Text style={styles.size}>{humanSize(a.size)}</Text>
+            </Pressable>
+            <Pressable hitSlop={8} onPress={() => void handlePreview(a)}>
+              <Ionicons name="eye-outline" size={18} color={Brand.primary} />
+            </Pressable>
+            <Pressable hitSlop={8} onPress={() => void handleOpen(a)}>
+              <Ionicons name="download-outline" size={18} color={Brand.primary} />
+            </Pressable>
+            {editable ? (
+              <Pressable hitSlop={8} onPress={() => handleDelete(a)}>
+                <Ionicons name="trash-outline" size={18} color={Brand.error} />
+              </Pressable>
+            ) : null}
+          </View>
+        ))
+      )}
+
+      <Modal visible={preview !== null} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
+        <View style={styles.previewBackdrop}>
+          <Pressable style={styles.previewClose} onPress={() => setPreview(null)}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </Pressable>
+          {previewLoading || !previewUri ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Image source={{ uri: previewUri }} style={styles.previewImage} contentFit="contain" />
+          )}
+          <Text style={styles.previewName} numberOfLines={1}>
+            {preview?.file_name}
+          </Text>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    gap: 10,
+  },
+  uploadBlock: {
+    gap: 8,
+  },
+  uploadBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: Brand.radiusSm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    backgroundColor: Brand.background,
+  },
+  uploadBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Brand.primary,
+  },
+  btnDisabled: {
+    opacity: 0.6,
+  },
+  hint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: Brand.mutedForeground,
+  },
+  loadingBox: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  empty: {
+    fontSize: 13,
+    color: Brand.mutedForeground,
+    paddingVertical: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fileName: {
+    fontSize: 14,
+    color: Brand.foreground,
+  },
+  size: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Brand.mutedForeground,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  previewClose: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    zIndex: 2,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  previewImage: {
+    width: '100%',
+    height: '80%',
+  },
+  previewName: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#fff',
+  },
+});

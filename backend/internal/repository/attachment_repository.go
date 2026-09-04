@@ -34,6 +34,32 @@ func (r *AttachmentRepository) ListByOwner(ownerType string, ownerID uint) ([]mo
 	return items, err
 }
 
+// CountProofByOwnerIDs 统计各归属对象的非签字证明材料份数。
+func (r *AttachmentRepository) CountProofByOwnerIDs(ownerType string, ownerIDs []uint) (map[uint]int64, error) {
+	out := map[uint]int64{}
+	if len(ownerIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		OwnerID uint  `gorm:"column:owner_id"`
+		Cnt     int64 `gorm:"column:cnt"`
+	}
+	var rows []row
+	err := r.db.Model(&model.Attachment{}).
+		Select("owner_id, count(*) AS cnt").
+		Where("owner_type = ? AND owner_id IN ?", ownerType, ownerIDs).
+		Where("file_name NOT IN ?", []string{"student_signature.png", "commitment_handwriting.png"}).
+		Group("owner_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		out[rows[i].OwnerID] = rows[i].Cnt
+	}
+	return out, nil
+}
+
 func (r *AttachmentRepository) Delete(id uint) error {
 	return deleteByID(r.db, &model.Attachment{}, id)
 }

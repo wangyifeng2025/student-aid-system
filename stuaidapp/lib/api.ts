@@ -351,6 +351,9 @@ export const recognitionApi = {
     deptId?: number;
     classId?: number;
     specialType?: string;
+    status?: string;
+    ids?: number[];
+    scope?: 'todo' | 'approved';
   }) =>
     downloadAndShareFile(
       `/recognitions/summary-export${buildParams({
@@ -359,6 +362,9 @@ export const recognitionApi = {
         dept_id: filter?.deptId,
         class_id: filter?.classId,
         special_type: filter?.specialType,
+        status: filter?.status,
+        ids: filter?.ids?.length ? filter.ids.join(',') : undefined,
+        scope: filter?.scope,
       })}`,
       `recognition_summary_${filter?.year || new Date().getFullYear()}.xlsx`,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -394,6 +400,13 @@ export const attachmentApi = {
   },
   remove: (id: number) =>
     apiFetch<{ message: string }>(`/attachments/${id}`, { method: 'DELETE' }),
+  download: (id: number, fileName: string) =>
+    downloadAndShareFile(
+      `/attachments/${id}/download`,
+      fileName,
+      'application/octet-stream',
+      '打开证明材料',
+    ),
 };
 
 // ===== 助学金申请（学生本人基于已通过认定发起，模块 6） =====

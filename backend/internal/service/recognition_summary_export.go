@@ -66,8 +66,10 @@ type recognitionSummaryRow struct {
 	Remark     string
 }
 
-// Export 导出数据范围内已认定通过的汇总表（班主任/教学系/资助中心/管理员）。
-func (s *RecognitionSummaryExportService) Export(actor rbac.Actor, f repository.RecognitionFilter) ([]byte, string, string, error) {
+// Export 导出认定汇总表。
+// scope=approved（默认）：数据范围内已认定通过；scope=todo：本级待审。
+// 传入 IDs 时按勾选记录导出（仍受数据范围约束，不含草稿）。
+func (s *RecognitionSummaryExportService) Export(actor rbac.Actor, f repository.RecognitionFilter, scope string) ([]byte, string, string, error) {
 	if actor.Role == model.RoleStudent {
 		return nil, "", "", ErrForbidden
 	}
@@ -75,10 +77,9 @@ func (s *RecognitionSummaryExportService) Export(actor rbac.Actor, f repository.
 		return nil, "", "", ErrForbidden
 	}
 
-	f.Status = string(model.StatusApproved)
 	f.Page = 0
 	f.PageSize = 0
-	items, _, err := s.repo.List(actor, f)
+	items, err := s.loadExportItems(actor, f, scope)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -153,8 +154,38 @@ func (s *RecognitionSummaryExportService) Export(actor rbac.Actor, f repository.
 		actor.Role,
 		s.headerClassName(actor, f.ClassID, classNames, rows),
 		meta.DeptName,
+		scope,
+		len(f.IDs) > 0,
 	)
 	return data, utf8Name, asciiName, nil
+}
+
+func (s *RecognitionSummaryExportService) loadExportItems(actor rbac.Actor, f repository.RecognitionFilter, scope string) ([]model.RecognitionApplication, error) {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if len(f.IDs) > 0 {
+		f.Status = ""
+		f.ExcludeStatuses = []string{string(model.StatusDraft)}
+		items, _, err := s.repo.List(actor, f)
+		return items, err
+	}
+	if scope == "todo" {
+		statuses := todoStatusesForRole(actor.Role)
+		if len(statuses) == 0 {
+			return nil, ErrForbidden
+		}
+		if f.Status != "" {
+			if !containsString(statuses, f.Status) {
+				return nil, NewValidationError("无权导出该状态的认定记录")
+			}
+			statuses = []string{f.Status}
+			f.Status = ""
+		}
+		items, _, err := s.repo.ListByStatuses(actor, statuses, f)
+		return items, err
+	}
+	f.Status = string(model.StatusApproved)
+	items, _, err := s.repo.List(actor, f)
+	return items, err
 }
 
 func (s *RecognitionSummaryExportService) loadLabelMaps() labelMaps {
@@ -251,7 +282,7 @@ func summaryDifficultyLabel(d model.DifficultyLevel) string {
 	case model.DifficultySpecial:
 		return "特别困难"
 	case model.DifficultyHard:
-		return "比较困难"
+		return "困难"
 	case model.DifficultyGeneral:
 		return "一般困难"
 	default:
@@ -294,18 +325,25 @@ func firstNonEmpty(vals ...string) string {
 
 // recognitionSummaryDownloadNames 按教师角色生成汇总表下载文件名。
 // 班主任：{班级名}-困难认定汇总表；教学系：{系名}-困难认定汇总表；资助中心/管理员：学院困难认定汇总表。
-func recognitionSummaryDownloadNames(role model.Role, className, deptName string) (utf8Name, asciiName string) {
+func recognitionSummaryDownloadNames(role model.Role, className, deptName, scope string, selected bool) (utf8Name, asciiName string) {
+	todo := !selected && strings.EqualFold(strings.TrimSpace(scope), "todo")
+	suffix := "困难认定汇总表"
+	ascii := "summary"
+	if todo {
+		suffix = "困难认定待审名单"
+		ascii = "todo"
+	}
 	switch role {
 	case model.RoleClassAdvisor:
 		name := firstNonEmpty(className, "班级")
-		return sanitizeDownloadName(name) + "-困难认定汇总表.xlsx", "class_summary.xlsx"
+		return sanitizeDownloadName(name) + "-" + suffix + ".xlsx", "class_" + ascii + ".xlsx"
 	case model.RoleDepartment:
 		name := firstNonEmpty(deptName, "系")
-		return sanitizeDownloadName(name) + "-困难认定汇总表.xlsx", "dept_summary.xlsx"
+		return sanitizeDownloadName(name) + "-" + suffix + ".xlsx", "dept_" + ascii + ".xlsx"
 	case model.RoleAidCenter, model.RoleAdmin:
-		return "学院困难认定汇总表.xlsx", "college_summary.xlsx"
+		return "学院" + suffix + ".xlsx", "college_" + ascii + ".xlsx"
 	default:
-		return "困难认定汇总表.xlsx", "recognition_summary.xlsx"
+		return suffix + ".xlsx", "recognition_" + ascii + ".xlsx"
 	}
 }
 

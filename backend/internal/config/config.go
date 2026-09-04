@@ -154,7 +154,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("upload.dir", "./uploads")
 	v.SetDefault("upload.max_size_mb", 20)
-	v.SetDefault("upload.allowed_exts", ".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx")
+	v.SetDefault("upload.allowed_exts", ".jpg,.jpeg,.png,.pdf")
 
 	v.SetDefault("export.pdf_font_path", "")
 	v.SetDefault("export.school_name", "黔西南民族职业技术学院")

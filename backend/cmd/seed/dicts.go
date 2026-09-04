@@ -24,7 +24,7 @@ var defaultDicts = map[string][]dictSeed{
 	// 困难等级（与 model.DifficultyLevel 对齐）
 	"difficulty_level": {
 		{"special", "特别困难"},
-		{"hard", "比较困难"},
+		{"hard", "困难"},
 		{"general", "一般困难"},
 	},
 	// 健康状况（认定表家庭成员字段）

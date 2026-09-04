@@ -12,7 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
+import { checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { StatusBadge } from "@/components/recognition/status-badge";
+import { ProofPreviewCell } from "@/components/recognition/proof-preview-cell";
 import { ReviewActionDialog } from "@/components/review/review-action-dialog";
 import { StatTabBar } from "@/components/review/stat-tab-bar";
 import { LoadingState } from "@/components/ui/states";
@@ -47,7 +49,7 @@ const TAB_ITEMS: { value: ReviewTab; label: string; hint: string; accentColor: s
   {
     value: "todo",
     label: "待办",
-    hint: "轮到您本级处理的申请，可逐条审核或勾选后批量通过 / 退回。",
+    hint: "轮到您本级处理的申请，可逐条审核、勾选后批量通过 / 退回，或导出本级待审 / 已选记录。",
     accentColor: "var(--state-info)",
   },
   {
@@ -202,15 +204,29 @@ function ReviewsWorkbench() {
   };
 
   const handleExportSummary = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0 && isTodo && total === 0) {
+      toast.info("暂无本级待审记录");
+      return;
+    }
     setExportingSummary(true);
     try {
       await recognitionApi.exportSummary({
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
         special_type: filterSpecialType || undefined,
+        status: filterStatus || undefined,
+        ids: ids.length ? ids : undefined,
+        scope: ids.length ? undefined : isTodo ? "todo" : "approved",
         ...orgScopeParams(orgScope),
       });
-      toast.success("认定结果汇总表已导出");
+      toast.success(
+        ids.length
+          ? `已导出选中的 ${ids.length} 条`
+          : isTodo
+            ? "本级待审名单已导出"
+            : "认定结果汇总表已导出",
+      );
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     } finally {
@@ -260,31 +276,14 @@ function ReviewsWorkbench() {
   };
 
   const columns: Column<RecognitionListItem>[] = [
-    ...(isTodo
-      ? [
-          {
-            header: (
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleAll}
-                aria-label="全选"
-                className="cursor-pointer"
-              />
-            ),
-            width: "40px",
-            cell: (r: RecognitionListItem) => (
-              <input
-                type="checkbox"
-                checked={selected.has(r.id)}
-                onChange={() => toggleRow(r.id)}
-                aria-label={`选择 ${r.student_name}`}
-                className="cursor-pointer"
-              />
-            ),
-          } satisfies Column<RecognitionListItem>,
-        ]
-      : []),
+    checkboxColumn<RecognitionListItem>(
+      selected,
+      allSelected,
+      toggleAll,
+      toggleRow,
+      (r) => r.id,
+      (r) => r.student_name || String(r.id),
+    ),
     {
       header: "姓名",
       width: "88px",
@@ -299,21 +298,21 @@ function ReviewsWorkbench() {
     },
     {
       header: "专业",
-      width: "140px",
+      width: "220px",
       cell: (r) => <CellText>{r.major_name || "—"}</CellText>,
     },
     ...(!isTodo
       ? [
           {
             header: "院系",
-            width: "140px",
+            width: "180px",
             cell: (r: RecognitionListItem) => <CellText>{r.dept_name || "—"}</CellText>,
           } satisfies Column<RecognitionListItem>,
         ]
       : []),
     {
       header: "班级",
-      width: "112px",
+      width: "200px",
       cell: (r) => <CellText>{r.class_name || "—"}</CellText>,
     },
     {
@@ -350,6 +349,17 @@ function ReviewsWorkbench() {
         ) : (
           <span className="text-ink-mute">未评定</span>
         ),
+    },
+    {
+      header: "证明材料",
+      width: "112px",
+      cell: (r) => (
+        <ProofPreviewCell
+          recognitionId={r.id}
+          count={r.proof_count ?? 0}
+          studentName={r.student_name}
+        />
+      ),
     },
     {
       header: "操作",
@@ -470,29 +480,51 @@ function ReviewsWorkbench() {
             className="shrink-0"
             disabled={exportingSummary}
             onClick={() => void handleExportSummary()}
-            title="导出当前筛选范围内已认定通过的学生汇总表"
+            title={
+              selected.size > 0
+                ? "导出勾选的记录"
+                : isTodo
+                  ? "导出当前筛选下本级待审申请"
+                  : "导出当前筛选范围内已认定通过的学生汇总表"
+            }
           >
             <Download size={16} />
-            {exportingSummary ? "导出中…" : "导出汇总表"}
+            {exportingSummary
+              ? "导出中…"
+              : selected.size > 0
+                ? `导出已选（${selected.size}）`
+                : isTodo
+                  ? "导出本级待审"
+                  : "导出已通过"}
           </Button>
         )}
       </Toolbar>
 
-      {isTodo && selected.size > 0 && (
+      {selected.size > 0 && (
         <div
           className="mb-3 flex flex-wrap items-center gap-3 rounded-md px-4 py-2.5"
           style={{ backgroundColor: "var(--color-primary-subtle)" }}
         >
           <span className="text-sm text-ink">已选择 {selected.size} 条</span>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => setBatchDialog("pass")}>
-              <Check size={14} />
-              批量通过
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setBatchDialog("reject")}>
-              <Undo2 size={14} />
-              批量退回
-            </Button>
+            {isTodo && (
+              <>
+                <Button size="sm" onClick={() => setBatchDialog("pass")}>
+                  <Check size={14} />
+                  批量通过
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => setBatchDialog("reject")}>
+                  <Undo2 size={14} />
+                  批量退回
+                </Button>
+              </>
+            )}
+            {canExportSummary && (
+              <Button size="sm" variant="outline" disabled={exportingSummary} onClick={() => void handleExportSummary()}>
+                <Download size={14} />
+                {exportingSummary ? "导出中…" : "导出已选"}
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               取消选择
             </Button>
@@ -504,6 +536,8 @@ function ReviewsWorkbench() {
         columns={columns}
         data={list}
         rowKey={(r) => r.id}
+        pinStartCount={2}
+        pinEndCount={2}
         loading={loading}
         error={error}
         onRetry={load}

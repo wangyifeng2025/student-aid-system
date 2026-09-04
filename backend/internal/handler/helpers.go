@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/middleware"
@@ -40,6 +41,35 @@ func parseUintQuery(c *gin.Context, name string) uint {
 		return 0
 	}
 	return uint(v)
+}
+
+const maxExportIDCount = 500
+
+// parseUintListQuery 解析逗号分隔的无符号 ID 列表；非法项跳过，最多保留 500 个。
+func parseUintListQuery(c *gin.Context, name string) []uint {
+	raw := strings.TrimSpace(c.Query(name))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]uint, 0, len(parts))
+	seen := make(map[uint]struct{}, len(parts))
+	for _, p := range parts {
+		v, err := strconv.ParseUint(strings.TrimSpace(p), 10, 64)
+		if err != nil || v == 0 {
+			continue
+		}
+		id := uint(v)
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		if len(out) >= maxExportIDCount {
+			break
+		}
+	}
+	return out
 }
 
 // parseIntQuery 解析查询参数为整型；缺失或非法返回 0。

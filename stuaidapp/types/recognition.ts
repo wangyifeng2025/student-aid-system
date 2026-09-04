@@ -120,6 +120,7 @@ export interface RecognitionListItem {
   difficulty_level: DifficultyLevel;
   per_capita_annual_income: number;
   special_types: string[];
+  proof_count: number;
 }
 
 export interface RecognitionDetail {

@@ -28,6 +28,7 @@ type RecognitionFilter struct {
 	Page            int
 	PageSize        int
 	ExcludeStatuses []string // 排除的状态（如 draft，供审核角色隐藏未提交申请）
+	IDs             []uint   // 按申请 ID 限定（导出勾选记录）
 }
 
 // scoped 在 applications 关联 students 后按操作者数据范围过滤。
@@ -78,6 +79,9 @@ func applyRecognitionFilter(q *gorm.DB, f RecognitionFilter) *gorm.DB {
 	q = applySpecialTypeFilter(q, f.SpecialType)
 	if len(f.ExcludeStatuses) > 0 {
 		q = q.Where("recognition_applications.status NOT IN ?", f.ExcludeStatuses)
+	}
+	if len(f.IDs) > 0 {
+		q = q.Where("recognition_applications.id IN ?", f.IDs)
 	}
 	return q
 }

@@ -37,7 +37,18 @@ func NewRecognitionService(db *gorm.DB) *RecognitionService {
 }
 
 // 与前端约定一致的签字附件文件名。
-const studentSignatureFile = "student_signature.png"
+const (
+	studentSignatureFile      = "student_signature.png"
+	commitmentHandwritingFile = "commitment_handwriting.png"
+)
+
+// 勾选下列特殊群体时，提交须上传至少一份非签字证明材料（低保证、特困证等）。
+var lowIncomeProofTypes = map[string]struct{}{
+	string(model.SGLowIncome):       {},
+	string(model.SGLowIncomeMargin): {},
+	string(model.SGOtherLowIncome):  {},
+	string(model.SGExtremePoverty):  {},
+}
 
 // List 按数据范围分页列出认定申请。
 func (s *RecognitionService) List(actor rbac.Actor, f repository.RecognitionFilter) (*dto.PageResult[dto.RecognitionListItem], error) {
@@ -87,7 +98,7 @@ func (s *RecognitionService) List(actor rbac.Actor, f repository.RecognitionFilt
 		Total:    total,
 		Page:     f.Page,
 		PageSize: f.PageSize,
-	}, nil
+	}, fillRecognitionProofCounts(s.attRepo, list)
 }
 
 // orgNameMaps 预加载院系/专业/班级 ID -> 名称映射，用于列表展示。
@@ -262,6 +273,9 @@ func (s *RecognitionService) Submit(actor rbac.Actor, id uint) (*dto.SubmitResul
 		return nil, err
 	}
 	if err := s.requireSignatureAttachments(id); err != nil {
+		return nil, err
+	}
+	if err := s.requireLowIncomeProofAttachments(a, id); err != nil {
 		return nil, err
 	}
 
@@ -580,6 +594,54 @@ func (s *RecognitionService) requireSignatureAttachments(appID uint) error {
 		return NewValidationError("请完成学生本人（或监护人）签字后再提交")
 	}
 	return nil
+}
+
+func needsLowIncomeProof(specialTypes string) bool {
+	for _, t := range dto.SplitSpecialTypes(specialTypes) {
+		if _, ok := lowIncomeProofTypes[t]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isSignatureFileName(name string) bool {
+	return name == studentSignatureFile || name == commitmentHandwritingFile
+}
+
+func fillRecognitionProofCounts(att *repository.AttachmentRepository, list []dto.RecognitionListItem) error {
+	if att == nil || len(list) == 0 {
+		return nil
+	}
+	ids := make([]uint, len(list))
+	for i := range list {
+		ids[i] = list[i].ID
+	}
+	counts, err := att.CountProofByOwnerIDs(OwnerTypeRecognition, ids)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		list[i].ProofCount = int(counts[list[i].ID])
+	}
+	return nil
+}
+
+// requireLowIncomeProofAttachments 勾选低保/特困/其他低收入时须上传至少一份证明材料。
+func (s *RecognitionService) requireLowIncomeProofAttachments(a *model.RecognitionApplication, appID uint) error {
+	if !needsLowIncomeProof(a.SpecialTypes) {
+		return nil
+	}
+	items, err := s.attRepo.ListByOwner(OwnerTypeRecognition, appID)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if !isSignatureFileName(items[i].FileName) {
+			return nil
+		}
+	}
+	return NewValidationError("勾选低收入家庭相关类型后，请上传至少一份证明材料（低保证、特困证等）")
 }
 
 // computePerCapita 由家庭成员年收入合计与家庭人口计算人均年收入（保留两位）。

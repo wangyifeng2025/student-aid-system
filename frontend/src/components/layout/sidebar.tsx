@@ -91,7 +91,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="fixed top-0 bottom-0 left-0 flex flex-col overflow-y-auto"
+      className="fixed top-0 bottom-0 left-0 z-40 flex flex-col overflow-y-auto"
       style={{
         width: "var(--sidebar-width)",
         backgroundColor: "var(--color-bg-sidebar)",

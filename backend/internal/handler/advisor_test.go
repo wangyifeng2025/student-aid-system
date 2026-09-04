@@ -14,6 +14,7 @@ import (
 	"github.com/wangyifeng2025/student-aid-system/internal/middleware"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/pkg/jwt"
+	"github.com/wangyifeng2025/student-aid-system/pkg/password"
 	"gorm.io/gorm"
 )
 
@@ -163,6 +164,63 @@ func TestAdvisorCRUDMultiClass(t *testing.T) {
 		if err := db.Unscoped().First(&u, *created.Data.UserID).Error; err != gorm.ErrRecordNotFound {
 			t.Fatalf("linked user should be hard-deleted, err=%v id=%d", err, *created.Data.UserID)
 		}
+	}
+}
+
+func TestCreateAdvisorResetsExistingUserPassword(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, _ := seedStudentOrgRefs(t, db)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	staffNo := fmt.Sprintf("C%s", suffix)
+	hash, err := password.Hash("OldPass123")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	u := model.User{
+		Username: staffNo, PasswordHash: hash, RealName: "先建用户",
+		Role: model.RoleClassAdvisor, Phone: "13900005555", Status: 1,
+	}
+	if err := db.Create(&u).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Where("staff_no = ?", staffNo).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("staff_no = ?", staffNo).Delete(&model.Advisor{})
+		db.Unscoped().Where("id = ?", u.ID).Delete(&model.User{})
+	})
+
+	w := doJSON(t, r, http.MethodPost, "/api/v1/advisors", token, dto.AdvisorRequest{
+		DeptID:  dept.ID,
+		StaffNo: staffNo,
+		Name:    "页面新增班主任",
+		Phone:   "13900005555",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create advisor %d, body %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		Data dto.AdvisorResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Data.InitialPassword != "Adv005555" {
+		t.Fatalf("initial password want Adv005555, got %q", created.Data.InitialPassword)
+	}
+	w = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "", dto.LoginRequest{
+		Username: staffNo, Password: "OldPass123",
+	})
+	if w.Code == http.StatusOK {
+		t.Fatal("old password should not work after creating advisor")
+	}
+	w = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "", dto.LoginRequest{
+		Username: staffNo, Password: "Adv005555",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login with Adv005555 expect 200, got %d body %s", w.Code, w.Body.String())
 	}
 }
 
@@ -324,5 +382,62 @@ func TestImportAdvisorsRestoresDeletedUsername(t *testing.T) {
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("login with initial password Adv003333 expect 200, got %d body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestImportAdvisorsResetsExistingLiveUserPassword(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, _ := seedStudentOrgRefs(t, db)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	staffNo := fmt.Sprintf("L%s", suffix)
+	hash, err := password.Hash("OldPass123")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	u := model.User{
+		Username: staffNo, PasswordHash: hash, RealName: "先建用户",
+		Role: model.RoleClassAdvisor, Phone: "13900004444", Status: 1,
+	}
+	if err := db.Create(&u).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Where("staff_no = ?", staffNo).Delete(&model.AdvisorClass{})
+		db.Unscoped().Where("staff_no = ?", staffNo).Delete(&model.Advisor{})
+		db.Unscoped().Where("id = ?", u.ID).Delete(&model.User{})
+	})
+
+	xlsx := buildXLSX(t, [][]any{
+		{"系部", "教工号", "姓名", "电话", "班级名称", "专业", "年级"},
+		{dept.Name, staffNo, "导入后班主任", "13900004444", "", "", ""},
+	})
+	w := uploadXLSX(t, r, "/api/v1/import/advisors", token, xlsx)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import status %d, body %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data dto.ImportResult `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data.Failed != 0 || resp.Data.Success != 1 {
+		t.Fatalf("import should succeed, got %+v", resp.Data)
+	}
+
+	w = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "", dto.LoginRequest{
+		Username: staffNo, Password: "OldPass123",
+	})
+	if w.Code == http.StatusOK {
+		t.Fatal("old user-management password should no longer work after advisor import")
+	}
+	w = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "", dto.LoginRequest{
+		Username: staffNo, Password: "Adv004444",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login with Adv004444 expect 200, got %d body %s", w.Code, w.Body.String())
 	}
 }

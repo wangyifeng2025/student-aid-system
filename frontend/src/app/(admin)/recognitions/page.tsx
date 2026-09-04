@@ -17,6 +17,7 @@ import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { StatusBadge } from "@/components/recognition/status-badge";
+import { ProofPreviewCell } from "@/components/recognition/proof-preview-cell";
 import {
   STATUS_META,
   SPECIAL_GROUP_OPTIONS,
@@ -56,8 +57,13 @@ export default function RecognitionsPage() {
   const [withdrawing, setWithdrawing] = React.useState(false);
   const [exportingSummary, setExportingSummary] = React.useState(false);
 
+  const selectableList = isStudent
+    ? list.filter((r) => canDeleteRecognition(r.status))
+    : canExportSummary
+      ? list
+      : [];
   const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(
-    list.filter((r) => canDeleteRecognition(r.status)),
+    selectableList,
     (r) => r.id,
   );
 
@@ -137,14 +143,17 @@ export default function RecognitionsPage() {
   };
 
   const handleExportSummary = async () => {
+    const ids = Array.from(selected);
     setExportingSummary(true);
     try {
       await recognitionApi.exportSummary({
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
         special_type: filterSpecialType || undefined,
+        ids: ids.length ? ids : undefined,
+        scope: ids.length ? undefined : "approved",
       });
-      toast.success("认定结果汇总表已导出");
+      toast.success(ids.length ? `已导出选中的 ${ids.length} 条` : "认定结果汇总表已导出");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     } finally {
@@ -153,7 +162,7 @@ export default function RecognitionsPage() {
   };
 
   const columns: Column<RecognitionListItem>[] = [
-    ...(isStudent
+    ...(isStudent || canExportSummary
       ? [
           checkboxColumn<RecognitionListItem>(
             selected,
@@ -162,7 +171,7 @@ export default function RecognitionsPage() {
             toggleRow,
             (r) => r.id,
             (r) => r.student_name || String(r.id),
-            (r) => canDeleteRecognition(r.status),
+            isStudent ? (r) => canDeleteRecognition(r.status) : undefined,
           ),
         ]
       : []),
@@ -184,12 +193,12 @@ export default function RecognitionsPage() {
         ]),
     {
       header: "专业",
-      width: "140px",
+      width: "220px",
       cell: (r) => <CellText>{r.major_name || "—"}</CellText>,
     },
     {
       header: "班级",
-      width: "112px",
+      width: "200px",
       cell: (r) => <CellText>{r.class_name || "—"}</CellText>,
     },
     {
@@ -229,6 +238,17 @@ export default function RecognitionsPage() {
         <span className="tabular-nums">
           {r.per_capita_annual_income ? `¥${r.per_capita_annual_income.toLocaleString()}` : "—"}
         </span>
+      ),
+    },
+    {
+      header: "证明材料",
+      width: "112px",
+      cell: (r) => (
+        <ProofPreviewCell
+          recognitionId={r.id}
+          count={r.proof_count ?? 0}
+          studentName={r.student_name}
+        />
       ),
     },
     {
@@ -351,7 +371,11 @@ export default function RecognitionsPage() {
             onClick={() => void handleExportSummary()}
           >
             <Download size={16} />
-            {exportingSummary ? "导出中…" : "导出汇总表"}
+            {exportingSummary
+              ? "导出中…"
+              : selected.size > 0
+                ? `导出已选（${selected.size}）`
+                : "导出已通过"}
           </Button>
         )}
         {isStudent && (
@@ -378,6 +402,8 @@ export default function RecognitionsPage() {
         columns={columns}
         data={list}
         rowKey={(r) => r.id}
+        pinStartCount={2}
+        pinEndCount={2}
         loading={loading}
         error={error}
         onRetry={load}

@@ -96,6 +96,17 @@ func (s *AdvisorService) Create(req *dto.AdvisorRequest) (*dto.AdvisorResponse, 
 	if err != nil {
 		return nil, err
 	}
+	// 教工号已有登录账号时 ensureLoginUser 只做关联、不改密。
+	// 新增班主任仍应初始化为 Adv+手机后 6 位，否则会沿用用户管理里随手设的旧密码。
+	if initial == "" {
+		if saved, ferr := s.repo.FindByID(a.ID); ferr == nil {
+			pwd, perr := s.applyInitialLoginPassword(saved)
+			if perr != nil {
+				return nil, perr
+			}
+			initial = pwd
+		}
+	}
 	resp, err := s.Get(a.ID)
 	if err != nil {
 		return nil, err

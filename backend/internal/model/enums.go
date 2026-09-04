@@ -62,7 +62,7 @@ type DifficultyLevel string
 
 const (
 	DifficultySpecial DifficultyLevel = "special" // 特别困难
-	DifficultyHard    DifficultyLevel = "hard"    // 比较困难
+	DifficultyHard    DifficultyLevel = "hard"    // 困难
 	DifficultyGeneral DifficultyLevel = "general" // 一般困难
 )
 
