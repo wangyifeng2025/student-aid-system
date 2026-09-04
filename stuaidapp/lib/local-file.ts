@@ -1,7 +1,8 @@
+import { File as ExpoFile } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-/** RN fetch / FormData 需要 file://；相册常返回 content:// 或裸路径。 */
+/** 相册常返回 content:// / ph://；上传前尽量落到 file://。 */
 export function ensureFileUri(uri: string): string {
   const trimmed = (uri || '').trim();
   if (!trimmed) return trimmed;
@@ -65,4 +66,20 @@ export async function preparePdfUpload(
   const name = /\.pdf$/i.test(base) ? base : `${base}.pdf`;
   const dest = await materializeLocalFile(uri, `proof_${Date.now()}.pdf`);
   return { uri: dest, name, mime: 'application/pdf' };
+}
+
+/**
+ * 把本地路径变成 Expo File（实现 Blob / bytes()），供默认 Expo fetch 的 FormData 使用。
+ * content:// 等先拷到缓存；file:// 直接打开。
+ */
+export async function asUploadFile(uri: string, destHint: string): Promise<ExpoFile> {
+  let path = ensureFileUri(uri);
+  if (!path.startsWith('file://') && !path.startsWith('/')) {
+    path = await materializeLocalFile(path, destHint);
+  }
+  const file = new ExpoFile(path);
+  if (typeof file.exists === 'boolean' && !file.exists) {
+    throw new Error('无法读取所选文件');
+  }
+  return file;
 }

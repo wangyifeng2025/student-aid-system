@@ -13,7 +13,7 @@ import type { CreateGrantInput, Grant, GrantInput, GrantListItem } from '@/types
 import type { StudentProfile } from '@/types/student';
 import type { DashboardOverview } from '@/types/dashboard';
 import { clearSession, getSession, saveSession } from '@/lib/token-storage';
-import { ensureFileUri } from '@/lib/local-file';
+import { asUploadFile, ensureFileUri } from '@/lib/local-file';
 // expo-file-system v19 起新增基于 File/Directory 的 API，旧版 cacheDirectory /
 // downloadAsync / EncodingType 等移至 `expo-file-system/legacy`。
 import * as FileSystem from 'expo-file-system/legacy';
@@ -224,7 +224,7 @@ async function downloadAndShareFile(
   await Sharing.shareAsync(shareUri, { mimeType, dialogTitle, UTI: uti });
 }
 
-/** multipart 上传本地文件（须为可读取的 file:// 路径）。 */
+/** multipart 上传本地文件：Expo 默认 fetch 只认 Blob / File，不认 { uri }。 */
 async function apiUploadFile<T>(
   path: string,
   fileUri: string,
@@ -236,12 +236,22 @@ async function apiUploadFile<T>(
     const headers: Record<string, string> = {};
     const session = getSession();
     if (session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
+    let file: Awaited<ReturnType<typeof asUploadFile>>;
+    try {
+      file = await asUploadFile(uri, `upload_${Date.now()}_${fileName}`);
+    } catch (e) {
+      const hint = e instanceof Error ? e.message : String(e);
+      return { status: 0, body: null, networkError: hint };
+    }
     const form = new FormData();
-    form.append('file', {
-      uri,
-      name: fileName,
-      type: mime,
-    } as unknown as Blob);
+    if (mime) {
+      try {
+        (file as { type: string }).type = mime;
+      } catch {
+        // File.type 只读时忽略，后端仍可按文件名扩展名识别。
+      }
+    }
+    form.append('file', file as Blob, fileName);
     let res: Response;
     try {
       res = await fetch(`${getApiBase()}${API_PREFIX}${path}`, {
