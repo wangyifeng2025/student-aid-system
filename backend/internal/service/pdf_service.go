@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/go-pdf/fpdf"
 	"github.com/wangyifeng2025/student-aid-system/internal/config"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/internal/rbac"
@@ -13,7 +15,7 @@ import (
 )
 
 // RecognitionPDFService 认定申请表导出（仅认定通过后可导出）。
-// 导出格式为 docx：基于 assets/templates/recognition_application.docx 模板填数。
+// 导出格式为 PDF：按官方认定申请表版式用 fpdf 绘制，需配置中文字体。
 type RecognitionPDFService struct {
 	cfg      *config.Config
 	repo     *repository.RecognitionRepository
@@ -34,7 +36,7 @@ func NewRecognitionPDFService(db *gorm.DB, cfg *config.Config) *RecognitionPDFSe
 	}
 }
 
-// Export 基于 Word 模板填数，生成《家庭经济困难学生认定申请表》docx。
+// Export 生成《家庭经济困难学生认定申请表》PDF。
 func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, string, error) {
 	ok, err := s.repo.CanAccess(actor, id)
 	if err != nil {
@@ -54,28 +56,51 @@ func (s *RecognitionPDFService) Export(actor rbac.Actor, id uint) ([]byte, strin
 		return nil, "", NewValidationError("仅认定通过的申请可导出申请表")
 	}
 
+	fontPath := resolvePDFFontPath(s.cfg)
+	fontBytes, err := os.ReadFile(fontPath)
+	if err != nil || len(fontBytes) == 0 {
+		return nil, "", NewValidationError("服务端未配置中文字体（export.pdf_font_path），无法导出 PDF，请联系管理员")
+	}
+
 	stu, _ := s.stuRepo.FindStudentUnscoped(a.StudentID)
 	dept, major, grade, class := resolveStudentOrgNames(s.orgRepo, stu)
 	labels := s.loadLabelMaps()
-	replacements := buildRecognitionDocxReplacements(s.cfg, a, stu, dept, major, grade, class, labels)
 	signaturePNG := s.loadStudentSignaturePNG(id)
 
-	docxBytes, err := exportRecognitionDocx(s.cfg, replacements, signaturePNG)
-	if err != nil {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	const fontName = "zh"
+	pdf.AddUTF8FontFromBytes(fontName, "", fontBytes)
+	if pdf.Err() {
+		return nil, "", NewValidationError("加载中文字体失败，请检查 export.pdf_font_path 指向的 TTF 字体文件")
+	}
+	pdf.SetMargins(pdfMarginL, 12, pdfMarginL)
+	pdf.SetAutoPageBreak(true, 12)
+	pdf.AddPage()
+	renderOfficialRecognitionForm(pdf, fontName, s.cfg, a, stu, dept, major, grade, class, labels, signaturePNG)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
 		return nil, "", err
 	}
-	return docxBytes, recognitionDocxFilename(stu), nil
+	return buf.Bytes(), recognitionPDFFilename(stu), nil
 }
 
-// recognitionDocxFilename 下载文件名：{申请人姓名}-困难认定申请表.docx。
-func recognitionDocxFilename(stu *model.Student) string {
+func resolvePDFFontPath(cfg *config.Config) string {
+	if cfg != nil && strings.TrimSpace(cfg.Export.PDFFontPath) != "" {
+		return strings.TrimSpace(cfg.Export.PDFFontPath)
+	}
+	return "./assets/fonts/NotoSansSC-Regular.ttf"
+}
+
+// recognitionPDFFilename 下载文件名：{申请人姓名}-困难认定申请表.pdf。
+func recognitionPDFFilename(stu *model.Student) string {
 	name := "申请人"
 	if stu != nil {
 		if n := strings.TrimSpace(stu.Name); n != "" {
 			name = n
 		}
 	}
-	return sanitizeDownloadName(name) + "-困难认定申请表.docx"
+	return sanitizeDownloadName(name) + "-困难认定申请表.pdf"
 }
 
 // sanitizeDownloadName 去掉路径分隔符与常见非法文件名字符，避免下载头被注入或落盘失败。

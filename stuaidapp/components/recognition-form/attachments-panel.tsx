@@ -1,22 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import { FilePreviewModal } from '@/components/file-preview-modal';
 import { Brand } from '@/constants/brand';
 import { isSignatureAttachment } from '@/constants/signature';
 import { ApiError, attachmentApi, recognitionApi, type Attachment } from '@/lib/api';
+import { prepareImageUpload, preparePdfUpload } from '@/lib/local-file';
 
 const MAX_PROOF_FILES = 8;
 
@@ -41,46 +40,11 @@ function isPdf(mime: string, name: string): boolean {
   return mime === 'application/pdf' || /\.pdf$/i.test(name);
 }
 
-function mimeOf(name: string, fallback = 'application/octet-stream'): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.pdf')) return 'application/pdf';
-  return fallback;
-}
-
-function normalizeProofFile(name: string, mime?: string): { name: string; mime: string } | null {
-  const lower = (name || '').toLowerCase();
-  if (/\.(heic|heif)$/.test(lower) || mime === 'image/heic' || mime === 'image/heif') {
-    return { name: `proof_${Date.now()}.jpg`, mime: 'image/jpeg' };
-  }
-  if (/\.png$/.test(lower)) return { name, mime: mime && mime !== 'image/heic' ? mime : 'image/png' };
-  if (/\.jpe?g$/.test(lower)) return { name, mime: mime || 'image/jpeg' };
-  if (/\.pdf$/.test(lower)) return { name, mime: mime || 'application/pdf' };
-  if (mime === 'application/pdf') return { name: name.endsWith('.pdf') ? name : `${name}.pdf`, mime };
-  if (mime?.startsWith('image/jpeg')) return { name: /\.jpe?g$/.test(lower) ? name : `${name}.jpg`, mime };
-  if (mime?.startsWith('image/png')) return { name: lower.endsWith('.png') ? name : `${name}.png`, mime };
-  return null;
-}
-
-function safeFileName(name: string): string {
-  const cleaned = name.replace(/[^\w.\-]+/g, '_');
-  return cleaned || `proof_${Date.now()}.jpg`;
-}
-
-async function copyToCache(uri: string, fileName: string): Promise<string> {
-  const dest = `${FileSystem.cacheDirectory}${fileName}`;
-  await FileSystem.copyAsync({ from: uri, to: dest });
-  return dest;
-}
-
 export function AttachmentsPanel({ recognitionId, editable, required, onCountChange }: Props) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(!!recognitionId);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<Attachment | null>(null);
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const onCountChangeRef = useRef(onCountChange);
   onCountChangeRef.current = onCountChange;
 
@@ -110,19 +74,31 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
 
   async function uploadLocal(uri: string, fileName: string, mime: string) {
     if (!recognitionId) return;
-    const normalized = normalizeProofFile(fileName, mime);
-    if (!normalized) {
-      Alert.alert('无法上传', '仅支持 JPG、PNG 图片或 PDF');
-      return;
-    }
     if (items.length >= MAX_PROOF_FILES) {
       Alert.alert('无法上传', `最多上传 ${MAX_PROOF_FILES} 份证明材料`);
       return;
     }
+    const asPdf = isPdf(mime, fileName);
+    const asImage =
+      !asPdf &&
+      (isImage(mime, fileName) ||
+        mime.startsWith('image/') ||
+        /\.(heic|heif|png|jpe?g)$/i.test(fileName));
+    if (!asPdf && !asImage) {
+      Alert.alert('无法上传', '仅支持 JPG、PNG 图片或 PDF');
+      return;
+    }
     setUploading(true);
     try {
-      const cached = await copyToCache(uri, safeFileName(normalized.name));
-      await recognitionApi.uploadAttachment(recognitionId, cached, normalized.name, normalized.mime);
+      const prepared = asPdf
+        ? await preparePdfUpload(uri, fileName)
+        : await prepareImageUpload(uri);
+      await recognitionApi.uploadAttachment(
+        recognitionId,
+        prepared.uri,
+        prepared.name,
+        prepared.mime,
+      );
       await load();
     } catch (e) {
       Alert.alert('上传失败', e instanceof ApiError ? e.message : '请稍后重试');
@@ -140,11 +116,13 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
     const res = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.8,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (res.canceled || !res.assets[0]) return;
     const asset = res.assets[0];
     const name = asset.fileName || `proof_${Date.now()}.jpg`;
-    await uploadLocal(asset.uri, name, asset.mimeType || mimeOf(name, 'image/jpeg'));
+    await uploadLocal(asset.uri, name, asset.mimeType || 'image/jpeg');
   }
 
   async function pickAlbum() {
@@ -156,11 +134,13 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (res.canceled || !res.assets[0]) return;
     const asset = res.assets[0];
     const name = asset.fileName || `proof_${Date.now()}.jpg`;
-    await uploadLocal(asset.uri, name, asset.mimeType || mimeOf(name, 'image/jpeg'));
+    await uploadLocal(asset.uri, name, asset.mimeType || 'image/jpeg');
   }
 
   async function pickDocument() {
@@ -170,7 +150,7 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
     });
     if (res.canceled || !res.assets[0]) return;
     const asset = res.assets[0];
-    await uploadLocal(asset.uri, asset.name, asset.mimeType || mimeOf(asset.name));
+    await uploadLocal(asset.uri, asset.name, asset.mimeType || '');
   }
 
   function handlePick() {
@@ -208,25 +188,6 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
       await attachmentApi.download(item.id, item.file_name);
     } catch (e) {
       Alert.alert('打开失败', e instanceof ApiError ? e.message : '请稍后重试');
-    }
-  }
-
-  async function handlePreview(item: Attachment) {
-    if (isPdf(item.mime, item.file_name)) {
-      await handleOpen(item);
-      return;
-    }
-    setPreview(item);
-    setPreviewLoading(true);
-    setPreviewUri(null);
-    try {
-      const uri = await attachmentApi.fetchDataUrl(item.id);
-      setPreviewUri(uri);
-    } catch (e) {
-      setPreview(null);
-      Alert.alert('预览失败', e instanceof ApiError ? e.message : '请稍后重试');
-    } finally {
-      setPreviewLoading(false);
     }
   }
 
@@ -277,13 +238,13 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
               size={18}
               color={isImage(a.mime, a.file_name) ? Brand.warning : Brand.primary}
             />
-            <Pressable style={styles.rowBody} onPress={() => void handlePreview(a)}>
+            <Pressable style={styles.rowBody} onPress={() => setPreview(a)}>
               <Text style={styles.fileName} numberOfLines={1}>
                 {a.file_name}
               </Text>
               <Text style={styles.size}>{humanSize(a.size)}</Text>
             </Pressable>
-            <Pressable hitSlop={8} onPress={() => void handlePreview(a)}>
+            <Pressable hitSlop={8} onPress={() => setPreview(a)}>
               <Ionicons name="eye-outline" size={18} color={Brand.primary} />
             </Pressable>
             <Pressable hitSlop={8} onPress={() => void handleOpen(a)}>
@@ -298,21 +259,7 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
         ))
       )}
 
-      <Modal visible={preview !== null} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
-        <View style={styles.previewBackdrop}>
-          <Pressable style={styles.previewClose} onPress={() => setPreview(null)}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-          {previewLoading || !previewUri ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Image source={{ uri: previewUri }} style={styles.previewImage} contentFit="contain" />
-          )}
-          <Text style={styles.previewName} numberOfLines={1}>
-            {preview?.file_name}
-          </Text>
-        </View>
-      </Modal>
+      <FilePreviewModal attachment={preview} onClose={() => setPreview(null)} />
     </View>
   );
 }
@@ -328,7 +275,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     height: 36,
     paddingHorizontal: 12,
     borderRadius: Brand.radiusSm,
@@ -376,33 +323,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: Brand.mutedForeground,
-  },
-  previewBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  previewClose: {
-    position: 'absolute',
-    top: 48,
-    right: 20,
-    zIndex: 2,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  previewImage: {
-    width: '100%',
-    height: '80%',
-  },
-  previewName: {
-    marginTop: 12,
-    fontSize: 13,
-    color: '#fff',
   },
 });

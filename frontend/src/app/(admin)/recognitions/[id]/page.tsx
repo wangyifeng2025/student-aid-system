@@ -154,7 +154,7 @@ export default function RecognitionDetailPage() {
 
   const handleExport = async () => {
     try {
-      await recognitionApi.exportDocx(id);
+      await recognitionApi.exportPdf(id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     }
@@ -387,7 +387,7 @@ export default function RecognitionDetailPage() {
                   {data.status === "approved" && (
                     <Button variant="outline" onClick={handleExport} className="w-full">
                       <Download size={16} />
-                      下载认定申请表（Word）
+                      下载认定申请表（PDF）
                     </Button>
                   )}
                 </div>

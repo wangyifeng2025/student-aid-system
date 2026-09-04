@@ -595,7 +595,7 @@ export const recognitionApi = {
     apiFetch<SubmitResult>(`/recognitions/${id}/submit`, { method: "POST" }),
   withdraw: (id: number) =>
     apiFetch<Recognition>(`/recognitions/${id}/withdraw`, { method: "POST" }),
-  exportDocx: (id: number, fallbackName = `recognition_${id}.docx`) =>
+  exportPdf: (id: number, fallbackName = `recognition_${id}.pdf`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
   exportSummary: (
     filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "status" | "ids" | "scope">,

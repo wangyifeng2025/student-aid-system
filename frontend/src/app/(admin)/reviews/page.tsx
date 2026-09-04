@@ -377,7 +377,7 @@ function ReviewsWorkbench() {
             <button
               type="button"
               onClick={() => {
-                void recognitionApi.exportDocx(r.id).catch((e) => {
+                void recognitionApi.exportPdf(r.id).catch((e) => {
                   toast.error(e instanceof ApiError ? e.message : "导出失败");
                 });
               }}

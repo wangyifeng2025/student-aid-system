@@ -225,7 +225,7 @@ func registerRecognitionRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		recs.DELETE("/:id", h.DeleteRecognition)
 		recs.POST("/:id/submit", h.SubmitRecognition)
 		recs.POST("/:id/withdraw", h.WithdrawRecognition)
-		recs.GET("/:id/export", h.ExportRecognitionDocx)
+		recs.GET("/:id/export", h.ExportRecognitionPDF)
 		recs.POST("/:id/attachments", h.UploadRecognitionAttachment)
 		recs.GET("/:id/attachments", h.ListRecognitionAttachments)
 	}

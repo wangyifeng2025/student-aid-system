@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -66,14 +66,11 @@ export function SignaturePad({
   const previewHeight = height ?? (isLine ? 72 : 150);
   const editorPadHeight = isLine ? 128 : undefined;
 
-  useEffect(() => {
-    if (!open) return;
-    setDraftEmpty(!value);
-    setPadKey((k) => k + 1);
-  }, [open, value]);
-
   function openEditor() {
     if (disabled) return;
+    // 在用户手势里重置草稿并换 key，避免二次打开残留笔迹；勿放进 effect。
+    setDraftEmpty(!value);
+    setPadKey((k) => k + 1);
     setOpen(true);
   }
 
@@ -190,9 +187,9 @@ export function SignaturePad({
                 autoClear={false}
                 imageType="image/png"
                 trimWhitespace
-                minWidth={0.35}
-                maxWidth={1.1}
-                dotSize={1.0}
+                minWidth={1.2}
+                maxWidth={3.2}
+                dotSize={2.4}
                 style={styles.canvas}
                 androidHardwareAccelerationDisabled={false}
                 webviewProps={{

@@ -136,7 +136,7 @@ export default function RecognitionsPage() {
 
   const handleExport = async (id: number) => {
     try {
-      await recognitionApi.exportDocx(id);
+      await recognitionApi.exportPdf(id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     }
@@ -297,7 +297,7 @@ export default function RecognitionsPage() {
               className="inline-flex items-center gap-1 text-link hover:underline"
             >
               <Download size={14} />
-              Word
+              PDF
             </button>
           )}
         </div>

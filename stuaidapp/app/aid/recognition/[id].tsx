@@ -110,7 +110,7 @@ export default function RecognitionDetailScreen() {
   async function handleExport() {
     setExporting(true);
     try {
-      await recognitionApi.exportDocx(numericId);
+      await recognitionApi.exportPdf(numericId);
     } catch (e) {
       Alert.alert('下载失败', e instanceof ApiError ? e.message : '请稍后重试');
     } finally {

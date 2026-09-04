@@ -578,7 +578,7 @@
 | DELETE | `/api/v1/recognitions/:id` | 删除（仅 `draft`/`rejected`） | 学生本人 |
 | POST | `/api/v1/recognitions/:id/submit` | 提交评审（完整校验 + 自动算人均收入 + 单亲/单薪提示） | 学生本人 |
 | POST | `/api/v1/recognitions/:id/withdraw` | 撤回申请（仅 `pending_class` 且无班级评审记录，恢复为 `draft`） | 学生本人 |
-| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 docx（仅 `approved`；基于 Word 模板填数，需配置 `export.recognition_template_path`） | 学生本人；班主任 / 教学系 / 资助中心 / 管理员按数据范围 |
+| GET | `/api/v1/recognitions/:id/export` | 导出认定申请表 PDF（仅 `approved`；需配置 `export.pdf_font_path` 中文字体） | 学生本人；班主任 / 教学系 / 资助中心 / 管理员按数据范围 |
 | POST | `/api/v1/recognitions/:id/attachments` | 上传支撑材料（`multipart/form-data`，字段 `file`） | 学生本人 |
 | GET | `/api/v1/recognitions/:id/attachments` | 列出支撑材料 | 登录（按范围） |
 | GET | `/api/v1/attachments/:id/download` | 下载附件 | 登录（按范围） |

@@ -141,12 +141,12 @@ docker compose exec postgres pg_dump -U postgres student_aid_db > backup.sql
 
 ### 认定表 / 助学金表导出
 
-- **认定表**：导出 Word（`docx`），模板 `export.recognition_template_path`
+- **认定表**：导出 PDF（需中文字体 `export.pdf_font_path`，镜像内已含 `assets/fonts/NotoSansSC-Regular.ttf`）
 - **助学金表**：导出 Word（`docx`），模板 `export.grant_template_path`（填数后直接返回，无需 LibreOffice）
 
-### PDF 导出中文字体（可选，历史 fpdf 配置）
+### PDF 导出中文字体
 
-当前助学金导出已改用 Word 模板，**不再依赖** TTF 字体。若仍有旧接口需要 fpdf，可按以下方式挂载：
+认定申请表 PDF 使用 TTF 中文字体。本地默认 `./assets/fonts/NotoSansSC-Regular.ttf`；Compose 默认 `/app/assets/fonts/NotoSansSC-Regular.ttf`。若需替换字体：
 
 1. 将字体文件放到 `deploy/fonts/NotoSansSC-Regular.ttf`
 2. 在 `docker-compose.yml` 的 `backend` 服务增加挂载：

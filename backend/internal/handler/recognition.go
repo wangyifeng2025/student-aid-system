@@ -145,8 +145,8 @@ func (h *Handler) WithdrawRecognition(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// ExportRecognitionDocx 导出认定申请表 docx（仅认定通过后）。
-func (h *Handler) ExportRecognitionDocx(c *gin.Context) {
+// ExportRecognitionPDF 导出认定申请表 PDF（仅认定通过后）。
+func (h *Handler) ExportRecognitionPDF(c *gin.Context) {
 	actor, ok := currentActor(c)
 	if !ok {
 		return
@@ -160,10 +160,8 @@ func (h *Handler) ExportRecognitionDocx(c *gin.Context) {
 		mapCommonError(c, err)
 		return
 	}
-	c.Header("Content-Disposition", attachmentDisposition("recognition-application.docx", filename))
-	c.Data(http.StatusOK,
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		data)
+	c.Header("Content-Disposition", attachmentDisposition("recognition-application.pdf", filename))
+	c.Data(http.StatusOK, "application/pdf", data)
 }
 
 // ExportRecognitionSummary 导出家庭经济困难学生认定结果汇总表（评审角色与管理员）。

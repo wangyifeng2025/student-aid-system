@@ -13,6 +13,7 @@ import type { CreateGrantInput, Grant, GrantInput, GrantListItem } from '@/types
 import type { StudentProfile } from '@/types/student';
 import type { DashboardOverview } from '@/types/dashboard';
 import { clearSession, getSession, saveSession } from '@/lib/token-storage';
+import { ensureFileUri } from '@/lib/local-file';
 // expo-file-system v19 起新增基于 File/Directory 的 API，旧版 cacheDirectory /
 // downloadAsync / EncodingType 等移至 `expo-file-system/legacy`。
 import * as FileSystem from 'expo-file-system/legacy';
@@ -223,20 +224,21 @@ async function downloadAndShareFile(
   await Sharing.shareAsync(shareUri, { mimeType, dialogTitle, UTI: uti });
 }
 
-/** multipart 上传本地文件（uri 可为 file:// 或 data URL 落盘后的路径）。 */
+/** multipart 上传本地文件（须为可读取的 file:// 路径）。 */
 async function apiUploadFile<T>(
   path: string,
   fileUri: string,
   fileName: string,
   mime: string,
 ): Promise<T> {
-  const send = async (): Promise<RawResult<T>> => {
+  const uri = ensureFileUri(fileUri);
+  const send = async (): Promise<RawResult<T> & { networkError?: string }> => {
     const headers: Record<string, string> = {};
     const session = getSession();
     if (session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
     const form = new FormData();
     form.append('file', {
-      uri: fileUri,
+      uri,
       name: fileName,
       type: mime,
     } as unknown as Blob);
@@ -247,8 +249,9 @@ async function apiUploadFile<T>(
         headers,
         body: form,
       });
-    } catch {
-      return { status: 0, body: null };
+    } catch (e) {
+      const hint = e instanceof Error ? e.message : String(e);
+      return { status: 0, body: null, networkError: hint };
     }
     let parsed: ApiResponse<T> | null = null;
     try {
@@ -259,17 +262,25 @@ async function apiUploadFile<T>(
     return { status: res.status, body: parsed };
   };
 
-  let { status, body } = await send();
+  let { status, body, networkError } = await send();
   if (status === 401) {
     const refreshed = await tryRefresh();
     if (refreshed) {
-      ({ status, body } = await send());
+      ({ status, body, networkError } = await send());
     } else {
       await clearSession();
     }
   }
   if (!body) {
-    const message = status === 0 ? '网络连接失败，请检查网络设置' : '服务器响应异常，请稍后重试';
+    const localFail =
+      uri.startsWith('content://') ||
+      uri.startsWith('ph://') ||
+      /could not be found|no such file|unable to open/i.test(networkError || '');
+    const message = localFail
+      ? '无法读取所选文件，请改用「文件」选择或重新拍照后再上传'
+      : status === 0
+        ? `网络连接失败，请检查网络设置${networkError ? `（${networkError}）` : ''}`
+        : '服务器响应异常，请稍后重试';
     throw new ApiError(message, -1, status);
   }
   if (body.code !== 0) {
@@ -370,13 +381,13 @@ export const recognitionApi = {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       '导出认定结果汇总表',
     ),
-  exportDocx: (id: number) =>
+  exportPdf: (id: number) =>
     downloadAndShareFile(
       `/recognitions/${id}/export`,
-      `recognition_${id}.docx`,
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      `recognition_${id}.pdf`,
+      'application/pdf',
       '下载认定申请表',
-      'org.openxmlformats.wordprocessingml.document',
+      'com.adobe.pdf',
     ),
 };
 
@@ -397,6 +408,34 @@ export const attachmentApi = {
     });
     const mime = result.headers?.['Content-Type'] || result.mimeType || 'image/png';
     return `data:${mime};base64,${base64}`;
+  },
+  /** 下载到缓存并返回 file://，供图片/PDF 预览（避免大文件转 data URL）。 */
+  downloadToCache: async (id: number, fileName: string): Promise<string> => {
+    const extMatch = fileName.match(/\.[a-z0-9]+$/i);
+    const ext = extMatch ? extMatch[0].toLowerCase() : '.bin';
+    const target = `${FileSystem.cacheDirectory}preview_${id}${ext}`;
+    const send = async () => {
+      const headers: Record<string, string> = {};
+      const session = getSession();
+      if (session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
+      await FileSystem.deleteAsync(target, { idempotent: true });
+      return FileSystem.downloadAsync(
+        `${getApiBase()}${API_PREFIX}/attachments/${id}/download`,
+        target,
+        { headers },
+      );
+    };
+    let result = await send();
+    if (result.status === 401) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        result = await send();
+      } else {
+        await clearSession();
+      }
+    }
+    if (result.status !== 200) throw new ApiError('读取附件失败', -1, result.status);
+    return ensureFileUri(result.uri);
   },
   remove: (id: number) =>
     apiFetch<{ message: string }>(`/attachments/${id}`, { method: 'DELETE' }),

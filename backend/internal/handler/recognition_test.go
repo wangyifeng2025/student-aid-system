@@ -65,7 +65,7 @@ func setupRecognitionRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	recs.DELETE("/:id", h.DeleteRecognition)
 	recs.POST("/:id/submit", h.SubmitRecognition)
 	recs.POST("/:id/withdraw", h.WithdrawRecognition)
-	recs.GET("/:id/export", h.ExportRecognitionDocx)
+	recs.GET("/:id/export", h.ExportRecognitionPDF)
 
 	return r, db
 }

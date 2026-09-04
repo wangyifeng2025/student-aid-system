@@ -132,7 +132,7 @@ export default function ReviewDetailPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      await recognitionApi.exportDocx(id);
+      await recognitionApi.exportPdf(id);
       toast.success("认定申请表已开始下载");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
@@ -385,7 +385,7 @@ export default function ReviewDetailPage() {
               <Card title="申请表">
                 <Button variant="outline" onClick={handleExport} disabled={exporting} className="w-full">
                   <Download size={16} />
-                  {exporting ? "下载中…" : "下载认定申请表（Word）"}
+                  {exporting ? "下载中…" : "下载认定申请表（PDF）"}
                 </Button>
               </Card>
             )}
