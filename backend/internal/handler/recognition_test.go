@@ -518,6 +518,10 @@ func TestListRecognitionsBySpecialType(t *testing.T) {
 		Data dto.RecognitionResponse `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &relocResp)
+	if err := db.Model(&model.RecognitionApplication{}).Where("id = ?", povertyResp.Data.ID).
+		Update("difficulty_level", model.DifficultyGeneral).Error; err != nil {
+		t.Fatalf("set difficulty: %v", err)
+	}
 
 	listIDs := func(query string) []uint {
 		t.Helper()
@@ -562,5 +566,10 @@ func TestListRecognitionsBySpecialType(t *testing.T) {
 	invalidIDs := listIDs("special_type=not_a_type")
 	if len(invalidIDs) != 0 {
 		t.Fatalf("invalid special_type should return empty, got %v", invalidIDs)
+	}
+
+	generalIDs := listIDs("difficulty_level=general")
+	if !contains(generalIDs, povertyResp.Data.ID) || contains(generalIDs, relocResp.Data.ID) {
+		t.Fatalf("difficulty_level=general want only poverty app, got %v", generalIDs)
 	}
 }

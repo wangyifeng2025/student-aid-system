@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Search, Upload, Download } from "lucide-react";
+import { Plus, Search, Upload } from "lucide-react";
 import {
   studentApi,
   departmentApi,
@@ -25,21 +25,39 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
-import { DataTable, type Column } from "@/components/base-data/data-table";
+import {
+  DataTable,
+  CellText,
+  type Column,
+} from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
-import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import {
+  BatchDeleteButton,
+  checkboxColumn,
+} from "@/components/base-data/batch-delete-button";
+import {
+  ExportButtons,
+  type ExportScope,
+} from "@/components/base-data/export-menu";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { ImportDialog } from "@/components/student/import-dialog";
+import { FileTransferOverlay } from "@/components/ui/file-transfer-overlay";
 import {
-  RECORDS_STATUS_OPTIONS,
+  difficultyLabel,
+  difficultyTone,
   rosterGrantMeta,
   rosterRecognitionMeta,
 } from "@/lib/recognition-options";
 
 const DEFAULT_PAGE_SIZE = 20;
 const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
+const YEAR_OPTIONS = [
+  CURRENT_YEAR + 1,
+  CURRENT_YEAR,
+  CURRENT_YEAR - 1,
+  CURRENT_YEAR - 2,
+];
 
 type KeyFilter = "" | "true" | "false";
 
@@ -52,7 +70,10 @@ function ProgressLink({
   status?: string;
   kind: "recognition" | "grant";
 }) {
-  const meta = kind === "recognition" ? rosterRecognitionMeta(status) : rosterGrantMeta(status);
+  const meta =
+    kind === "recognition"
+      ? rosterRecognitionMeta(status)
+      : rosterGrantMeta(status);
   const badge = <Badge tone={meta.tone}>{meta.label}</Badge>;
   if (!href) return badge;
   return (
@@ -66,6 +87,7 @@ export default function StudentsPage() {
   const user = useAuthStore((s) => s.user);
   const canWrite = user?.role === "admin";
   const role = user?.role;
+  const isStudentRole = role === "student";
 
   // 列表与分页
   const [list, setList] = React.useState<Student[]>([]);
@@ -82,7 +104,6 @@ export default function StudentsPage() {
   const [filterClass, setFilterClass] = React.useState("");
   const [filterKey, setFilterKey] = React.useState<KeyFilter>("");
   const [filterYear, setFilterYear] = React.useState(String(CURRENT_YEAR));
-  const [filterRecStatus, setFilterRecStatus] = React.useState("");
 
   // 基础数据（用于筛选与名称解析、表单联动）
   const [depts, setDepts] = React.useState<Department[]>([]);
@@ -102,7 +123,8 @@ export default function StudentsPage() {
   const [importOpen, setImportOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
 
-  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (s) => s.id);
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } =
+    useRowSelection(list, (s) => s.id);
 
   function emptyForm(): StudentInput {
     return {
@@ -122,15 +144,18 @@ export default function StudentsPage() {
   }
 
   const deptName = React.useCallback(
-    (id: number) => (id ? depts.find((d) => d.id === id)?.name ?? `#${id}` : "—"),
+    (id: number) =>
+      id ? (depts.find((d) => d.id === id)?.name ?? `#${id}`) : "—",
     [depts],
   );
   const majorName = React.useCallback(
-    (id: number) => (id ? majors.find((m) => m.id === id)?.name ?? `#${id}` : "—"),
+    (id: number) =>
+      id ? (majors.find((m) => m.id === id)?.name ?? `#${id}`) : "—",
     [majors],
   );
   const className = React.useCallback(
-    (id: number) => (id ? classes.find((c) => c.id === id)?.name ?? `#${id}` : "—"),
+    (id: number) =>
+      id ? (classes.find((c) => c.id === id)?.name ?? `#${id}`) : "—",
     [classes],
   );
 
@@ -156,11 +181,9 @@ export default function StudentsPage() {
     })();
   }, []);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await studentApi.list({
+  const fetchList = React.useCallback(
+    () =>
+      studentApi.list({
         page,
         page_size: pageSize,
         keyword: keyword || undefined,
@@ -168,31 +191,70 @@ export default function StudentsPage() {
         class_id: filterClass ? Number(filterClass) : undefined,
         is_key_group: filterKey === "" ? undefined : filterKey === "true",
         year: filterYear ? Number(filterYear) : CURRENT_YEAR,
-        recognition_status: filterRecStatus || undefined,
-      });
+      }),
+    [page, pageSize, keyword, filterDept, filterClass, filterKey, filterYear],
+  );
+
+  const applyListResult = React.useCallback(
+    (res: Awaited<ReturnType<typeof studentApi.list>>) => {
       setList(res.items);
       setTotal(res.total);
-      clearSelection();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "加载失败");
-    } finally {
+      setError(null);
       setLoading(false);
-    }
-  }, [page, pageSize, keyword, filterDept, filterClass, filterKey, filterYear, filterRecStatus, clearSelection]);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+
+  const applyListError = React.useCallback((e: unknown) => {
+    setError(e instanceof ApiError ? e.message : "加载失败");
+    setLoading(false);
+  }, []);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    fetchList().then(
+      (res) => {
+        if (!cancelled) applyListResult(res);
+      },
+      (e: unknown) => {
+        if (!cancelled) applyListError(e);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchList, applyListResult, applyListError]);
+
+  const reload = () => {
+    setLoading(true);
+    return fetchList().then(applyListResult, applyListError);
+  };
 
   // 筛选变更：重置到第 1 页
-  const resetToFirst = () => setPage(1);
+  const resetToFirst = () => {
+    setLoading(true);
+    setPage(1);
+  };
 
   const submitSearch = () => {
-    setKeyword(keywordInput.trim());
-    resetToFirst();
+    const next = keywordInput.trim();
+    if (next === keyword && page === 1) {
+      void reload();
+      return;
+    }
+    setLoading(true);
+    setKeyword(next);
+    setPage(1);
+  };
+
+  const handlePageChange = (next: number) => {
+    setLoading(true);
+    setPage(next);
   };
 
   const handlePageSizeChange = (size: number) => {
+    setLoading(true);
     setPageSize(size);
     setPage(1);
   };
@@ -204,25 +266,27 @@ export default function StudentsPage() {
   const formClasses = form.dept_id
     ? classes.filter((c) => c.dept_id === form.dept_id)
     : classes;
+  const userDeptId = user?.dept_id;
+  const userClassIds = user?.class_ids;
   const scopedDepts = React.useMemo(() => {
-    if ((role === "classadvisor" || role === "department") && user?.dept_id) {
-      return depts.filter((d) => d.id === user.dept_id);
+    if ((role === "classadvisor" || role === "department") && userDeptId) {
+      return depts.filter((d) => d.id === userDeptId);
     }
     return depts;
-  }, [depts, role, user?.dept_id]);
+  }, [depts, role, userDeptId]);
 
   const scopedClasses = React.useMemo(() => {
     let list = classes;
-    if (role === "classadvisor" && user?.class_ids?.length) {
-      list = list.filter((c) => user.class_ids!.includes(c.id));
-    } else if (role === "department" && user?.dept_id) {
-      list = list.filter((c) => c.dept_id === user.dept_id);
+    if (role === "classadvisor" && userClassIds?.length) {
+      list = list.filter((c) => userClassIds.includes(c.id));
+    } else if (role === "department" && userDeptId) {
+      list = list.filter((c) => c.dept_id === userDeptId);
     }
     if (filterDept) {
       list = list.filter((c) => c.dept_id === Number(filterDept));
     }
     return list;
-  }, [classes, role, user?.class_ids, user?.dept_id, filterDept]);
+  }, [classes, role, userClassIds, userDeptId, filterDept]);
 
   const openCreate = () => {
     setEditing(null);
@@ -249,8 +313,10 @@ export default function StudentsPage() {
     setFormOpen(true);
   };
 
-  const setField = <K extends keyof StudentInput>(key: K, value: StudentInput[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const setField = <K extends keyof StudentInput>(
+    key: K,
+    value: StudentInput[K],
+  ) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleSubmit = async () => {
     if (!form.student_no?.trim()) {
@@ -303,7 +369,7 @@ export default function StudentsPage() {
         }
       }
       setFormOpen(false);
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "保存失败");
     } finally {
@@ -318,7 +384,7 @@ export default function StudentsPage() {
       await studentApi.remove(deleteTarget.id);
       toast.success("已删除学生");
       setDeleteTarget(null);
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "删除失败");
     } finally {
@@ -326,15 +392,26 @@ export default function StudentsPage() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (scope: ExportScope) => {
+    if (scope === "selected" && selected.size === 0) {
+      toast.info("请先勾选要导出的学生");
+      return;
+    }
     setExporting(true);
     try {
-      await exportApi.students({
-        keyword: keyword || undefined,
-        dept_id: filterDept ? Number(filterDept) : undefined,
-        class_id: filterClass ? Number(filterClass) : undefined,
-        is_key_group: filterKey === "" ? undefined : filterKey === "true",
-      });
+      if (scope === "all") {
+        await exportApi.students();
+      } else if (scope === "filtered") {
+        await exportApi.students({
+          keyword: keyword || undefined,
+          dept_id: filterDept ? Number(filterDept) : undefined,
+          class_id: filterClass ? Number(filterClass) : undefined,
+          is_key_group: filterKey === "" ? undefined : filterKey === "true",
+          year: filterYear ? Number(filterYear) : CURRENT_YEAR,
+        });
+      } else {
+        await exportApi.students(undefined, Array.from(selected));
+      }
       toast.success("学生数据已导出");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
@@ -343,21 +420,58 @@ export default function StudentsPage() {
     }
   };
 
+  const hasStudentFilter = Boolean(
+    keyword ||
+    filterDept ||
+    filterClass ||
+    filterKey ||
+    filterYear !== String(CURRENT_YEAR),
+  );
+
   const columns: Column<Student>[] = [
     ...(canWrite
-      ? [checkboxColumn<Student>(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name)]
+      ? [
+          checkboxColumn<Student>(
+            selected,
+            allSelected,
+            toggleAll,
+            toggleRow,
+            (s) => s.id,
+            (s) => s.name,
+          ),
+        ]
       : []),
-    { header: "学号", width: "130px", cell: (s) => <span className="font-mono text-ink">{s.student_no}</span> },
+    {
+      header: "学号",
+      width: "130px",
+      cell: (s) => <span className="font-mono text-ink">{s.student_no}</span>,
+    },
     { header: "姓名", cell: (s) => <span className="text-ink">{s.name}</span> },
     { header: "性别", width: "70px", cell: (s) => s.gender || "—" },
-    { header: "院系", cell: (s) => deptName(s.dept_id) },
-    { header: "专业", cell: (s) => majorName(s.major_id) },
-    { header: "班级", cell: (s) => className(s.class_id) },
+    {
+      header: "院系",
+      width: "160px",
+      cell: (s) => <CellText>{s.dept_name || deptName(s.dept_id)}</CellText>,
+    },
+    {
+      header: "专业",
+      width: "160px",
+      cell: (s) => <CellText>{majorName(s.major_id)}</CellText>,
+    },
+    {
+      header: "班级",
+      width: "230px",
+      cell: (s) => <CellText>{s.class_name || className(s.class_id)}</CellText>,
+    },
     {
       header: "重点人群",
       width: "100px",
       cell: (s) =>
-        s.is_key_group ? <Badge tone="warning">重点</Badge> : <span className="text-ink-mute">否</span>,
+        s.is_key_group ? (
+          <Badge tone="warning">重点</Badge>
+        ) : (
+          <span className="text-ink-mute">否</span>
+        ),
     },
     {
       header: "认定",
@@ -376,6 +490,22 @@ export default function StudentsPage() {
         />
       ),
     },
+    ...(!isStudentRole
+      ? [
+          {
+            header: "困难等级",
+            width: "96px",
+            cell: (s: Student) =>
+              s.difficulty_level ? (
+                <Badge tone={difficultyTone(s.difficulty_level)}>
+                  {difficultyLabel(s.difficulty_level)}
+                </Badge>
+              ) : (
+                <span className="text-ink-mute">未评定</span>
+              ),
+          } satisfies Column<Student>,
+        ]
+      : []),
     {
       header: "助学金",
       width: "112px",
@@ -399,7 +529,11 @@ export default function StudentsPage() {
             header: "操作",
             width: "120px",
             cell: (s: Student) => (
-              <RowActions canWrite={canWrite} onEdit={() => openEdit(s)} onDelete={() => setDeleteTarget(s)} />
+              <RowActions
+                canWrite={canWrite}
+                onEdit={() => openEdit(s)}
+                onDelete={() => setDeleteTarget(s)}
+              />
             ),
           } satisfies Column<Student>,
         ]
@@ -411,7 +545,10 @@ export default function StudentsPage() {
       <Toolbar>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <div className="relative min-w-0" style={{ width: 240 }}>
-            <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
+            />
             <Input
               value={keywordInput}
               onChange={(e) => setKeywordInput(e.target.value)}
@@ -430,7 +567,9 @@ export default function StudentsPage() {
           >
             <option value="">全部院系</option>
             {scopedDepts.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
             ))}
           </Select>
           <Select
@@ -442,7 +581,9 @@ export default function StudentsPage() {
           >
             <option value="">全部班级</option>
             {scopedClasses.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </Select>
           <Select
@@ -453,22 +594,10 @@ export default function StudentsPage() {
             }}
           >
             {YEAR_OPTIONS.map((y) => (
-              <option key={y} value={y}>{y} 学年</option>
+              <option key={y} value={y}>
+                {y} 学年
+              </option>
             ))}
-          </Select>
-          <Select
-            value={filterRecStatus}
-            onChange={(e) => {
-              setFilterRecStatus(e.target.value);
-              resetToFirst();
-            }}
-          >
-            <option value="">认定：全部</option>
-            <option value="none">未提交</option>
-            {RECORDS_STATUS_OPTIONS.filter((o) => o.value !== "pending_final").map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-            <option value="draft">草稿</option>
           </Select>
           <Select
             value={filterKey}
@@ -486,20 +615,27 @@ export default function StudentsPage() {
           </Button>
         </div>
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => studentApi.remove(id)}
-              onDone={load}
+              onDone={reload}
               entityLabel="学生"
               canWrite={canWrite}
               hint={`确定删除选中的 ${selected.size} 名学生吗？无申报的将彻底删除登录账号；已有认定或助学金申报的无法删除，将自动跳过。`}
             />
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-              <Download size={16} />
-              {exporting ? "导出中…" : "导出 Excel"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <ExportButtons
+              onExport={handleExport}
+              exporting={exporting}
+              selectedCount={selected.size}
+              hasFilter={hasStudentFilter}
+              label="导出"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+            >
               <Upload size={16} />
               导入名单
             </Button>
@@ -513,7 +649,8 @@ export default function StudentsPage() {
 
       {!canWrite && (
         <p className="mb-3 text-xs text-ink-mute">
-          仅显示您数据范围内的学生。认定 / 助学金列为所选学年进度，未提交的学生也会列出。
+          仅显示您数据范围内的学生。认定 /
+          助学金列为所选学年进度，未提交的学生也会列出。
         </p>
       )}
 
@@ -523,8 +660,13 @@ export default function StudentsPage() {
         rowKey={(s) => s.id}
         loading={loading}
         error={error}
-        onRetry={load}
-        emptyLabel={keyword || filterDept || filterClass || filterKey || filterRecStatus ? "无匹配学生" : "暂无学生，可新增或导入名单"}
+        onRetry={reload}
+        emptyLabel={
+          keyword || filterDept || filterClass || filterKey
+            ? "无匹配学生"
+            : "暂无学生，可新增或导入名单"
+        }
+        pinStartCount={canWrite ? 2 : 1}
       />
 
       {!loading && !error && total > 0 && (
@@ -532,7 +674,7 @@ export default function StudentsPage() {
           page={page}
           pageSize={pageSize}
           total={total}
-          onChange={setPage}
+          onChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
         />
       )}
@@ -544,7 +686,12 @@ export default function StudentsPage() {
         onClose={() => setFormOpen(false)}
         footer={
           <>
-            <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)} disabled={submitting}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFormOpen(false)}
+              disabled={submitting}
+            >
               取消
             </Button>
             <Button size="sm" onClick={handleSubmit} disabled={submitting}>
@@ -562,20 +709,36 @@ export default function StudentsPage() {
                 color: "var(--color-primary)",
               }}
             >
-              保存后将自动在「用户管理」创建学生登录账号：用户名=学号，初始密码=Stu＋身份证后 6 位。请告知学生登录后尽快修改密码。
+              保存后将自动在「用户管理」创建学生登录账号：用户名=学号，初始密码=Stu＋身份证后
+              6 位。请告知学生登录后尽快修改密码。
             </div>
           )}
           <div>
             <Label htmlFor="stu-no">学号 *</Label>
-            <Input id="stu-no" value={form.student_no} onChange={(e) => setField("student_no", e.target.value)} placeholder="如：2024010101" />
+            <Input
+              id="stu-no"
+              value={form.student_no}
+              onChange={(e) => setField("student_no", e.target.value)}
+              placeholder="如：2024010101"
+            />
           </div>
           <div>
             <Label htmlFor="stu-name">姓名 *</Label>
-            <Input id="stu-name" value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder="学生姓名" />
+            <Input
+              id="stu-name"
+              value={form.name}
+              onChange={(e) => setField("name", e.target.value)}
+              placeholder="学生姓名"
+            />
           </div>
           <div>
             <Label htmlFor="stu-gender">性别 *</Label>
-            <Select id="stu-gender" className="w-full" value={form.gender} onChange={(e) => setField("gender", e.target.value)}>
+            <Select
+              id="stu-gender"
+              className="w-full"
+              value={form.gender}
+              onChange={(e) => setField("gender", e.target.value)}
+            >
               <option value="">请选择</option>
               <option value="男">男</option>
               <option value="女">女</option>
@@ -583,37 +746,71 @@ export default function StudentsPage() {
           </div>
           <div>
             <Label htmlFor="stu-idcard">身份证号 *</Label>
-            <Input id="stu-idcard" value={form.id_card} onChange={(e) => setField("id_card", e.target.value)} placeholder="18 位居民身份证" />
+            <Input
+              id="stu-idcard"
+              value={form.id_card}
+              onChange={(e) => setField("id_card", e.target.value)}
+              placeholder="18 位居民身份证"
+            />
           </div>
           <div>
             <Label htmlFor="stu-phone">手机号</Label>
-            <Input id="stu-phone" value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="11 位手机号" />
+            <Input
+              id="stu-phone"
+              value={form.phone}
+              onChange={(e) => setField("phone", e.target.value)}
+              placeholder="11 位手机号"
+            />
           </div>
           <div>
             <Label htmlFor="stu-nation">民族</Label>
-            <Select id="stu-nation" className="w-full" value={form.nation} onChange={(e) => setField("nation", e.target.value)}>
+            <Select
+              id="stu-nation"
+              className="w-full"
+              value={form.nation}
+              onChange={(e) => setField("nation", e.target.value)}
+            >
               <option value="">未填写</option>
               {nations.map((n) => (
-                <option key={n.code} value={n.code}>{n.label}</option>
+                <option key={n.code} value={n.code}>
+                  {n.label}
+                </option>
               ))}
             </Select>
           </div>
           <div>
             <Label htmlFor="stu-political">政治面貌</Label>
-            <Select id="stu-political" className="w-full" value={form.political_status} onChange={(e) => setField("political_status", e.target.value)}>
+            <Select
+              id="stu-political"
+              className="w-full"
+              value={form.political_status}
+              onChange={(e) => setField("political_status", e.target.value)}
+            >
               <option value="">未填写</option>
               {politics.map((p) => (
-                <option key={p.code} value={p.code}>{p.label}</option>
+                <option key={p.code} value={p.code}>
+                  {p.label}
+                </option>
               ))}
             </Select>
           </div>
           <div>
             <Label htmlFor="stu-birth">出生年月</Label>
-            <Input id="stu-birth" type="date" value={form.birth} onChange={(e) => setField("birth", e.target.value)} />
+            <Input
+              id="stu-birth"
+              type="date"
+              value={form.birth}
+              onChange={(e) => setField("birth", e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="stu-enroll">入学时间</Label>
-            <Input id="stu-enroll" type="date" value={form.enroll_time} onChange={(e) => setField("enroll_time", e.target.value)} />
+            <Input
+              id="stu-enroll"
+              type="date"
+              value={form.enroll_time}
+              onChange={(e) => setField("enroll_time", e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="stu-dept">所属院系 *</Label>
@@ -623,30 +820,61 @@ export default function StudentsPage() {
               value={form.dept_id ?? ""}
               onChange={(e) => {
                 const v = e.target.value ? Number(e.target.value) : undefined;
-                setForm((prev) => ({ ...prev, dept_id: v, major_id: undefined, class_id: undefined }));
+                setForm((prev) => ({
+                  ...prev,
+                  dept_id: v,
+                  major_id: undefined,
+                  class_id: undefined,
+                }));
               }}
             >
               <option value="">请选择</option>
               {depts.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
               ))}
             </Select>
           </div>
           <div>
             <Label htmlFor="stu-major">所属专业 *</Label>
-            <Select id="stu-major" className="w-full" value={form.major_id ?? ""} onChange={(e) => setField("major_id", e.target.value ? Number(e.target.value) : undefined)}>
+            <Select
+              id="stu-major"
+              className="w-full"
+              value={form.major_id ?? ""}
+              onChange={(e) =>
+                setField(
+                  "major_id",
+                  e.target.value ? Number(e.target.value) : undefined,
+                )
+              }
+            >
               <option value="">请选择</option>
               {formMajors.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
               ))}
             </Select>
           </div>
           <div>
             <Label htmlFor="stu-class">所属班级 *</Label>
-            <Select id="stu-class" className="w-full" value={form.class_id ?? ""} onChange={(e) => setField("class_id", e.target.value ? Number(e.target.value) : undefined)}>
+            <Select
+              id="stu-class"
+              className="w-full"
+              value={form.class_id ?? ""}
+              onChange={(e) =>
+                setField(
+                  "class_id",
+                  e.target.value ? Number(e.target.value) : undefined,
+                )
+              }
+            >
               <option value="">请选择</option>
               {formClasses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </Select>
           </div>
@@ -668,7 +896,13 @@ export default function StudentsPage() {
         title="导入录取/新生名单"
         hint="按模板列填写：学号*、姓名*、性别*（男/女）、身份证号*、院系*、专业*、班级* 为必填；民族、政治面貌填写中文名称（如汉族、共青团员），可留空；其余可选。学号与身份证号均须唯一。已存在的学号将按学号更新（增量导入）。导入时会自动为每位学生创建登录账号（用户名=学号，初始密码=Stu＋身份证后 6 位）。"
         onClose={() => setImportOpen(false)}
-        onImported={load}
+        onImported={reload}
+      />
+      <FileTransferOverlay
+        open={exporting}
+        title="正在导出学生数据"
+        hint="名单较多时请耐心等待，系统仍在生成 Excel，请勿关闭页面。"
+        tauSeconds={26}
       />
     </div>
   );

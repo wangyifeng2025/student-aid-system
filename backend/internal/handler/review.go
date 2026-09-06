@@ -15,14 +15,15 @@ func (h *Handler) ListReviewTodo(c *gin.Context) {
 	}
 	page, pageSize := parsePagination(c)
 	f := repository.RecognitionFilter{
-		Year:        parseIntQuery(c, "year"),
-		Status:      c.Query("status"),
-		Keyword:     c.Query("keyword"),
-		SpecialType: c.Query("special_type"),
-		DeptID:      parseUintQuery(c, "dept_id"),
-		ClassID:     parseUintQuery(c, "class_id"),
-		Page:        page,
-		PageSize:    pageSize,
+		Year:            parseIntQuery(c, "year"),
+		Status:          c.Query("status"),
+		Keyword:         c.Query("keyword"),
+		SpecialType:     c.Query("special_type"),
+		DifficultyLevel: c.Query("difficulty_level"),
+		DeptID:          parseUintQuery(c, "dept_id"),
+		ClassID:         parseUintQuery(c, "class_id"),
+		Page:            page,
+		PageSize:        pageSize,
 	}
 	res, err := h.Review.Todo(actor, f)
 	if err != nil {
@@ -40,14 +41,15 @@ func (h *Handler) ListReviewRecords(c *gin.Context) {
 	}
 	page, pageSize := parsePagination(c)
 	f := repository.RecognitionFilter{
-		Year:        parseIntQuery(c, "year"),
-		Status:      c.Query("status"),
-		Keyword:     c.Query("keyword"),
-		SpecialType: c.Query("special_type"),
-		DeptID:      parseUintQuery(c, "dept_id"),
-		ClassID:     parseUintQuery(c, "class_id"),
-		Page:        page,
-		PageSize:    pageSize,
+		Year:            parseIntQuery(c, "year"),
+		Status:          c.Query("status"),
+		Keyword:         c.Query("keyword"),
+		SpecialType:     c.Query("special_type"),
+		DifficultyLevel: c.Query("difficulty_level"),
+		DeptID:          parseUintQuery(c, "dept_id"),
+		ClassID:         parseUintQuery(c, "class_id"),
+		Page:            page,
+		PageSize:        pageSize,
 	}
 	res, err := h.Review.Records(actor, c.Query("tab"), f)
 	if err != nil {

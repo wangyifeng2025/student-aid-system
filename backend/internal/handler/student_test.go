@@ -577,7 +577,7 @@ func TestStudentRosterScopeAndProgress(t *testing.T) {
 	_ = createOne(noA2, "本班未报", uniqueValidIDCard(), classA.ID)
 	idB := createOne(noB, "他班学生", uniqueValidIDCard(), classB.ID)
 
-	rec := model.RecognitionApplication{StudentID: idA, Year: year, Status: model.StatusPendingClass}
+	rec := model.RecognitionApplication{StudentID: idA, Year: year, Status: model.StatusPendingClass, DifficultyLevel: model.DifficultyGeneral}
 	if err := db.Create(&rec).Error; err != nil {
 		t.Fatalf("create recognition: %v", err)
 	}
@@ -609,6 +609,9 @@ func TestStudentRosterScopeAndProgress(t *testing.T) {
 	if got.GrantStatus != string(model.GrantStatusDraft) || got.GrantID != grant.ID {
 		t.Fatalf("grant progress want draft/%d, got %s/%d", grant.ID, got.GrantStatus, got.GrantID)
 	}
+	if got.DifficultyLevel != string(model.DifficultyGeneral) {
+		t.Fatalf("difficulty want general, got %s", got.DifficultyLevel)
+	}
 	if got.IDCard == idCardA {
 		t.Fatalf("advisor should see masked id card, got full %s", got.IDCard)
 	}
@@ -639,6 +642,18 @@ func TestStudentRosterScopeAndProgress(t *testing.T) {
 	pendingPage := decodeStudentPage(t, w.Body.Bytes())
 	if pendingPage.Total != 1 || pendingPage.Items[0].StudentNo != noA {
 		t.Fatalf("pending_class filter want %s, got %+v", noA, pendingPage)
+	}
+
+	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/students?difficulty_level=general&year=%d", year), advisorToken, nil)
+	generalPage := decodeStudentPage(t, w.Body.Bytes())
+	if generalPage.Total != 1 || generalPage.Items[0].StudentNo != noA {
+		t.Fatalf("difficulty=general want %s, got %+v", noA, generalPage)
+	}
+
+	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/students?difficulty_level=none&year=%d&class_id=%d", year, classA.ID), advisorToken, nil)
+	unratedPage := decodeStudentPage(t, w.Body.Bytes())
+	if unratedPage.Total != 1 || unratedPage.Items[0].StudentNo != noA2 {
+		t.Fatalf("difficulty=none want unsubmitted classmate, got %+v", unratedPage)
 	}
 
 	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/students?keyword=%s", noB), deptToken, nil)

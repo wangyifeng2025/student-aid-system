@@ -43,6 +43,7 @@ func (s *StudentService) List(f repository.StudentFilter, actor rbac.Actor) (*dt
 		return nil, err
 	}
 	resps := dto.ToStudentResponses(items)
+	s.attachOrgNamesBatch(resps, items)
 	if err := s.attachProgress(resps, items, year, actor.Role != model.RoleAdmin); err != nil {
 		return nil, err
 	}
@@ -97,6 +98,20 @@ func (s *StudentService) attachOrgNames(resp *dto.StudentResponse, st *model.Stu
 		return
 	}
 	resp.DeptName, resp.ClassName = studentOrgNames(s.orgRepo, st)
+}
+
+func (s *StudentService) attachOrgNamesBatch(resps []dto.StudentResponse, items []model.Student) {
+	if len(resps) == 0 || len(resps) != len(items) {
+		return
+	}
+	deptNames, _, classNames, err := buildOrgNameMaps(s.orgRepo)
+	if err != nil {
+		return
+	}
+	for i := range resps {
+		resps[i].DeptName = deptNames[items[i].DeptID]
+		resps[i].ClassName = classNames[items[i].ClassID]
+	}
 }
 
 func progressYear(year int) int {
@@ -160,6 +175,7 @@ func (s *StudentService) attachProgress(resps []dto.StudentResponse, items []mod
 		if r, ok := recByStu[items[i].ID]; ok {
 			resps[i].RecognitionStatus = string(r.Status)
 			resps[i].RecognitionID = r.ID
+			resps[i].DifficultyLevel = string(r.DifficultyLevel)
 		}
 		if g := pickGrant(grantsByStu[items[i].ID]); g != nil {
 			resps[i].GrantStatus = string(g.Status)

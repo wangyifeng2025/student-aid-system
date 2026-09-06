@@ -11,6 +11,7 @@ import (
 type AdvisorFilter struct {
 	DeptID   uint
 	Keyword  string
+	IDs      []uint
 	Page     int
 	PageSize int
 }
@@ -32,6 +33,9 @@ func (r *AdvisorRepository) List(f AdvisorFilter) ([]model.Advisor, int64, error
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where("name LIKE ? OR phone LIKE ? OR staff_no LIKE ?", like, like, like)
+	}
+	if len(f.IDs) > 0 {
+		q = q.Where("id IN ?", f.IDs)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

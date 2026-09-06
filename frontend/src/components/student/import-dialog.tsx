@@ -9,6 +9,8 @@ import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
+import { TransferProgress } from "@/components/ui/transfer-progress";
+import { estimatedPercent, useElapsed } from "@/hooks/use-elapsed";
 
 interface ImportDialogProps {
   open: boolean;
@@ -35,6 +37,8 @@ async function runImport(kind: ImportKind, file: File): Promise<ImportResult> {
       return importApi.importClasses(file);
     case "advisors":
       return importApi.importAdvisors(file);
+    case "users":
+      return importApi.importUsers(file);
   }
 }
 
@@ -51,6 +55,8 @@ export function ImportDialog({
   const [importing, setImporting] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
   const [result, setResult] = React.useState<ImportResult | null>(null);
+  const busy = importing || downloading;
+  const elapsed = useElapsed(busy);
 
   // 每次打开重置状态：用渲染期状态调整（替代 effect，避免级联渲染）。
   const [prevOpen, setPrevOpen] = React.useState(open);
@@ -102,13 +108,14 @@ export function ImportDialog({
       open={open}
       title={title}
       size="lg"
+      closable={!busy}
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={importing}>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             关闭
           </Button>
-          <Button size="sm" onClick={handleImport} disabled={importing || !file}>
+          <Button size="sm" onClick={handleImport} disabled={busy || !file}>
             <Upload size={16} />
             {importing ? "导入中…" : "开始导入"}
           </Button>
@@ -117,9 +124,22 @@ export function ImportDialog({
     >
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">{hint}</p>
+        {busy ? (
+          <TransferProgress
+            percent={estimatedPercent(elapsed, importing ? 28 : 8)}
+            elapsed={elapsed}
+            title={importing ? "正在导入，请稍候" : "正在下载模板"}
+            hint={
+              importing
+                ? "行数较多时可能需要一两分钟，请勿关闭页面或重复点击。"
+                : "正在准备 Excel 模板…"
+            }
+            detail={importing && file ? file.name : undefined}
+          />
+        ) : null}
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={handleDownload} disabled={downloading}>
+          <Button variant="outline" size="sm" onClick={handleDownload} disabled={busy}>
             <Download size={16} />
             {downloading ? "下载中…" : "下载导入模板"}
           </Button>
@@ -129,7 +149,9 @@ export function ImportDialog({
         {/* 文件选择 */}
         <div
           className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-line bg-page px-4 py-3 transition-colors hover:border-brand"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => {
+            if (!busy) inputRef.current?.click();
+          }}
           role="button"
         >
           <FileSpreadsheet size={20} className="text-ink-mute" />

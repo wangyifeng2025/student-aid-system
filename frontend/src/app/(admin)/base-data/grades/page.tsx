@@ -135,17 +135,19 @@ export default function GradesPage() {
   return (
     <div>
       <Toolbar>
-        <div className="relative min-w-0 flex-1" style={{ maxWidth: 280 }}>
-          <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
-          <Input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索年级名称或年份…"
-            className="h-9 pl-8 text-sm"
-          />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1" style={{ maxWidth: 280 }}>
+            <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
+            <Input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="搜索年级名称或年份…"
+              className="h-9 pl-8 text-sm"
+            />
+          </div>
         </div>
         {canWrite && (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => gradeApi.remove(id)}
@@ -164,7 +166,7 @@ export default function GradesPage() {
               <Plus size={16} />
               新增年级
             </Button>
-          </>
+          </div>
         )}
       </Toolbar>
 

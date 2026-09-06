@@ -3,6 +3,7 @@ package handler
 import (
 	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/repository"
@@ -113,10 +114,44 @@ func (h *Handler) ImportClasses(c *gin.Context) {
 	response.OK(c, res)
 }
 
+// ImportUsers 上传 Excel 导入用户（主要用于审核角色账号）。
+func (h *Handler) ImportUsers(c *gin.Context) {
+	f, ok := openUpload(c)
+	if !ok {
+		return
+	}
+	defer f.Close()
+	res, err := h.Import.ImportUsers(f)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
+// ExportUsers 导出用户 Excel（支持筛选与勾选）。
+func (h *Handler) ExportUsers(c *gin.Context) {
+	status := parseIntPtrQuery(c, "status")
+	f := repository.UserFilter{
+		Role:    c.Query("role"),
+		Status:  status,
+		Keyword: c.Query("keyword"),
+		IDs:     parseUintListQuery(c, "ids"),
+	}
+	data, filename, err := h.Import.ExportUsers(f)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, xlsxContentType, data)
+}
+
 // ExportOrg 导出组织机构 Excel（departments | majors | grades | classes）。
 func (h *Handler) ExportOrg(c *gin.Context) {
 	kind := c.Param("type")
-	data, filename, err := h.Import.Export(kind)
+	ids := parseUintListQuery(c, "ids")
+	data, filename, err := h.Import.Export(kind, ids)
 	if err != nil {
 		mapCommonError(c, err)
 		return
@@ -132,11 +167,14 @@ func (h *Handler) ExportStudents(c *gin.Context) {
 		return
 	}
 	f := repository.StudentFilter{
-		DeptID:     parseUintQuery(c, "dept_id"),
-		MajorID:    parseUintQuery(c, "major_id"),
-		ClassID:    parseUintQuery(c, "class_id"),
-		Keyword:    c.Query("keyword"),
-		IsKeyGroup: parseBoolQuery(c, "is_key_group"),
+		DeptID:          parseUintQuery(c, "dept_id"),
+		MajorID:         parseUintQuery(c, "major_id"),
+		ClassID:         parseUintQuery(c, "class_id"),
+		Keyword:         c.Query("keyword"),
+		IsKeyGroup:      parseBoolQuery(c, "is_key_group"),
+		Year:            parseIntQuery(c, "year"),
+		DifficultyLevel: strings.TrimSpace(c.Query("difficulty_level")),
+		IDs:             parseUintListQuery(c, "ids"),
 	}
 	data, filename, err := h.Import.ExportStudents(f, actor)
 	if err != nil {

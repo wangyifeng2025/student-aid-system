@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Search, Eye, Pencil, Trash2, Download, Undo2 } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Eye,
+  Pencil,
+  Trash2,
+  Download,
+  Undo2,
+} from "lucide-react";
 import { recognitionApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
@@ -12,15 +20,23 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
-import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
+import {
+  DataTable,
+  CellText,
+  type Column,
+} from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
-import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import {
+  BatchDeleteButton,
+  checkboxColumn,
+} from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { StatusBadge } from "@/components/recognition/status-badge";
 import { ProofPreviewCell } from "@/components/recognition/proof-preview-cell";
 import {
   STATUS_META,
   SPECIAL_GROUP_OPTIONS,
+  DIFFICULTY_OPTIONS,
   difficultyLabel,
   difficultyTone,
   canDeleteRecognition,
@@ -48,12 +64,15 @@ export default function RecognitionsPage() {
   const [keyword, setKeyword] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("");
   const [filterSpecialType, setFilterSpecialType] = React.useState("");
+  const [filterDifficulty, setFilterDifficulty] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
 
-  const [deleteTarget, setDeleteTarget] = React.useState<RecognitionListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    React.useState<RecognitionListItem | null>(null);
   const [deleting, setDeleting] = React.useState(false);
-  const [withdrawTarget, setWithdrawTarget] = React.useState<RecognitionListItem | null>(null);
+  const [withdrawTarget, setWithdrawTarget] =
+    React.useState<RecognitionListItem | null>(null);
   const [withdrawing, setWithdrawing] = React.useState(false);
   const [exportingSummary, setExportingSummary] = React.useState(false);
 
@@ -62,10 +81,8 @@ export default function RecognitionsPage() {
     : canExportSummary
       ? list
       : [];
-  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(
-    selectableList,
-    (r) => r.id,
-  );
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } =
+    useRowSelection(selectableList, (r) => r.id);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -77,6 +94,8 @@ export default function RecognitionsPage() {
         keyword: keyword || undefined,
         status: filterStatus || undefined,
         special_type: filterSpecialType || undefined,
+        difficulty_level:
+          !isStudent && filterDifficulty ? filterDifficulty : undefined,
         year: filterYear ? Number(filterYear) : undefined,
       });
       setList(res.items);
@@ -87,7 +106,17 @@ export default function RecognitionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, keyword, filterStatus, filterSpecialType, filterYear, clearSelection]);
+  }, [
+    page,
+    pageSize,
+    keyword,
+    filterStatus,
+    filterSpecialType,
+    filterDifficulty,
+    filterYear,
+    isStudent,
+    clearSelection,
+  ]);
 
   React.useEffect(() => {
     void load();
@@ -150,10 +179,13 @@ export default function RecognitionsPage() {
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
         special_type: filterSpecialType || undefined,
+        difficulty_level: filterDifficulty || undefined,
         ids: ids.length ? ids : undefined,
         scope: ids.length ? undefined : "approved",
       });
-      toast.success(ids.length ? `已导出选中的 ${ids.length} 条` : "认定结果汇总表已导出");
+      toast.success(
+        ids.length ? `已导出选中的 ${ids.length} 条` : "认定结果汇总表已导出",
+      );
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     } finally {
@@ -178,7 +210,9 @@ export default function RecognitionsPage() {
     {
       header: "姓名",
       width: "88px",
-      cell: (r) => <CellText className="text-ink">{r.student_name || "—"}</CellText>,
+      cell: (r) => (
+        <CellText className="text-ink">{r.student_name || "—"}</CellText>
+      ),
     },
     ...(isStudent
       ? []
@@ -218,7 +252,11 @@ export default function RecognitionsPage() {
           <span className="text-ink-mute">未勾选</span>
         ),
     },
-    { header: "状态", width: "112px", cell: (r) => <StatusBadge status={r.status} /> },
+    {
+      header: "状态",
+      width: "112px",
+      cell: (r) => <StatusBadge status={r.status} />,
+    },
     {
       header: "困难等级",
       width: "96px",
@@ -236,7 +274,9 @@ export default function RecognitionsPage() {
       width: "112px",
       cell: (r) => (
         <span className="tabular-nums">
-          {r.per_capita_annual_income ? `¥${r.per_capita_annual_income.toLocaleString()}` : "—"}
+          {r.per_capita_annual_income
+            ? `¥${r.per_capita_annual_income.toLocaleString()}`
+            : "—"}
         </span>
       ),
     },
@@ -256,7 +296,10 @@ export default function RecognitionsPage() {
       width: "200px",
       cell: (r) => (
         <div className="flex items-center gap-3 text-xs">
-          <Link href={`/recognitions/${r.id}`} className="inline-flex items-center gap-1 text-link hover:underline">
+          <Link
+            href={`/recognitions/${r.id}`}
+            className="inline-flex items-center gap-1 text-link hover:underline"
+          >
             <Eye size={14} />
             查看
           </Link>
@@ -311,7 +354,10 @@ export default function RecognitionsPage() {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {!isStudent && (
             <div className="relative w-52 shrink-0">
-              <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
+              <Search
+                size={16}
+                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
+              />
               <Input
                 value={keywordInput}
                 onChange={(e) => setKeywordInput(e.target.value)}
@@ -351,6 +397,24 @@ export default function RecognitionsPage() {
               </option>
             ))}
           </Select>
+          {!isStudent && (
+            <Select
+              value={filterDifficulty}
+              onChange={(e) => {
+                setFilterDifficulty(e.target.value);
+                setPage(1);
+              }}
+              className="w-32 shrink-0"
+            >
+              <option value="">困难等级</option>
+              {DIFFICULTY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+              <option value="none">未评定</option>
+            </Select>
+          )}
           <Input
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
@@ -358,7 +422,12 @@ export default function RecognitionsPage() {
             placeholder="年度"
             className="h-9 w-20 shrink-0 text-sm"
           />
-          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={submitSearch}
+          >
             查询
           </Button>
         </div>
@@ -408,7 +477,9 @@ export default function RecognitionsPage() {
         error={error}
         onRetry={load}
         emptyLabel={
-          isStudent ? "暂无认定申请，点击右上角「填报新申请」开始" : "暂无可审阅的认定申请"
+          isStudent
+            ? "暂无认定申请，点击右上角「填报新申请」开始"
+            : "暂无可审阅的认定申请"
         }
       />
 

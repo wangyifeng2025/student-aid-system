@@ -26,6 +26,7 @@ func (h *Handler) ListStudents(c *gin.Context) {
 		IsKeyGroup:        parseBoolQuery(c, "is_key_group"),
 		Year:              parseIntQuery(c, "year"),
 		RecognitionStatus: strings.TrimSpace(c.Query("recognition_status")),
+		DifficultyLevel:   strings.TrimSpace(c.Query("difficulty_level")),
 		Page:              page,
 		PageSize:          pageSize,
 	}

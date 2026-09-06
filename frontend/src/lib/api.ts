@@ -443,6 +443,7 @@ export const studentApi = {
         is_key_group: filter?.is_key_group,
         year: filter?.year,
         recognition_status: filter?.recognition_status,
+        difficulty_level: filter?.difficulty_level,
       })}`,
     ),
   /** 学生本人获取关联学籍档案 */
@@ -509,6 +510,7 @@ export type ImportKind =
   | "students"
   | "special-groups"
   | "advisors"
+  | "users"
   | OrgSpreadsheetKind;
 
 const orgTemplateNames: Record<OrgSpreadsheetKind, string> = {
@@ -525,6 +527,11 @@ const orgExportNames: Record<OrgSpreadsheetKind, string> = {
   classes: "classes_export.xlsx",
 };
 
+/** 将 ID 列表拼成逗号分隔的查询参数串。 */
+function idsQuery(ids: number[]): string {
+  return ids.length ? ids.join(",") : "";
+}
+
 export const importApi = {
   downloadTemplate: (type: ImportKind) => {
     const fallback =
@@ -534,7 +541,9 @@ export const importApi = {
           ? "special_groups_template.xlsx"
           : type === "advisors"
             ? "advisors_template.xlsx"
-            : orgTemplateNames[type as OrgSpreadsheetKind];
+            : type === "users"
+              ? "users_template.xlsx"
+              : orgTemplateNames[type as OrgSpreadsheetKind];
     return downloadFile(`/import/template/${type}`, fallback);
   },
   importStudents: (file: File) =>
@@ -551,12 +560,24 @@ export const importApi = {
     apiUpload<ImportResult>("/import/classes", file),
   importAdvisors: (file: File) =>
     apiUpload<ImportResult>("/import/advisors", file),
+  importUsers: (file: File) =>
+    apiUpload<ImportResult>("/import/users", file),
 };
 
 export const exportApi = {
-  org: (type: OrgSpreadsheetKind) =>
-    downloadFile(`/export/${type}`, orgExportNames[type]),
-  students: (filter?: Pick<StudentFilter, "dept_id" | "major_id" | "class_id" | "keyword" | "is_key_group">) =>
+  org: (
+    type: OrgSpreadsheetKind,
+    options?: { filter?: Record<string, string | number | boolean | undefined>; ids?: number[] },
+  ) => {
+    const params: Record<string, string | number | boolean | undefined> = {};
+    if (options?.filter) Object.assign(params, options.filter);
+    if (options?.ids && options.ids.length) params.ids = idsQuery(options.ids);
+    return downloadFile(`/export/${type}${buildParams(params)}`, orgExportNames[type]);
+  },
+  students: (
+    filter?: Pick<StudentFilter, "dept_id" | "major_id" | "class_id" | "keyword" | "is_key_group" | "year" | "difficulty_level">,
+    ids?: number[],
+  ) =>
     downloadFile(
       `/export/students${buildParams({
         dept_id: filter?.dept_id,
@@ -564,10 +585,37 @@ export const exportApi = {
         class_id: filter?.class_id,
         keyword: filter?.keyword,
         is_key_group: filter?.is_key_group,
+        year: filter?.year,
+        difficulty_level: filter?.difficulty_level,
+        ids: ids && ids.length ? idsQuery(ids) : undefined,
       })}`,
       "students_export.xlsx",
     ),
-  advisors: () => downloadFile("/export/advisors", "advisors_export.xlsx"),
+  advisors: (
+    filter?: { keyword?: string; dept_id?: number },
+    ids?: number[],
+  ) =>
+    downloadFile(
+      `/export/advisors${buildParams({
+        keyword: filter?.keyword,
+        dept_id: filter?.dept_id,
+        ids: ids && ids.length ? idsQuery(ids) : undefined,
+      })}`,
+      "advisors_export.xlsx",
+    ),
+  users: (
+    filter?: { keyword?: string; role?: string; status?: number },
+    ids?: number[],
+  ) =>
+    downloadFile(
+      `/export/users${buildParams({
+        keyword: filter?.keyword,
+        role: filter?.role,
+        status: filter?.status,
+        ids: ids && ids.length ? idsQuery(ids) : undefined,
+      })}`,
+      "users_export.xlsx",
+    ),
 };
 
 // ===== 困难认定申请 Recognition =====
@@ -582,6 +630,7 @@ export const recognitionApi = {
         status: filter?.status,
         keyword: filter?.keyword,
         special_type: filter?.special_type,
+        difficulty_level: filter?.difficulty_level,
       })}`,
     ),
   get: (id: number) => apiFetch<Recognition>(`/recognitions/${id}`),
@@ -598,7 +647,7 @@ export const recognitionApi = {
   exportPdf: (id: number, fallbackName = `recognition_${id}.pdf`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
   exportSummary: (
-    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "status" | "ids" | "scope">,
+    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "difficulty_level" | "status" | "ids" | "scope">,
   ) =>
     downloadFile(
       `/recognitions/summary-export${buildParams({
@@ -607,6 +656,7 @@ export const recognitionApi = {
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
         special_type: filter?.special_type,
+        difficulty_level: filter?.difficulty_level,
         status: filter?.status,
         ids: filter?.ids?.length ? filter.ids.join(",") : undefined,
         scope: filter?.scope,
@@ -660,6 +710,7 @@ export const reviewApi = {
         status: filter?.status,
         keyword: filter?.keyword,
         special_type: filter?.special_type,
+        difficulty_level: filter?.difficulty_level,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
       })}`,
@@ -674,6 +725,7 @@ export const reviewApi = {
         status: filter?.status,
         keyword: filter?.keyword,
         special_type: filter?.special_type,
+        difficulty_level: filter?.difficulty_level,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
       })}`,

@@ -276,11 +276,13 @@ func registerImportRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		imp.POST("/grades", h.ImportGrades)
 		imp.POST("/classes", h.ImportClasses)
 		imp.POST("/advisors", h.ImportAdvisors)
+		imp.POST("/users", h.ImportUsers)
 	}
 	exp := g.Group("/export")
 	{
 		exp.GET("/students", h.ExportStudents)
 		exp.GET("/advisors", h.ExportAdvisors)
+		exp.GET("/users", h.ExportUsers)
 		exp.GET("/:type", h.ExportOrg)
 	}
 }

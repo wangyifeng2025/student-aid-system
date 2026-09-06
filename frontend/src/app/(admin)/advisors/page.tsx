@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, Upload, Download } from "lucide-react";
+import { Plus, Search, Upload } from "lucide-react";
 import { advisorApi, departmentApi, classApi, exportApi, ApiError } from "@/lib/api";
 import type { Advisor, AdvisorInput } from "@/types/advisor";
 import type { Class, Department } from "@/types/org";
@@ -18,9 +18,11 @@ import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { ExportButtons, type ExportScope } from "@/components/base-data/export-menu";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { Combobox } from "@/components/ui/combobox";
 import { ImportDialog } from "@/components/student/import-dialog";
+import { FileTransferOverlay } from "@/components/ui/file-transfer-overlay";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -178,10 +180,23 @@ export default function AdvisorsPage() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (scope: ExportScope) => {
+    if (scope === "selected" && selected.size === 0) {
+      toast.info("请先勾选要导出的班主任");
+      return;
+    }
     setExporting(true);
     try {
-      await exportApi.advisors();
+      if (scope === "all") {
+        await exportApi.advisors();
+      } else if (scope === "filtered") {
+        await exportApi.advisors({
+          keyword: keyword || undefined,
+          dept_id: filterDept ? Number(filterDept) : undefined,
+        });
+      } else {
+        await exportApi.advisors(undefined, Array.from(selected));
+      }
       toast.success("已开始下载");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
@@ -189,6 +204,8 @@ export default function AdvisorsPage() {
       setExporting(false);
     }
   };
+
+  const hasAdvisorFilter = Boolean(keyword || filterDept);
 
   const columns: Column<Advisor>[] = [
     ...(canWrite
@@ -242,7 +259,7 @@ export default function AdvisorsPage() {
           </Button>
         </div>
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => advisorApi.remove(id)}
@@ -255,10 +272,13 @@ export default function AdvisorsPage() {
               <Upload size={16} />
               导入
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-              <Download size={16} />
-              {exporting ? "导出中…" : "导出"}
-            </Button>
+            <ExportButtons
+              onExport={handleExport}
+              exporting={exporting}
+              selectedCount={selected.size}
+              hasFilter={hasAdvisorFilter}
+              label="导出"
+            />
             <Button size="sm" onClick={openCreate}>
               <Plus size={16} />
               新增
@@ -392,6 +412,12 @@ export default function AdvisorsPage() {
           void classApi.list().then(setClasses).catch(() => undefined);
           void load();
         }}
+      />
+      <FileTransferOverlay
+        open={exporting}
+        title="正在导出班主任数据"
+        hint="数据较多时请耐心等待，系统仍在生成 Excel，请勿关闭页面。"
+        tauSeconds={20}
       />
     </div>
   );

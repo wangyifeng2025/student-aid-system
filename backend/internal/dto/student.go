@@ -62,6 +62,7 @@ type StudentResponse struct {
 	ProgressYear       int    `json:"progress_year"`
 	RecognitionStatus  string `json:"recognition_status"`
 	RecognitionID      uint   `json:"recognition_id,omitempty"`
+	DifficultyLevel    string `json:"difficulty_level,omitempty"`
 	GrantStatus        string `json:"grant_status"`
 	GrantID            uint   `json:"grant_id,omitempty"`
 }

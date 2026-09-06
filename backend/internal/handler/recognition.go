@@ -17,12 +17,13 @@ func (h *Handler) ListRecognitions(c *gin.Context) {
 	}
 	page, pageSize := parsePagination(c)
 	f := repository.RecognitionFilter{
-		Year:        parseIntQuery(c, "year"),
-		Status:      c.Query("status"),
-		Keyword:     c.Query("keyword"),
-		SpecialType: c.Query("special_type"),
-		Page:        page,
-		PageSize:    pageSize,
+		Year:            parseIntQuery(c, "year"),
+		Status:          c.Query("status"),
+		Keyword:         c.Query("keyword"),
+		SpecialType:     c.Query("special_type"),
+		DifficultyLevel: c.Query("difficulty_level"),
+		Page:            page,
+		PageSize:        pageSize,
 	}
 	res, err := h.Recognition.List(actor, f)
 	if err != nil {
@@ -171,13 +172,14 @@ func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
 		return
 	}
 	f := repository.RecognitionFilter{
-		Year:        parseIntQuery(c, "year"),
-		Keyword:     c.Query("keyword"),
-		SpecialType: c.Query("special_type"),
-		DeptID:      parseUintQuery(c, "dept_id"),
-		ClassID:     parseUintQuery(c, "class_id"),
-		Status:      c.Query("status"),
-		IDs:         parseUintListQuery(c, "ids"),
+		Year:            parseIntQuery(c, "year"),
+		Keyword:         c.Query("keyword"),
+		SpecialType:     c.Query("special_type"),
+		DifficultyLevel: c.Query("difficulty_level"),
+		DeptID:          parseUintQuery(c, "dept_id"),
+		ClassID:         parseUintQuery(c, "class_id"),
+		Status:          c.Query("status"),
+		IDs:             parseUintListQuery(c, "ids"),
 	}
 	data, filename, asciiName, err := h.RecognitionSummary.Export(actor, f, c.Query("scope"))
 	if err != nil {

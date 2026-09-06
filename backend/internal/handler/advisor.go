@@ -95,7 +95,12 @@ func (h *Handler) ImportAdvisors(c *gin.Context) {
 }
 
 func (h *Handler) ExportAdvisors(c *gin.Context) {
-	data, filename, err := h.Import.ExportAdvisors()
+	f := repository.AdvisorFilter{
+		DeptID:  parseUintQuery(c, "dept_id"),
+		Keyword: c.Query("keyword"),
+		IDs:     parseUintListQuery(c, "ids"),
+	}
+	data, filename, err := h.Import.ExportAdvisors(f)
 	if err != nil {
 		mapCommonError(c, err)
 		return

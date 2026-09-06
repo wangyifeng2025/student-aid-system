@@ -34,6 +34,7 @@ export interface Student {
   progress_year?: number;
   recognition_status?: string;
   recognition_id?: number;
+  difficulty_level?: string;
   grant_status?: string;
   grant_id?: number;
 }
@@ -63,6 +64,7 @@ export interface StudentFilter {
   is_key_group?: boolean;
   year?: number;
   recognition_status?: string;
+  difficulty_level?: string;
 }
 
 // ===== 重点人群 SpecialGroup =====

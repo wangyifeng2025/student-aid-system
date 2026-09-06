@@ -29,16 +29,16 @@ export function Modal({
   children,
   footer,
   size = "md",
+  closable = true,
 }: ModalProps) {
-  // ESC 关闭
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !closable) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, closable]);
 
   if (!open) return null;
 
@@ -46,7 +46,7 @@ export function Modal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(15, 23, 42, 0.45)" }}
-      onClick={onClose}
+      onClick={closable ? onClose : undefined}
       role="presentation"
     >
       <div
@@ -58,14 +58,18 @@ export function Modal({
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="关闭"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-ink-mute transition-colors hover:bg-page hover:text-ink-soft"
-          >
-            <X size={16} />
-          </button>
+          {closable ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="关闭"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-ink-mute transition-colors hover:bg-page hover:text-ink-soft"
+            >
+              <X size={16} />
+            </button>
+          ) : (
+            <span className="h-7 w-7" aria-hidden />
+          )}
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && (

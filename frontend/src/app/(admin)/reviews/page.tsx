@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Toolbar } from "@/components/base-data/toolbar";
-import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
+import {
+  DataTable,
+  CellText,
+  type Column,
+} from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { StatusBadge } from "@/components/recognition/status-badge";
@@ -31,6 +35,7 @@ import {
   RECORDS_STATUS_OPTIONS,
   canExportRecognitionSummary,
   SPECIAL_GROUP_OPTIONS,
+  DIFFICULTY_OPTIONS,
   specialTypesText,
 } from "@/lib/recognition-options";
 import { useAuthStore } from "@/store/auth";
@@ -45,7 +50,12 @@ const DEFAULT_PAGE_SIZE = 20;
 
 type ReviewTab = "todo" | "done" | "all";
 
-const TAB_ITEMS: { value: ReviewTab; label: string; hint: string; accentColor: string }[] = [
+const TAB_ITEMS: {
+  value: ReviewTab;
+  label: string;
+  hint: string;
+  accentColor: string;
+}[] = [
   {
     value: "todo",
     label: "待办",
@@ -97,9 +107,13 @@ function ReviewsWorkbench() {
   const [keyword, setKeyword] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("");
   const [filterSpecialType, setFilterSpecialType] = React.useState("");
+  const [filterDifficulty, setFilterDifficulty] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
-  const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({ deptId: 0, classId: 0 });
+  const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({
+    deptId: 0,
+    classId: 0,
+  });
   const [exportingSummary, setExportingSummary] = React.useState(false);
   const canExportSummary = canExportRecognitionSummary(role);
 
@@ -111,7 +125,9 @@ function ReviewsWorkbench() {
   const [countsLoading, setCountsLoading] = React.useState(true);
 
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
-  const [batchDialog, setBatchDialog] = React.useState<ReviewActionType | null>(null);
+  const [batchDialog, setBatchDialog] = React.useState<ReviewActionType | null>(
+    null,
+  );
   const [batching, setBatching] = React.useState(false);
 
   const statusOptions = React.useMemo(
@@ -135,6 +151,7 @@ function ReviewsWorkbench() {
       keyword: keyword || undefined,
       status: filterStatus || undefined,
       special_type: filterSpecialType || undefined,
+      difficulty_level: filterDifficulty || undefined,
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
     };
@@ -150,7 +167,18 @@ function ReviewsWorkbench() {
     } finally {
       setLoading(false);
     }
-  }, [isTodo, tab, page, pageSize, keyword, filterStatus, filterSpecialType, filterYear, orgScope]);
+  }, [
+    isTodo,
+    tab,
+    page,
+    pageSize,
+    keyword,
+    filterStatus,
+    filterSpecialType,
+    filterDifficulty,
+    filterYear,
+    orgScope,
+  ]);
 
   React.useEffect(() => {
     void load();
@@ -164,6 +192,7 @@ function ReviewsWorkbench() {
       page_size: 1,
       keyword: keyword || undefined,
       special_type: filterSpecialType || undefined,
+      difficulty_level: filterDifficulty || undefined,
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
     };
@@ -190,7 +219,7 @@ function ReviewsWorkbench() {
     return () => {
       cancelled = true;
     };
-  }, [keyword, filterSpecialType, filterYear, orgScope]);
+  }, [keyword, filterSpecialType, filterDifficulty, filterYear, orgScope]);
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
@@ -215,6 +244,7 @@ function ReviewsWorkbench() {
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
         special_type: filterSpecialType || undefined,
+        difficulty_level: filterDifficulty || undefined,
         status: filterStatus || undefined,
         ids: ids.length ? ids : undefined,
         scope: ids.length ? undefined : isTodo ? "todo" : "approved",
@@ -260,7 +290,9 @@ function ReviewsWorkbench() {
         reject_to_level: input.reject_to_level,
       });
       if (res.failed === 0) {
-        toast.success(`批量${batchDialog === "pass" ? "通过" : "退回"}成功，共 ${res.success} 条`);
+        toast.success(
+          `批量${batchDialog === "pass" ? "通过" : "退回"}成功，共 ${res.success} 条`,
+        );
       } else {
         toast.info(`成功 ${res.success} 条，失败 ${res.failed} 条`);
         const firstFail = res.items.find((i) => !i.ok);
@@ -288,13 +320,17 @@ function ReviewsWorkbench() {
       header: "姓名",
       width: "88px",
       cell: (r) => (
-        <CellText className="font-medium text-ink">{r.student_name || "—"}</CellText>
+        <CellText className="font-medium text-ink">
+          {r.student_name || "—"}
+        </CellText>
       ),
     },
     {
       header: "学号",
       width: "140px",
-      cell: (r) => <CellText className="font-mono">{r.student_no || "—"}</CellText>,
+      cell: (r) => (
+        <CellText className="font-mono">{r.student_no || "—"}</CellText>
+      ),
     },
     {
       header: "专业",
@@ -306,7 +342,9 @@ function ReviewsWorkbench() {
           {
             header: "院系",
             width: "180px",
-            cell: (r: RecognitionListItem) => <CellText>{r.dept_name || "—"}</CellText>,
+            cell: (r: RecognitionListItem) => (
+              <CellText>{r.dept_name || "—"}</CellText>
+            ),
           } satisfies Column<RecognitionListItem>,
         ]
       : []),
@@ -332,11 +370,17 @@ function ReviewsWorkbench() {
           <span className="text-ink-mute">未勾选</span>
         ),
     },
-    { header: "状态", width: "112px", cell: (r) => <StatusBadge status={r.status} /> },
+    {
+      header: "状态",
+      width: "112px",
+      cell: (r) => <StatusBadge status={r.status} />,
+    },
     {
       header: "当前级别",
       width: "96px",
-      cell: (r) => <span className="text-sm">{levelName(r.current_level)}</span>,
+      cell: (r) => (
+        <span className="text-sm">{levelName(r.current_level)}</span>
+      ),
     },
     {
       header: "困难等级",
@@ -408,7 +452,9 @@ function ReviewsWorkbench() {
         loading={countsLoading}
       />
 
-      {activeTabHint && <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>}
+      {activeTabHint && (
+        <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>
+      )}
 
       <Toolbar>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -462,6 +508,22 @@ function ReviewsWorkbench() {
               </option>
             ))}
           </Select>
+          <Select
+            value={filterDifficulty}
+            onChange={(e) => {
+              setFilterDifficulty(e.target.value);
+              setPage(1);
+            }}
+            className="w-32 shrink-0"
+          >
+            <option value="">困难等级</option>
+            {DIFFICULTY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            <option value="none">未评定</option>
+          </Select>
           <Input
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
@@ -469,7 +531,12 @@ function ReviewsWorkbench() {
             placeholder="年度"
             className="h-9 w-20 shrink-0 text-sm"
           />
-          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={submitSearch}
+          >
             查询
           </Button>
         </div>
@@ -513,19 +580,32 @@ function ReviewsWorkbench() {
                   <Check size={14} />
                   批量通过
                 </Button>
-                <Button size="sm" variant="danger" onClick={() => setBatchDialog("reject")}>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => setBatchDialog("reject")}
+                >
                   <Undo2 size={14} />
                   批量退回
                 </Button>
               </>
             )}
             {canExportSummary && (
-              <Button size="sm" variant="outline" disabled={exportingSummary} onClick={() => void handleExportSummary()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exportingSummary}
+                onClick={() => void handleExportSummary()}
+              >
                 <Download size={14} />
                 {exportingSummary ? "导出中…" : "导出已选"}
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelected(new Set())}
+            >
               取消选择
             </Button>
           </div>
@@ -542,7 +622,11 @@ function ReviewsWorkbench() {
         error={error}
         onRetry={load}
         emptyLabel={
-          tab === "todo" ? "暂无待办申请" : tab === "done" ? "暂无已办理记录" : "暂无认定记录"
+          tab === "todo"
+            ? "暂无待办申请"
+            : tab === "done"
+              ? "暂无已办理记录"
+              : "暂无认定记录"
         }
       />
 

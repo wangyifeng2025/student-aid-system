@@ -66,6 +66,16 @@ const (
 	DifficultyGeneral DifficultyLevel = "general" // 一般困难
 )
 
+// IsValidDifficultyLevel 判断是否为合法困难等级。
+func IsValidDifficultyLevel(s string) bool {
+	switch DifficultyLevel(s) {
+	case DifficultySpecial, DifficultyHard, DifficultyGeneral:
+		return true
+	default:
+		return false
+	}
+}
+
 // HouseholdType 户口类型
 type HouseholdType string
 

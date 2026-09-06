@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, KeyRound } from "lucide-react";
-import { userApi, departmentApi, classApi, ApiError } from "@/lib/api";
+import { Plus, Search, KeyRound, Upload } from "lucide-react";
+import { userApi, departmentApi, classApi, exportApi, ApiError } from "@/lib/api";
 import type { User, UserCreateInput, UserUpdateInput } from "@/types/user";
 import type { Role } from "@/types/auth";
 import type { Department, Class } from "@/types/org";
@@ -19,6 +19,9 @@ import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
+import { ExportButtons, type ExportScope } from "@/components/base-data/export-menu";
+import { ImportDialog } from "@/components/student/import-dialog";
+import { FileTransferOverlay } from "@/components/ui/file-transfer-overlay";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { useAuthStore } from "@/store/auth";
 
@@ -80,6 +83,9 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = React.useState<User | null>(null);
   const [newPassword, setNewPassword] = React.useState("");
   const [resetting, setResetting] = React.useState(false);
+
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -248,6 +254,34 @@ export default function UsersPage() {
     }
   };
 
+  const handleExport = async (scope: ExportScope) => {
+    if (scope === "selected" && selected.size === 0) {
+      toast.info("请先勾选要导出的用户");
+      return;
+    }
+    setExporting(true);
+    try {
+      if (scope === "all") {
+        await exportApi.users();
+      } else if (scope === "filtered") {
+        await exportApi.users({
+          keyword: keyword || undefined,
+          role: filterRole || undefined,
+          status: filterStatus === "" ? undefined : Number(filterStatus),
+        });
+      } else {
+        await exportApi.users(undefined, Array.from(selected));
+      }
+      toast.success("用户数据已导出");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const hasUserFilter = Boolean(keyword || filterRole || filterStatus);
+
   const scopeText = (u: User) => {
     if (u.role === "classadvisor") {
       const names = (u.class_ids ?? [])
@@ -386,7 +420,7 @@ export default function UsersPage() {
             查询
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <BatchDeleteButton
             selectedIds={selected}
             deleteOne={(id) => userApi.remove(id)}
@@ -394,6 +428,21 @@ export default function UsersPage() {
             entityLabel="用户"
             canWrite={canWrite}
           />
+          {canWrite && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload size={16} />
+                导入用户
+              </Button>
+              <ExportButtons
+                onExport={handleExport}
+                exporting={exporting}
+                selectedCount={selected.size}
+                hasFilter={hasUserFilter}
+                label="导出"
+              />
+            </>
+          )}
           <Button size="sm" onClick={openCreate}>
             <Plus size={16} />
             新增用户
@@ -596,6 +645,23 @@ export default function UsersPage() {
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {canWrite && (
+        <ImportDialog
+          open={importOpen}
+          kind="users"
+          title="导入用户"
+          hint="模板列：用户名*、姓名*、角色*、手机号、所属院系编码、状态。角色取值：student/classadvisor/department/aidcenter/admin。学生账号建议通过学生信息维护自动创建，此处主要用于批量导入审核角色账号。"
+          onClose={() => setImportOpen(false)}
+          onImported={load}
+        />
+      )}
+      <FileTransferOverlay
+        open={exporting}
+        title="正在导出用户数据"
+        hint="数据较多时请耐心等待，系统仍在生成 Excel，请勿关闭页面。"
+        tauSeconds={18}
       />
     </div>
   );

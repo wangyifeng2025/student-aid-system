@@ -113,6 +113,7 @@ type UserFilter struct {
 	Role     string
 	Status   *int
 	Keyword  string // 用户名/姓名/手机号
+	IDs      []uint // 指定 ID 集合（导出勾选用）
 	Page     int
 	PageSize int
 }
@@ -128,6 +129,9 @@ func (r *UserRepository) query(f UserFilter) *gorm.DB {
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		q = q.Where("username LIKE ? OR real_name LIKE ? OR phone LIKE ?", kw, kw, kw)
+	}
+	if len(f.IDs) > 0 {
+		q = q.Where("id IN ?", f.IDs)
 	}
 	return q
 }

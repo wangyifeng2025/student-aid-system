@@ -23,6 +23,7 @@ type RecognitionFilter struct {
 	Status          string
 	Keyword         string // 学生姓名/学号
 	SpecialType     string // 申请表勾选的特殊群体类型 code（命中即返回，可与其它勾选并存）
+	DifficultyLevel string // 空=不限；none=未评定；其余为困难等级
 	DeptID          uint   // 按院系筛选（资助中心/管理员）
 	ClassID         uint   // 按班级筛选（教学系/资助中心）
 	Page            int
@@ -77,6 +78,15 @@ func applyRecognitionFilter(q *gorm.DB, f RecognitionFilter) *gorm.DB {
 		q = q.Where("students.class_id = ?", f.ClassID)
 	}
 	q = applySpecialTypeFilter(q, f.SpecialType)
+	if dl := strings.TrimSpace(f.DifficultyLevel); dl != "" {
+		if dl == "none" {
+			q = q.Where("recognition_applications.difficulty_level = '' OR recognition_applications.difficulty_level IS NULL")
+		} else if model.IsValidDifficultyLevel(dl) {
+			q = q.Where("recognition_applications.difficulty_level = ?", dl)
+		} else {
+			q = q.Where("1 = 0")
+		}
+	}
 	if len(f.ExcludeStatuses) > 0 {
 		q = q.Where("recognition_applications.status NOT IN ?", f.ExcludeStatuses)
 	}

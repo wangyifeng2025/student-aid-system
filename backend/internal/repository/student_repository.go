@@ -38,6 +38,8 @@ type StudentFilter struct {
 	IsKeyGroup        *bool
 	Year              int    // 认定/助学金学年，0 表示当前年
 	RecognitionStatus string // 空=不限；none=未提交；其余为认定状态
+	DifficultyLevel   string // 空=不限；none=未评定；其余为困难等级
+	IDs               []uint // 指定 ID 集合（导出勾选用）
 	Page              int
 	PageSize          int
 }
@@ -56,20 +58,34 @@ func (r *StudentRepository) query(f StudentFilter, actor rbac.Actor) *gorm.DB {
 	if f.IsKeyGroup != nil {
 		q = q.Where("students.is_key_group = ?", *f.IsKeyGroup)
 	}
+	if len(f.IDs) > 0 {
+		q = q.Where("students.id IN ?", f.IDs)
+	}
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		q = q.Where("students.name LIKE ? OR students.student_no LIKE ? OR students.id_card LIKE ?", kw, kw, kw)
 	}
-	if st := f.RecognitionStatus; st != "" {
+	if f.RecognitionStatus != "" || f.DifficultyLevel != "" {
 		year := f.Year
 		if year <= 0 {
 			year = time.Now().Year()
 		}
 		q = q.Joins("LEFT JOIN recognition_applications ra ON ra.student_id = students.id AND ra.year = ? AND ra.deleted_at IS NULL", year)
-		if st == "none" {
-			q = q.Where("ra.id IS NULL")
-		} else {
-			q = q.Where("ra.status = ?", st)
+		if st := f.RecognitionStatus; st != "" {
+			if st == "none" {
+				q = q.Where("ra.id IS NULL")
+			} else {
+				q = q.Where("ra.status = ?", st)
+			}
+		}
+		if dl := f.DifficultyLevel; dl != "" {
+			if dl == "none" {
+				q = q.Where("ra.id IS NULL OR ra.difficulty_level = '' OR ra.difficulty_level IS NULL")
+			} else if model.IsValidDifficultyLevel(dl) {
+				q = q.Where("ra.difficulty_level = ?", dl)
+			} else {
+				q = q.Where("1 = 0")
+			}
 		}
 	}
 	return q

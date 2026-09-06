@@ -213,7 +213,7 @@ export default function ClassesPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1" style={{ maxWidth: 280 }}>
             <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
             <Input
@@ -231,7 +231,7 @@ export default function ClassesPage() {
           </Select>
         </div>
         {canWrite && (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => classApi.remove(id)}
@@ -245,12 +245,18 @@ export default function ClassesPage() {
               importTitle="导入班级"
               importHint="请先导入班主任信息。模板列：院系编码、专业编码、入学年份、班级名称、教工号*。教工号必须已在班主任信息中存在，否则该行导入失败。导入后会同步该班主任的管理班级。"
               onDone={load}
+              hasFilter={Boolean(keyword || filterDept)}
+              selectedIds={selected}
+              buildFilterParams={() => ({
+                keyword: keyword || undefined,
+                dept_id: filterDept ? Number(filterDept) : undefined,
+              })}
             />
             <Button size="sm" onClick={openCreate}>
               <Plus size={16} />
               新增班级
             </Button>
-          </>
+          </div>
         )}
       </Toolbar>
 

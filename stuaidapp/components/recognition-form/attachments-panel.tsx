@@ -46,15 +46,12 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<Attachment | null>(null);
   const onCountChangeRef = useRef(onCountChange);
-  onCountChangeRef.current = onCountChange;
+  useEffect(() => {
+    onCountChangeRef.current = onCountChange;
+  }, [onCountChange]);
 
   const load = useCallback(async () => {
-    if (!recognitionId) {
-      setItems([]);
-      onCountChangeRef.current?.(0);
-      setLoading(false);
-      return;
-    }
+    if (!recognitionId) return;
     setLoading(true);
     try {
       const res = await recognitionApi.listAttachments(recognitionId);
@@ -69,8 +66,16 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
   }, [recognitionId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!recognitionId) {
+      onCountChangeRef.current?.(0);
+      return;
+    }
+    // 等当前渲染结束再拉列表，避免在 effect 里同步 setState。
+    const t = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [load, recognitionId]);
 
   async function uploadLocal(uri: string, fileName: string, mime: string) {
     if (!recognitionId) return;

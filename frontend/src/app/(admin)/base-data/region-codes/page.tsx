@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { FileTransferOverlay } from "@/components/ui/file-transfer-overlay";
 
 interface Crumb {
   code: string;
@@ -329,7 +330,7 @@ export default function RegionCodesPage() {
           </div>
         </div>
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileRef}
               type="file"
@@ -434,6 +435,12 @@ export default function RegionCodesPage() {
         loading={importing}
         onConfirm={() => void handleImportDefault()}
         onCancel={() => setImportOpen(false)}
+      />
+      <FileTransferOverlay
+        open={importing}
+        title="正在导入行政区划"
+        hint="全国区划数据量较大，请耐心等待，系统仍在处理，请勿关闭页面。"
+        tauSeconds={32}
       />
     </div>
   );
