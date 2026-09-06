@@ -13,6 +13,9 @@ config/config.local.yaml
 # 上传文件
 /uploads/
 
+# 本地生成的数据备份归档
+/backups/
+
 # 依赖与缓存
 /vendor/
 

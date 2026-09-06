@@ -39,7 +39,7 @@ COPY assets/ /app/assets/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN chmod +x /app/docker-entrypoint.sh \
-  && mkdir -p /app/uploads \
+  && mkdir -p /app/uploads /app/backups \
   && chown -R app:app /app
 
 USER app

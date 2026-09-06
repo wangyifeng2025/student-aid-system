@@ -17,6 +17,7 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Upload   UploadConfig   `mapstructure:"upload"`
 	Export   ExportConfig   `mapstructure:"export"`
+	Backup   BackupConfig   `mapstructure:"backup"`
 }
 
 type AppConfig struct {
@@ -64,6 +65,17 @@ type ExportConfig struct {
 	GrantTemplatePath string `mapstructure:"grant_template_path"`
 	// RecognitionSummaryTemplatePath 家庭经济困难学生认定结果汇总表 Excel 模板。
 	RecognitionSummaryTemplatePath string `mapstructure:"recognition_summary_template_path"`
+}
+
+// BackupConfig 数据备份与恢复相关配置。
+type BackupConfig struct {
+	// Dir 备份归档（.zip）在服务器上的存放目录。
+	// 生产环境应挂载到独立卷，并定期同步到异地存储。
+	Dir string `mapstructure:"dir"`
+	// MaxKeep 目录内保留的备份数量上限，超出时自动删除最旧的；0 表示不限制。
+	MaxKeep int `mapstructure:"max_keep"`
+	// MaxUploadMB 恢复时允许上传的归档大小上限（MB），0 表示不限制。
+	MaxUploadMB int `mapstructure:"max_upload_mb"`
 }
 
 // Load 从 config/config.yaml 及环境变量加载配置。
@@ -159,4 +171,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("export.recognition_template_path", "./assets/templates/recognition_application.docx")
 	v.SetDefault("export.grant_template_path", "./assets/templates/grant_national_aid.docx")
 	v.SetDefault("export.recognition_summary_template_path", "./assets/templates/recognition_result_summary.xlsx")
+
+	v.SetDefault("backup.dir", "./backups")
+	v.SetDefault("backup.max_keep", 20)
+	v.SetDefault("backup.max_upload_mb", 1024)
 }

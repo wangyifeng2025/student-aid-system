@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Database,
+  DatabaseBackup,
   Building2,
   BookMarked,
   CalendarRange,
@@ -169,6 +170,13 @@ export const ADMIN_NAV: NavItem[] = [
         label: "用户管理",
         href: "/users",
         icon: UserCog,
+      },
+      {
+        type: "leaf",
+        key: "backups",
+        label: "数据备份",
+        href: "/backups",
+        icon: DatabaseBackup,
       },
     ],
   },

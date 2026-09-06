@@ -59,6 +59,11 @@ import type {
 } from "@/types/user";
 import type { DashboardOverview } from "@/types/dashboard";
 import type { Advisor, AdvisorFilter, AdvisorInput } from "@/types/advisor";
+import type {
+  BackupItem,
+  CreateBackupInput,
+  RestoreResult,
+} from "@/types/backup";
 import { clearSession, loadSession, updateSession } from "@/lib/token-storage";
 
 /** 请求时解析 API 根地址：Docker 同源反代留空 env 即可；本地开发默认 localhost:8080。 */
@@ -825,6 +830,27 @@ export const attachmentApi = {
   },
   remove: (id: number) =>
     apiFetch<{ message: string }>(`/attachments/${id}`, { method: "DELETE" }),
+};
+
+// ===== 数据备份与恢复（仅管理员） =====
+
+export const backupApi = {
+  list: () => apiFetch<BackupItem[]>("/backups"),
+  create: (body: CreateBackupInput = {}) =>
+    apiFetch<BackupItem>("/backups", { method: "POST", body }),
+  download: (name: string) =>
+    downloadFile(`/backups/download/${encodeURIComponent(name)}`, name),
+  remove: (name: string) =>
+    apiFetch<{ message: string }>(`/backups/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+  /** 用服务器上已有的归档恢复。 */
+  restore: (name: string) =>
+    apiFetch<RestoreResult>(`/backups/restore/${encodeURIComponent(name)}`, {
+      method: "POST",
+    }),
+  /** 上传本地归档并恢复（用于服务器损坏后在新机器上重建）。 */
+  restoreUpload: (file: File) => apiUpload<RestoreResult>("/backups/restore", file),
 };
 
 export { apiFetch };

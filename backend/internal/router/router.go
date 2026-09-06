@@ -72,6 +72,9 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			registerUserRoutes(adminOnly, h)
 			registerAdvisorRoutes(adminOnly, h)
 
+			// 数据备份与恢复 — 仅管理员。
+			registerBackupRoutes(adminOnly, h)
+
 			// 模块 4：困难认定申请。所有登录角色可访问，
 			// 具体读写权限由 service 按角色 + 数据范围（本人/本班/本系/全校）控制。
 			registerRecognitionRoutes(secured, h)
@@ -284,6 +287,20 @@ func registerImportRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		exp.GET("/advisors", h.ExportAdvisors)
 		exp.GET("/users", h.ExportUsers)
 		exp.GET("/:type", h.ExportOrg)
+	}
+}
+
+// registerBackupRoutes 挂载数据库全量备份与恢复路由（仅管理员）。
+// download/restore 走独立静态段，避免与 :name 通配符在同一层冲突。
+func registerBackupRoutes(g *gin.RouterGroup, h *handler.Handler) {
+	backups := g.Group("/backups")
+	{
+		backups.GET("", h.ListBackups)
+		backups.POST("", h.CreateBackup)
+		backups.GET("/download/:name", h.DownloadBackup)
+		backups.POST("/restore", h.RestoreBackupFromUpload)
+		backups.POST("/restore/:name", h.RestoreBackupFromServer)
+		backups.DELETE("/:name", h.DeleteBackup)
 	}
 }
 

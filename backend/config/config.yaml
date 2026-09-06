@@ -36,3 +36,11 @@ export:
   grant_template_path: "./assets/templates/grant_national_aid.docx"
   # 家庭经济困难学生认定结果汇总表 Excel 模板
   recognition_summary_template_path: "./assets/templates/recognition_result_summary.xlsx"
+
+backup:
+  # 备份归档（.zip）存放目录，生产环境请挂载到独立卷并定期异地同步
+  dir: ./backups
+  # 目录内保留的备份数量上限，超出后自动清理最旧的；0 表示不限制
+  max_keep: 20
+  # 恢复时允许上传的归档大小上限（MB），0 表示不限制
+  max_upload_mb: 1024

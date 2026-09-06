@@ -30,6 +30,7 @@ type Handler struct {
 	Advisor            *service.AdvisorService
 	RegionCode         *service.RegionCodeService
 	Dashboard          *service.DashboardService
+	Backup             *service.BackupService
 }
 
 func New(db *gorm.DB, cfg *config.Config, jwtMgr *jwt.Manager) *Handler {
@@ -55,5 +56,6 @@ func New(db *gorm.DB, cfg *config.Config, jwtMgr *jwt.Manager) *Handler {
 		Advisor:            service.NewAdvisorService(db),
 		RegionCode:         service.NewRegionCodeService(db),
 		Dashboard:          service.NewDashboardService(db),
+		Backup:             service.NewBackupService(db, cfg),
 	}
 }
