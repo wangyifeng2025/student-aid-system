@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
@@ -158,9 +158,9 @@ export default function DictsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Label className="mb-0 shrink-0">字典类型</Label>
-          <Select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
+        <ToolbarFilters>
+          <Label className="mb-0 shrink-0 text-xs">字典类型</Label>
+          <Select compact value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-52 shrink-0">
             {types.length === 0 && <option value="">暂无类型</option>}
             {types.map((t) => (
               <option key={t} value={t}>
@@ -168,9 +168,9 @@ export default function DictsPage() {
               </option>
             ))}
           </Select>
-        </div>
+        </ToolbarFilters>
         {canWrite && selectedType && (
-          <div className="flex items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => {
@@ -184,10 +184,10 @@ export default function DictsPage() {
               hint={`确定删除选中的 ${selected.size} 个字典项吗？此操作不可撤销。`}
             />
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增字典项
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

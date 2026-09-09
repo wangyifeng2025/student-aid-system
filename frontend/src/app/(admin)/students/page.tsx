@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Search, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import {
   studentApi,
   departmentApi,
@@ -24,7 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import {
   DataTable,
   CellText,
@@ -543,27 +543,23 @@ export default function StudentsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0" style={{ width: 240 }}>
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
-            />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索姓名/学号/身份证…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="姓名 / 学号 / 身份证"
+            widthClassName="w-48"
+          />
           <Select
+            compact
             value={filterDept}
             onChange={(e) => {
               setFilterDept(e.target.value);
               setFilterClass("");
               resetToFirst();
             }}
+            className="w-28 shrink-0"
           >
             <option value="">全部院系</option>
             {scopedDepts.map((d) => (
@@ -573,11 +569,13 @@ export default function StudentsPage() {
             ))}
           </Select>
           <Select
+            compact
             value={filterClass}
             onChange={(e) => {
               setFilterClass(e.target.value);
               resetToFirst();
             }}
+            className="w-28 shrink-0"
           >
             <option value="">全部班级</option>
             {scopedClasses.map((c) => (
@@ -587,11 +585,13 @@ export default function StudentsPage() {
             ))}
           </Select>
           <Select
+            compact
             value={filterYear}
             onChange={(e) => {
               setFilterYear(e.target.value);
               resetToFirst();
             }}
+            className="w-28 shrink-0"
           >
             {YEAR_OPTIONS.map((y) => (
               <option key={y} value={y}>
@@ -600,22 +600,24 @@ export default function StudentsPage() {
             ))}
           </Select>
           <Select
+            compact
             value={filterKey}
             onChange={(e) => {
               setFilterKey(e.target.value as KeyFilter);
               resetToFirst();
             }}
+            className="w-28 shrink-0"
           >
             <option value="">全部人群</option>
             <option value="true">仅重点人群</option>
             <option value="false">非重点人群</option>
           </Select>
-          <Button variant="outline" size="sm" onClick={submitSearch}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
-        </div>
+        </ToolbarFilters>
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => studentApi.remove(id)}
@@ -636,14 +638,14 @@ export default function StudentsPage() {
               size="sm"
               onClick={() => setImportOpen(true)}
             >
-              <Upload size={16} />
+              <Upload size={14} />
               导入名单
             </Button>
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增学生
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

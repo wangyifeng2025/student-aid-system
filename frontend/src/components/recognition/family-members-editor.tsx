@@ -23,11 +23,104 @@ export function emptyMember(): FamilyMemberInput {
 }
 
 const inputCls =
-  "w-full rounded-sm border border-line bg-transparent px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand-light";
+  "w-full min-h-11 rounded-sm border border-line bg-transparent px-2 py-2 text-base text-ink outline-none transition-colors md:min-h-0 md:py-1 md:text-sm focus:border-brand focus:ring-2 focus:ring-brand-light";
 
 interface Props {
   members: FamilyMemberInput[];
   onChange: (next: FamilyMemberInput[]) => void;
+}
+
+function MemberFields({
+  m,
+  i,
+  update,
+}: {
+  m: FamilyMemberInput;
+  i: number;
+  update: <K extends keyof FamilyMemberInput>(
+    index: number,
+    key: K,
+    value: FamilyMemberInput[K],
+  ) => void;
+}) {
+  return (
+    <>
+      <input
+        className={inputCls}
+        value={m.name}
+        onChange={(e) => update(i, "name", e.target.value)}
+        placeholder="姓名"
+        aria-label="姓名"
+      />
+      <input
+        className={inputCls}
+        inputMode="numeric"
+        value={m.age || ""}
+        onChange={(e) =>
+          update(i, "age", Number(e.target.value.replace(/\D/g, "")) || 0)
+        }
+        placeholder="年龄"
+        aria-label="年龄"
+      />
+      <select
+        className={`${inputCls} cursor-pointer`}
+        value={m.relation}
+        onChange={(e) => update(i, "relation", e.target.value)}
+        aria-label="与学生关系"
+      >
+        {RELATION_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <input
+        className={inputCls}
+        value={m.work_unit}
+        onChange={(e) => update(i, "work_unit", e.target.value)}
+        placeholder="工作 / 学习单位"
+        aria-label="工作或学习单位"
+      />
+      <select
+        className={`${inputCls} cursor-pointer`}
+        value={m.occupation}
+        onChange={(e) => update(i, "occupation", e.target.value)}
+        aria-label="职业"
+      >
+        {OCCUPATION_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <input
+        className={inputCls}
+        inputMode="numeric"
+        value={m.annual_income || ""}
+        onChange={(e) =>
+          update(
+            i,
+            "annual_income",
+            Number(e.target.value.replace(/[^\d.]/g, "")) || 0,
+          )
+        }
+        placeholder="年收入(元)"
+        aria-label="年收入"
+      />
+      <select
+        className={`${inputCls} cursor-pointer`}
+        value={m.health}
+        onChange={(e) => update(i, "health", e.target.value)}
+        aria-label="健康状况"
+      >
+        {HEALTH_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </>
+  );
 }
 
 export function FamilyMembersEditor({ members, onChange }: Props) {
@@ -45,7 +138,35 @@ export function FamilyMembersEditor({ members, onChange }: Props) {
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-sm border border-line">
+      <div className="space-y-3 md:hidden">
+        {members.length === 0 ? (
+          <p className="rounded-sm border border-line px-3 py-6 text-center text-sm text-ink-mute">
+            暂无家庭成员，点击下方「添加成员」录入（不含本人）。
+          </p>
+        ) : (
+          members.map((m, i) => (
+            <div key={i} className="rounded-md border border-line p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-ink">成员 {i + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="inline-flex items-center justify-center p-1"
+                  style={{ color: "var(--state-error)" }}
+                  aria-label="删除该成员"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <MemberFields m={m} i={i} update={update} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-sm border border-line md:block">
         <table className="w-full" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ backgroundColor: "var(--color-bg-page)" }}>
@@ -188,7 +309,7 @@ export function FamilyMembersEditor({ members, onChange }: Props) {
       <button
         type="button"
         onClick={addRow}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-sm border border-dashed border-line px-3.5 py-1.5 text-sm font-medium text-brand transition-colors hover:border-brand hover:bg-brand-subtle"
+        className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-dashed border-line px-3.5 py-1.5 text-sm font-medium text-brand transition-colors hover:border-brand hover:bg-brand-subtle md:min-h-0"
       >
         <Plus size={16} />
         添加成员

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { FileTransferOverlay } from "@/components/ui/file-transfer-overlay";
@@ -281,10 +281,10 @@ export default function RegionCodesPage() {
       </div>
 
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <ToolbarFilters>
           <button
             type="button"
-            className="text-sm text-link hover:underline"
+            className="shrink-0 text-xs text-link hover:underline"
             onClick={() => {
               setCrumbs([]);
               setAppliedKeyword("");
@@ -295,10 +295,10 @@ export default function RegionCodesPage() {
           </button>
           {crumbs.map((c, i) => (
             <React.Fragment key={c.code}>
-              <ChevronRight size={14} className="text-ink-mute" />
+              <ChevronRight size={12} className="shrink-0 text-ink-mute" />
               <button
                 type="button"
-                className="text-sm text-link hover:underline"
+                className="shrink-0 text-xs text-link hover:underline"
                 onClick={() => {
                   setCrumbs((prev) => prev.slice(0, i + 1));
                   setAppliedKeyword("");
@@ -309,28 +309,28 @@ export default function RegionCodesPage() {
               </button>
             </React.Fragment>
           ))}
-          <div className="ml-3 flex min-w-40 items-center gap-2">
-            <Input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜索名称 / 代码"
-              className="h-9"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setAppliedKeyword(keyword.trim());
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAppliedKeyword(keyword.trim())}
-            >
-              <Search size={16} />
-              查询
-            </Button>
-          </div>
-        </div>
+          <Input
+            compact
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="名称 / 代码"
+            className="ml-1 w-40 shrink-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setAppliedKeyword(keyword.trim());
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setAppliedKeyword(keyword.trim())}
+          >
+            <Search size={14} />
+            查询
+          </Button>
+        </ToolbarFilters>
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
+          <ToolbarActions>
             <input
               ref={fileRef}
               type="file"
@@ -342,17 +342,17 @@ export default function RegionCodesPage() {
               }}
             />
             <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
-              <Upload size={16} />
+              <Upload size={14} />
               导入 JSON
             </Button>
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} disabled={importing}>
               导入内置区划
             </Button>
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

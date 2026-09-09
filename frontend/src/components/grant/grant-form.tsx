@@ -130,17 +130,17 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <Link href="/grants" className="inline-flex items-center gap-1.5 text-sm text-link hover:underline">
           <ArrowLeft size={16} />
           返回列表
         </Link>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={save} disabled={saving}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="outline" onClick={save} disabled={saving} className="w-full sm:w-auto">
             <Save size={16} />
             {saving ? "保存中…" : "保存草稿"}
           </Button>
-          <Button onClick={submit} disabled={submitting}>
+          <Button onClick={submit} disabled={submitting} className="w-full sm:w-auto">
             <Send size={16} />
             {submitting ? "提交中…" : "提交申请"}
           </Button>
@@ -149,7 +149,7 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
 
       <h2 className="mb-4 text-lg font-semibold text-ink">贵州省高等学校国家助学金申请表</h2>
 
-      <section className="mb-6 rounded-md border border-line bg-surface p-5">
+      <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">本人情况（学籍信息，只读）</h3>
         <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
           <div><span className="text-ink-soft">姓名</span><div>{readonly?.student_name || "—"}</div></div>
@@ -165,7 +165,7 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
         </div>
       </section>
 
-      <section className="mb-6 rounded-md border border-line bg-surface p-5">
+      <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">联系与家庭经济情况</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -174,7 +174,7 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
           </div>
           <div>
             <Label>家庭户口</Label>
-            <Select value={form.household_type} onChange={(e) => patch({ household_type: e.target.value })}>
+            <Select className="w-full" value={form.household_type} onChange={(e) => patch({ household_type: e.target.value })}>
               {HOUSEHOLD_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
@@ -194,7 +194,7 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
           </div>
           <div>
             <Label>收入来源</Label>
-            <Select value={form.income_source} onChange={(e) => patch({ income_source: e.target.value })}>
+            <Select className="w-full" value={form.income_source} onChange={(e) => patch({ income_source: e.target.value })}>
               {INCOME_SOURCE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
@@ -211,15 +211,15 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
         </div>
       </section>
 
-      <section className="mb-6 rounded-md border border-line bg-surface p-5">
+      <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">家庭成员情况</h3>
         <GrantFamilyEditor members={form.family_members} onChange={(family_members) => patch({ family_members })} />
       </section>
 
-      <section className="mb-6 rounded-md border border-line bg-surface p-5">
+      <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">申请理由（建议 150 字左右）</h3>
         <textarea
-          className="min-h-[120px] w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
+          className="min-h-[120px] w-full rounded-md border border-line bg-surface px-3 py-2 text-base md:text-sm"
           value={form.reason}
           onChange={(e) => patch({ reason: e.target.value })}
           placeholder="请简要说明家庭经济困难情况及申请助学金的理由…"

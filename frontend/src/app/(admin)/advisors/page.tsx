@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { advisorApi, departmentApi, classApi, exportApi, ApiError } from "@/lib/api";
 import type { Advisor, AdvisorInput } from "@/types/advisor";
 import type { Class, Department } from "@/types/org";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
@@ -231,35 +231,34 @@ export default function AdvisorsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0" style={{ width: 220 }}>
-            <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索姓名/电话/教工号…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="姓名 / 电话 / 教工号"
+            widthClassName="w-48"
+          />
           <Select
+            compact
             value={filterDept}
             onChange={(e) => {
               setFilterDept(e.target.value);
               setPage(1);
             }}
+            className="w-28 shrink-0"
           >
             <option value="">全部系部</option>
             {depts.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </Select>
-          <Button variant="outline" size="sm" onClick={submitSearch}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
-        </div>
+        </ToolbarFilters>
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => advisorApi.remove(id)}
@@ -269,7 +268,7 @@ export default function AdvisorsPage() {
               hint={`确定删除选中的 ${selected.size} 位班主任吗？将彻底删除其登录账号；已有评审记录的无法删除，将自动跳过。`}
             />
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload size={16} />
+              <Upload size={14} />
               导入
             </Button>
             <ExportButtons
@@ -280,10 +279,10 @@ export default function AdvisorsPage() {
               label="导出"
             />
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Bell, ChevronDown, LogOut } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { resolvePageMeta } from "@/lib/nav";
 import { useAuthStore } from "@/store/auth";
 import { avatarInitial, roleLabel } from "@/lib/labels";
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -34,16 +34,24 @@ export function Topbar() {
 
   return (
     <header
-      className="z-30 flex shrink-0 items-center justify-between px-6"
+      className="z-30 flex min-h-14 shrink-0 items-center justify-between gap-2 px-3 md:px-6"
       style={{
-        height: "var(--header-height)",
         backgroundColor: "var(--color-bg-card)",
         borderBottom: "1px solid var(--color-border)",
+        paddingTop: "env(safe-area-inset-top)",
       }}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2 md:gap-3">
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink-soft hover:bg-page md:hidden"
+          onClick={onMenuClick}
+          aria-label="打开导航"
+        >
+          <Menu size={20} />
+        </button>
         <h1 className="truncate text-sm font-semibold text-ink">{meta.title}</h1>
-        <nav className="flex items-center gap-1 text-xs text-ink-mute" aria-label="面包屑">
+        <nav className="hidden items-center gap-1 text-xs text-ink-mute md:flex" aria-label="面包屑">
           {meta.breadcrumb.map((seg, i) => (
             <React.Fragment key={i}>
               {i > 0 && <span>/</span>}
@@ -84,7 +92,7 @@ export function Topbar() {
             >
               {avatarInitial(user?.real_name || user?.username)}
             </div>
-            <span className="text-sm text-ink">
+            <span className="hidden max-w-28 truncate text-sm text-ink sm:inline">
               {user?.real_name || user?.username}
             </span>
             <ChevronDown size={14} style={{ color: "var(--color-text-muted)" }} />

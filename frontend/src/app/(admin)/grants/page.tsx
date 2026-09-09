@@ -2,15 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Search, Eye, Pencil, Trash2, Download } from "lucide-react";
+import { Plus, Eye, Pencil, Trash2, Download } from "lucide-react";
 import { grantApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { GrantStatusBadge } from "@/components/grant/grant-status-badge";
@@ -112,20 +111,49 @@ export default function GrantsPage() {
   return (
     <div>
       <Toolbar>
-        <Input placeholder="姓名/学号" value={keywordInput} onChange={(e) => setKeywordInput(e.target.value)} className="w-40" />
-        <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-36">
-          <option value="">全部状态</option>
-          {GRANT_STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-        <Button variant="outline" size="sm" onClick={() => { setKeyword(keywordInput.trim()); setPage(1); }}>
-          <Search size={16} /> 查询
-        </Button>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={() => {
+              setKeyword(keywordInput.trim());
+              setPage(1);
+            }}
+            placeholder="姓名 / 学号"
+            widthClassName="w-36"
+          />
+          <Select
+            compact
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="w-28 shrink-0"
+          >
+            <option value="">全部状态</option>
+            {GRANT_STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              setKeyword(keywordInput.trim());
+              setPage(1);
+            }}
+          >
+            查询
+          </Button>
+        </ToolbarFilters>
         {isStudent && (
-          <Link href="/grants/new">
-            <Button size="sm"><Plus size={16} /> 新建申请</Button>
-          </Link>
+          <ToolbarActions>
+            <Link href="/grants/new">
+              <Button size="sm">
+                <Plus size={14} />
+                新建申请
+              </Button>
+            </Link>
+          </ToolbarActions>
         )}
       </Toolbar>
 

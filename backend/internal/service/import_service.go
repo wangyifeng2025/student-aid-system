@@ -984,6 +984,7 @@ func (s *ImportService) ExportUsers(f repository.UserFilter) ([]byte, string, er
 
 // ImportUsers 导入用户。模板列：用户名*、姓名*、角色*、手机号、所属院系编码、状态。
 // 学生账号建议通过学生信息维护自动创建，此处主要用于批量导入审核角色账号。
+// 班主任 / 系管理员 / 学院管理员必须带手机号，初始密码为 Adv / Dept / Aid + 手机后 6 位。
 // 已存在的用户名会跳过（不覆盖），避免误改密码。
 func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 	rows, err := readRows(r)
@@ -1057,8 +1058,11 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 			result.Fail(dto.ImportRowError{Row: excelRow, Column: "用户名", Message: "用户名已存在，跳过"})
 			continue
 		}
-		// 初始密码：默认 Stu+用户名后6位（兼容学号/工号）；班主任可由后续学生导入流程重置
-		pwd := initialImportUserPassword(username, phone)
+		pwd, perr := initialImportUserPassword(model.Role(role), username, phone)
+		if perr != nil {
+			failRow(result, excelRow, "手机号", perr)
+			continue
+		}
 		hash, err := password.Hash(pwd)
 		if err != nil {
 			failRow(result, excelRow, "用户名", err)
@@ -1082,13 +1086,18 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 	return result, nil
 }
 
-// initialImportUserPassword 导入用户初始密码：用户名后 6 位，不足则取全部，前缀 U。
-func initialImportUserPassword(username, phone string) string {
+// initialImportUserPassword 导入用户初始密码。
+// 班主任 / 系管理员 / 学院管理员：Adv / Dept / Aid + 手机号后 6 位；
+// 其余角色仍用 U + 用户名后 6 位（系统管理员等须事后改密）。
+func initialImportUserPassword(role model.Role, username, phone string) (string, error) {
+	if usesPhonePasswordRule(role) {
+		return roleInitialPassword(role, phone)
+	}
 	s := username
 	if len(s) > 6 {
 		s = s[len(s)-6:]
 	}
-	return "U" + s
+	return "U" + s, nil
 }
 
 // writeXlsx 写入表头 + 数据行并返回 xlsx 字节。

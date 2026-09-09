@@ -42,7 +42,7 @@ export function CommitmentSignatureBlock({
             {COMMITMENT_HANDWRITE_TEXT}
           </div>
           <p className="text-xs leading-5" style={{ color: "var(--color-text-muted)" }}>
-            请仔细阅读上述承诺，在右侧手写签字并勾选同意。
+          请仔细阅读上述承诺，在下方手写签字并勾选同意。
           </p>
         </div>
 
@@ -56,7 +56,7 @@ export function CommitmentSignatureBlock({
           <SignaturePad
             value={signatureDataUrl}
             onChange={onSignatureChange}
-            height={150}
+            height={180}
             placeholder="请在此签字"
             disabled={disabled}
           />

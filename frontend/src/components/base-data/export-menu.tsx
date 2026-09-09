@@ -33,14 +33,14 @@ export function ExportButtons({
   label = "导出",
 }: ExportButtonsProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <Button
         variant="outline"
         size="sm"
         disabled={exporting}
         onClick={() => onExport("all")}
       >
-        <Download size={16} />
+        <Download size={14} />
         {exporting ? "导出中…" : `${label}全部`}
       </Button>
       {hasFilter && (
@@ -50,7 +50,7 @@ export function ExportButtons({
           disabled={exporting}
           onClick={() => onExport("filtered")}
         >
-          <Download size={16} />
+          <Download size={14} />
           {label}筛选
         </Button>
       )}
@@ -60,7 +60,7 @@ export function ExportButtons({
         disabled={exporting || selectedCount === 0}
         onClick={() => onExport("selected")}
       >
-        <Download size={16} />
+        <Download size={14} />
         {label}勾选
         {selectedCount > 0 && (
           <span className="ml-0.5 text-xs text-ink-mute">({selectedCount})</span>

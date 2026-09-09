@@ -3,13 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Eye, Check, Undo2, Download } from "lucide-react";
+import { Eye, Check, Undo2, Download } from "lucide-react";
 import { reviewApi, recognitionApi, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import {
   DataTable,
   CellText,
@@ -100,7 +100,7 @@ function ReviewsWorkbench() {
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
-  const [loading, setLoading] = React.useState(true);
+  const [listSnapshotKey, setListSnapshotKey] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const [keywordInput, setKeywordInput] = React.useState("");
@@ -122,7 +122,9 @@ function ReviewsWorkbench() {
     done: 0,
     all: 0,
   });
-  const [countsLoading, setCountsLoading] = React.useState(true);
+  const [countsSnapshotKey, setCountsSnapshotKey] = React.useState<string | null>(
+    null,
+  );
 
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [batchDialog, setBatchDialog] = React.useState<ReviewActionType | null>(
@@ -142,9 +144,49 @@ function ReviewsWorkbench() {
     setSelected(new Set());
   };
 
+  const listQueryKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        isTodo,
+        tab,
+        page,
+        pageSize,
+        keyword,
+        filterStatus,
+        filterSpecialType,
+        filterDifficulty,
+        filterYear,
+        orgScope,
+      }),
+    [
+      isTodo,
+      tab,
+      page,
+      pageSize,
+      keyword,
+      filterStatus,
+      filterSpecialType,
+      filterDifficulty,
+      filterYear,
+      orgScope,
+    ],
+  );
+  const loading = listSnapshotKey !== listQueryKey;
+
+  const countsFilterKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        keyword,
+        filterSpecialType,
+        filterDifficulty,
+        filterYear,
+        orgScope,
+      }),
+    [keyword, filterSpecialType, filterDifficulty, filterYear, orgScope],
+  );
+  const countsLoading = countsSnapshotKey !== countsFilterKey;
+
   const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
     const filter = {
       page,
       page_size: pageSize,
@@ -162,12 +204,14 @@ function ReviewsWorkbench() {
       setList(res.items);
       setTotal(res.total);
       setSelected(new Set());
+      setError(null);
+      setListSnapshotKey(listQueryKey);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
-    } finally {
-      setLoading(false);
+      setListSnapshotKey(listQueryKey);
     }
   }, [
+    listQueryKey,
     isTodo,
     tab,
     page,
@@ -181,12 +225,41 @@ function ReviewsWorkbench() {
   ]);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    const filter = {
+      page,
+      page_size: pageSize,
+      keyword: keyword || undefined,
+      status: filterStatus || undefined,
+      special_type: filterSpecialType || undefined,
+      difficulty_level: filterDifficulty || undefined,
+      year: filterYear ? Number(filterYear) : undefined,
+      ...orgScopeParams(orgScope),
+    };
+    void (async () => {
+      try {
+        const res = isTodo
+          ? await reviewApi.todo(filter)
+          : await reviewApi.records({ ...filter, tab });
+        if (cancelled) return;
+        setList(res.items);
+        setTotal(res.total);
+        setSelected(new Set());
+        setError(null);
+        setListSnapshotKey(listQueryKey);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof ApiError ? e.message : "加载失败");
+        setListSnapshotKey(listQueryKey);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [listQueryKey, isTodo, tab, page, pageSize, keyword, filterStatus, filterSpecialType, filterDifficulty, filterYear, orgScope]);
 
   React.useEffect(() => {
     let cancelled = false;
-    setCountsLoading(true);
     const base = {
       page: 1,
       page_size: 1,
@@ -196,30 +269,30 @@ function ReviewsWorkbench() {
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
     };
-    (async () => {
+    void (async () => {
       try {
         const [todoRes, doneRes, allRes] = await Promise.all([
           reviewApi.todo(base),
           reviewApi.records({ ...base, tab: "done" }),
           reviewApi.records({ ...base, tab: "all" }),
         ]);
-        if (!cancelled) {
-          setTabCounts({
-            todo: todoRes.total,
-            done: doneRes.total,
-            all: allRes.total,
-          });
-        }
+        if (cancelled) return;
+        setTabCounts({
+          todo: todoRes.total,
+          done: doneRes.total,
+          all: allRes.total,
+        });
       } catch {
-        if (!cancelled) setTabCounts({ todo: 0, done: 0, all: 0 });
+        if (cancelled) return;
+        setTabCounts({ todo: 0, done: 0, all: 0 });
       } finally {
-        if (!cancelled) setCountsLoading(false);
+        if (!cancelled) setCountsSnapshotKey(countsFilterKey);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [keyword, filterSpecialType, filterDifficulty, filterYear, orgScope]);
+  }, [countsFilterKey, keyword, filterSpecialType, filterDifficulty, filterYear, orgScope]);
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
@@ -457,20 +530,14 @@ function ReviewsWorkbench() {
       )}
 
       <Toolbar>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="relative w-52 shrink-0">
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
-            />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索姓名 / 学号…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="姓名 / 学号"
+            widthClassName="w-36"
+          />
           <OrgScopeFilters
             value={orgScope}
             onChange={(next) => {
@@ -479,12 +546,13 @@ function ReviewsWorkbench() {
             }}
           />
           <Select
+            compact
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
-            className="w-32 shrink-0"
+            className="w-24 shrink-0"
           >
             <option value="">{isTodo ? "全部待办" : "全部状态"}</option>
             {statusOptions.map((o) => (
@@ -494,12 +562,13 @@ function ReviewsWorkbench() {
             ))}
           </Select>
           <Select
+            compact
             value={filterSpecialType}
             onChange={(e) => {
               setFilterSpecialType(e.target.value);
               setPage(1);
             }}
-            className="w-40 min-w-0 shrink-0"
+            className="w-28 shrink-0"
           >
             <option value="">全部特殊群体</option>
             {SPECIAL_GROUP_OPTIONS.map((o) => (
@@ -509,12 +578,13 @@ function ReviewsWorkbench() {
             ))}
           </Select>
           <Select
+            compact
             value={filterDifficulty}
             onChange={(e) => {
               setFilterDifficulty(e.target.value);
               setPage(1);
             }}
-            className="w-32 shrink-0"
+            className="w-24 shrink-0"
           >
             <option value="">困难等级</option>
             {DIFFICULTY_OPTIONS.map((o) => (
@@ -525,45 +595,43 @@ function ReviewsWorkbench() {
             <option value="none">未评定</option>
           </Select>
           <Input
+            compact
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="h-9 w-20 shrink-0 text-sm"
+            className="w-16 shrink-0"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={submitSearch}
-          >
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
-        </div>
+        </ToolbarFilters>
         {canExportSummary && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={exportingSummary}
-            onClick={() => void handleExportSummary()}
-            title={
-              selected.size > 0
-                ? "导出勾选的记录"
-                : isTodo
-                  ? "导出当前筛选下本级待审申请"
-                  : "导出当前筛选范围内已认定通过的学生汇总表"
-            }
-          >
-            <Download size={16} />
-            {exportingSummary
-              ? "导出中…"
-              : selected.size > 0
-                ? `导出已选（${selected.size}）`
-                : isTodo
-                  ? "导出本级待审"
-                  : "导出已通过"}
-          </Button>
+          <ToolbarActions>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={exportingSummary}
+              onClick={() => void handleExportSummary()}
+              title={
+                selected.size > 0
+                  ? "导出勾选的记录"
+                  : isTodo
+                    ? "导出当前筛选下本级待审申请"
+                    : "导出当前筛选范围内已认定通过的学生汇总表"
+              }
+            >
+              <Download size={14} />
+              {exportingSummary
+                ? "导出中…"
+                : selected.size > 0
+                  ? `导出已选（${selected.size}）`
+                  : isTodo
+                    ? "导出本级待审"
+                    : "导出已通过"}
+            </Button>
+          </ToolbarActions>
         )}
       </Toolbar>
 
@@ -573,7 +641,7 @@ function ReviewsWorkbench() {
           style={{ backgroundColor: "var(--color-primary-subtle)" }}
         >
           <span className="text-sm text-ink">已选择 {selected.size} 条</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {isTodo && (
               <>
                 <Button size="sm" onClick={() => setBatchDialog("pass")}>
@@ -620,7 +688,10 @@ function ReviewsWorkbench() {
         pinEndCount={2}
         loading={loading}
         error={error}
-        onRetry={load}
+        onRetry={() => {
+          setListSnapshotKey(null);
+          void load();
+        }}
         emptyLabel={
           tab === "todo"
             ? "暂无待办申请"

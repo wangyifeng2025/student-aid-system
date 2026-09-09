@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { specialGroupApi, dictApi, ApiError } from "@/lib/api";
 import type { SpecialGroup, SpecialGroupInput } from "@/types/student";
 import type { DictItem } from "@/types/dict";
@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
@@ -210,23 +210,22 @@ export default function SpecialGroupsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0" style={{ width: 240 }}>
-            <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索姓名/学号/身份证…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="姓名 / 学号 / 身份证"
+            widthClassName="w-48"
+          />
           <Select
+            compact
             value={filterType}
             onChange={(e) => {
               setFilterType(e.target.value);
               resetToFirst();
             }}
+            className="w-28 shrink-0"
           >
             <option value="">全部类型</option>
             {types.map((t) => (
@@ -234,18 +233,19 @@ export default function SpecialGroupsPage() {
             ))}
           </Select>
           <Input
+            compact
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="h-9 w-24 text-sm"
+            className="w-16 shrink-0"
           />
-          <Button variant="outline" size="sm" onClick={submitSearch}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
-        </div>
+        </ToolbarFilters>
         {canWrite && (
-          <div className="flex items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => specialGroupApi.remove(id)}
@@ -255,14 +255,14 @@ export default function SpecialGroupsPage() {
               hint={`确定删除选中的 ${selected.size} 条名单记录吗？删除后将重算关联学生的重点人群标记，此操作不可撤销。`}
             />
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload size={16} />
+              <Upload size={14} />
               导入名单
             </Button>
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增记录
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

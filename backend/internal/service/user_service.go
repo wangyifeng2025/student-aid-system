@@ -170,7 +170,7 @@ func (s *UserService) Delete(actorID, id uint) error {
 }
 
 // ResetPassword 管理员重置指定用户密码。
-// 班主任且新密码为空时，重置为 Adv+手机号后 6 位。
+// 班主任 / 系管理员 / 学院管理员且新密码为空时，按 Adv / Dept / Aid + 手机后 6 位重置。
 func (s *UserService) ResetPassword(id uint, newPassword string) error {
 	u, err := s.repo.FindByID(id)
 	if err != nil {
@@ -181,10 +181,14 @@ func (s *UserService) ResetPassword(id uint, newPassword string) error {
 	}
 	newPassword = strings.TrimSpace(newPassword)
 	if newPassword == "" {
-		if u.Role != model.RoleClassAdvisor {
+		if !usesPhonePasswordRule(u.Role) {
 			return NewValidationError("请填写新密码")
 		}
-		newPassword = advisorInitialPassword(u.Phone)
+		generated, gerr := roleInitialPassword(u.Role, u.Phone)
+		if gerr != nil {
+			return gerr
+		}
+		newPassword = generated
 	}
 	if err := password.Validate(newPassword); err != nil {
 		return NewValidationError(err.Error())

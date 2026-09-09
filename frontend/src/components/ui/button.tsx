@@ -21,7 +21,7 @@ const variantClasses: Record<Variant, string> = {
 };
 
 const sizeClasses: Record<Size, string> = {
-  sm: "h-9 px-3 text-sm gap-1.5",
+  sm: "h-8 px-2.5 text-xs gap-1",
   md: "h-10 px-4 text-[0.9375rem] gap-2",
 };
 
@@ -36,7 +36,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center rounded-md font-medium whitespace-nowrap transition-[background-color,transform,border-color] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-brand-light",
+        "inline-flex items-center justify-center rounded-md font-medium whitespace-nowrap transition-[background-color,transform,border-color] duration-150 outline-none touch-manipulation focus-visible:ring-2 focus-visible:ring-brand-light",
         sizeClasses[size],
         variantClasses[variant],
         className,

@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Plus,
-  Search,
   Eye,
   Pencil,
   Trash2,
@@ -19,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import {
   DataTable,
   CellText,
@@ -351,29 +350,24 @@ export default function RecognitionsPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <ToolbarFilters>
           {!isStudent && (
-            <div className="relative w-52 shrink-0">
-              <Search
-                size={16}
-                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
-              />
-              <Input
-                value={keywordInput}
-                onChange={(e) => setKeywordInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-                placeholder="搜索姓名 / 学号 / 班级…"
-                className="h-9 pl-8 text-sm"
-              />
-            </div>
+            <ToolbarSearch
+              value={keywordInput}
+              onChange={setKeywordInput}
+              onSubmit={submitSearch}
+              placeholder="姓名 / 学号 / 班级"
+              widthClassName="w-44"
+            />
           )}
           <Select
+            compact
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
-            className="w-32 shrink-0"
+            className="w-24 shrink-0"
           >
             <option value="">全部状态</option>
             {Object.entries(STATUS_META).map(([value, meta]) => (
@@ -383,12 +377,13 @@ export default function RecognitionsPage() {
             ))}
           </Select>
           <Select
+            compact
             value={filterSpecialType}
             onChange={(e) => {
               setFilterSpecialType(e.target.value);
               setPage(1);
             }}
-            className="w-40 min-w-0 shrink-0"
+            className="w-28 shrink-0"
           >
             <option value="">全部特殊群体</option>
             {SPECIAL_GROUP_OPTIONS.map((o) => (
@@ -399,12 +394,13 @@ export default function RecognitionsPage() {
           </Select>
           {!isStudent && (
             <Select
+              compact
               value={filterDifficulty}
               onChange={(e) => {
                 setFilterDifficulty(e.target.value);
                 setPage(1);
               }}
-              className="w-32 shrink-0"
+              className="w-24 shrink-0"
             >
               <option value="">困难等级</option>
               {DIFFICULTY_OPTIONS.map((o) => (
@@ -416,11 +412,12 @@ export default function RecognitionsPage() {
             </Select>
           )}
           <Input
+            compact
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="h-9 w-20 shrink-0 text-sm"
+            className="w-16 shrink-0"
           />
           <Button
             variant="outline"
@@ -430,25 +427,27 @@ export default function RecognitionsPage() {
           >
             查询
           </Button>
-        </div>
+        </ToolbarFilters>
         {canExportSummary && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={exportingSummary}
-            onClick={() => void handleExportSummary()}
-          >
-            <Download size={16} />
-            {exportingSummary
-              ? "导出中…"
-              : selected.size > 0
-                ? `导出已选（${selected.size}）`
-                : "导出已通过"}
-          </Button>
+          <ToolbarActions>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={exportingSummary}
+              onClick={() => void handleExportSummary()}
+            >
+              <Download size={14} />
+              {exportingSummary
+                ? "导出中…"
+                : selected.size > 0
+                  ? `导出已选（${selected.size}）`
+                  : "导出已通过"}
+            </Button>
+          </ToolbarActions>
         )}
         {isStudent && (
-          <div className="flex items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => recognitionApi.remove(id)}
@@ -459,11 +458,11 @@ export default function RecognitionsPage() {
             />
             <Link href="/recognitions/new">
               <Button size="sm">
-                <Plus size={16} />
+                <Plus size={14} />
                 填报新申请
               </Button>
             </Link>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

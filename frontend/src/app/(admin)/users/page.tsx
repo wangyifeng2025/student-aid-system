@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search, KeyRound, Upload } from "lucide-react";
+import { Plus, KeyRound, Upload } from "lucide-react";
 import { userApi, departmentApi, classApi, exportApi, ApiError } from "@/lib/api";
 import type { User, UserCreateInput, UserUpdateInput } from "@/types/user";
 import type { Role } from "@/types/auth";
@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
@@ -28,6 +28,26 @@ import { useAuthStore } from "@/store/auth";
 const DEFAULT_PAGE_SIZE = 20;
 
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS) as [Role, string][];
+
+/** 可按「前缀 + 手机号后 6 位」生成/重置密码的审核角色。 */
+const PHONE_PASSWORD_ROLES: Role[] = ["classadvisor", "department", "aidcenter"];
+
+function usesPhonePasswordRule(role?: Role): boolean {
+  return !!role && PHONE_PASSWORD_ROLES.includes(role);
+}
+
+function phonePasswordRuleLabel(role?: Role): string {
+  switch (role) {
+    case "classadvisor":
+      return "Adv＋手机号后 6 位";
+    case "department":
+      return "Dept＋手机号后 6 位";
+    case "aidcenter":
+      return "Aid＋手机号后 6 位";
+    default:
+      return "";
+  }
+}
 
 // 需要关联院系的角色（学生/班主任/教学系）。班主任班级范围来自名册，不在此编辑。
 const NEEDS_DEPT: Role[] = ["student", "classadvisor", "department"];
@@ -233,7 +253,7 @@ export default function UsersPage() {
 
   const handleReset = async () => {
     if (!resetTarget) return;
-    if (!newPassword.trim() && resetTarget.role !== "classadvisor") {
+    if (!newPassword.trim() && !usesPhonePasswordRule(resetTarget.role)) {
       toast.error("请输入新密码");
       return;
     }
@@ -241,8 +261,8 @@ export default function UsersPage() {
     try {
       await userApi.resetPassword(resetTarget.id, { new_password: newPassword.trim() });
       toast.success(
-        resetTarget.role === "classadvisor" && !newPassword.trim()
-          ? `已将 ${resetTarget.real_name || resetTarget.username} 的密码重置为 Adv＋手机后 6 位`
+        !newPassword.trim() && usesPhonePasswordRule(resetTarget.role)
+          ? `已将 ${resetTarget.real_name || resetTarget.username} 的密码重置为 ${phonePasswordRuleLabel(resetTarget.role)}`
           : `已重置 ${resetTarget.real_name || resetTarget.username} 的密码`,
       );
       setResetTarget(null);
@@ -377,26 +397,22 @@ export default function UsersPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0" style={{ width: 240 }}>
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
-            />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索用户名 / 姓名 / 手机号…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="用户名 / 姓名 / 手机号"
+            widthClassName="w-52"
+          />
           <Select
+            compact
             value={filterRole}
             onChange={(e) => {
               setFilterRole(e.target.value);
               setPage(1);
             }}
+            className="w-24 shrink-0"
           >
             <option value="">全部角色</option>
             {ROLE_OPTIONS.map(([value, label]) => (
@@ -406,21 +422,23 @@ export default function UsersPage() {
             ))}
           </Select>
           <Select
+            compact
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
+            className="w-24 shrink-0"
           >
             <option value="">全部状态</option>
             <option value="1">启用</option>
             <option value="0">禁用</option>
           </Select>
-          <Button variant="outline" size="sm" onClick={submitSearch}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询
           </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+        </ToolbarFilters>
+        <ToolbarActions>
           <BatchDeleteButton
             selectedIds={selected}
             deleteOne={(id) => userApi.remove(id)}
@@ -431,7 +449,7 @@ export default function UsersPage() {
           {canWrite && (
             <>
               <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                <Upload size={16} />
+                <Upload size={14} />
                 导入用户
               </Button>
               <ExportButtons
@@ -444,10 +462,10 @@ export default function UsersPage() {
             </>
           )}
           <Button size="sm" onClick={openCreate}>
-            <Plus size={16} />
+            <Plus size={14} />
             新增用户
           </Button>
-        </div>
+        </ToolbarActions>
       </Toolbar>
 
       <div
@@ -457,7 +475,7 @@ export default function UsersPage() {
           color: "var(--color-primary)",
         }}
       >
-        提示：学生登录账号无需在此手动创建。新增或导入学生时系统会自动创建账号（用户名=学号，初始密码=Stu＋身份证后 6 位），并随学生信息同步更新；删除学生时账号一并删除，认定与助学金申报记录会保留备查。此处主要用于管理班主任、教学系、资助中心、管理员等审核角色账号。
+        提示：学生登录账号无需在此手动创建。新增或导入学生时系统会自动创建账号（用户名=学号，初始密码=Stu＋身份证后 6 位）。导入班主任 / 系管理员 / 学院管理员时必须填写手机号，初始密码分别为 Adv / Dept / Aid＋手机号后 6 位。删除学生时账号一并删除，认定与助学金申报记录会保留备查。
       </div>
 
       <DataTable
@@ -618,8 +636,8 @@ export default function UsersPage() {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-ink-soft">
             为用户「{resetTarget?.real_name || resetTarget?.username}」设置新密码，用户下次可用新密码登录。
-            {resetTarget?.role === "classadvisor"
-              ? " 班主任可留空，按规则重置为 Adv＋手机号后 6 位（A 大写）。"
+            {usesPhonePasswordRule(resetTarget?.role)
+              ? ` ${roleLabel(resetTarget!.role)}可留空，按规则重置为 ${phonePasswordRuleLabel(resetTarget?.role)}。`
               : ""}
           </p>
           <div>
@@ -629,8 +647,8 @@ export default function UsersPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder={
-                resetTarget?.role === "classadvisor"
-                  ? "留空则 Adv＋手机后6位，如 Adv596061"
+                usesPhonePasswordRule(resetTarget?.role)
+                  ? `留空则 ${phonePasswordRuleLabel(resetTarget?.role)}`
                   : "≥6 位，含字母和数字"
               }
             />
@@ -652,7 +670,7 @@ export default function UsersPage() {
           open={importOpen}
           kind="users"
           title="导入用户"
-          hint="模板列：用户名*、姓名*、角色*、手机号、所属院系编码、状态。角色取值：student/classadvisor/department/aidcenter/admin。学生账号建议通过学生信息维护自动创建，此处主要用于批量导入审核角色账号。"
+          hint="模板列：用户名*、姓名*、角色*、手机号、所属院系编码、状态。角色取值：student/classadvisor/department/aidcenter/admin。班主任 / 系管理员 / 学院管理员必须填手机号，初始密码为 Adv / Dept / Aid＋手机号后 6 位。学生账号建议通过学生信息维护自动创建。"
           onClose={() => setImportOpen(false)}
           onImported={load}
         />

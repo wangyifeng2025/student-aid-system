@@ -167,6 +167,48 @@ func TestUserManagementCRUD(t *testing.T) {
 	}
 }
 
+func TestResetPasswordByPhoneRule(t *testing.T) {
+	r, db := setupUserRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+
+	cases := []struct {
+		role     model.Role
+		phone    string
+		password string
+	}{
+		{model.RoleDepartment, "13800001234", "Dept001234"},
+		{model.RoleAidCenter, "13900005678", "Aid005678"},
+	}
+	for _, tc := range cases {
+		username := fmt.Sprintf("%s_%d", tc.role, time.Now().UnixNano())
+		cleanupUser(t, db, username)
+		w := doJSON(t, r, http.MethodPost, "/api/v1/users", token, dto.UserCreateRequest{
+			Username: username,
+			Password: "pass123",
+			RealName: "规则重置",
+			Role:     string(tc.role),
+			Phone:    tc.phone,
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("create %s status %d, body %s", tc.role, w.Code, w.Body.String())
+		}
+		var created struct {
+			Data dto.UserResponse `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &created)
+
+		w = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/reset-password", created.Data.ID), token,
+			dto.ResetPasswordRequest{NewPassword: ""})
+		if w.Code != http.StatusOK {
+			t.Fatalf("reset %s status %d, body %s", tc.role, w.Code, w.Body.String())
+		}
+		if loginToken(t, r, username, tc.password) == "" {
+			t.Fatalf("%s 应按规则密码 %q 登录", tc.role, tc.password)
+		}
+	}
+}
+
 func TestUserCannotDeleteSelf(t *testing.T) {
 	r, db := setupUserRouter(t)
 	admin := seedUser(t, db, "pass123", model.RoleAdmin)

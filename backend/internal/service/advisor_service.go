@@ -488,21 +488,11 @@ func advisorUsername(a *model.Advisor) string {
 }
 
 func advisorInitialPassword(phone string) string {
-	digits := digitsOnly(phone)
-	if len(digits) >= 6 {
-		return "Adv" + digits[len(digits)-6:]
+	pwd, err := roleInitialPassword(model.RoleClassAdvisor, phone)
+	if err != nil {
+		return "Adv123456"
 	}
-	return "Adv123456"
-}
-
-func digitsOnly(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return pwd
 }
 
 func (s *AdvisorService) applyInitialLoginPassword(a *model.Advisor) (string, error) {

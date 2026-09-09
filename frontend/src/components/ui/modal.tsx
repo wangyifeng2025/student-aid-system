@@ -50,7 +50,7 @@ export function Modal({
       role="presentation"
     >
       <div
-        className={`max-h-[90vh] w-full ${sizeClass[size]} overflow-hidden rounded-lg border border-line bg-surface shadow-[var(--shadow-float)]`}
+        className={`max-h-[90vh] w-full ${sizeClass[size]} overflow-hidden rounded-lg border border-line bg-surface shadow-[var(--shadow-float)] max-md:max-h-[min(90vh,100dvh-2rem)]`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -73,7 +73,7 @@ export function Modal({
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3.5">
             {footer}
           </div>
         )}

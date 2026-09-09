@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions } from "@/components/base-data/toolbar";
 import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
 
 /** 输入该词才允许执行恢复，避免误点导致全库被覆盖。 */
@@ -259,13 +259,13 @@ export default function BackupsPage() {
             <>，最近一次于 {formatDateTime(list[0].created_at)}</>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <ToolbarActions>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Save size={16} />
+            <Save size={14} />
             立即备份
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload size={16} />
+            <Upload size={14} />
             上传备份并恢复
           </Button>
           <input
@@ -275,7 +275,7 @@ export default function BackupsPage() {
             className="hidden"
             onChange={handlePickFile}
           />
-        </div>
+        </ToolbarActions>
       </Toolbar>
 
       <DataTable

@@ -41,6 +41,7 @@ export function GrantFamilyEditor({ members, onChange }: Props) {
             onChange={(e) => update(idx, { age: Number(e.target.value) || 0 })}
           />
           <Select
+            className="w-full"
             value={m.relation}
             onChange={(e) => update(idx, { relation: e.target.value })}
           >

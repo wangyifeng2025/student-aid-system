@@ -139,17 +139,9 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="mb-5"
-      style={{
-        backgroundColor: "var(--color-bg-card)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-md)",
-        padding: "24px 32px",
-      }}
-    >
+    <div className="mb-5 rounded-md border border-line bg-surface p-4 md:px-8 md:py-6">
       {title && (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-ink">{title}</h3>
           {extra}
         </div>
@@ -488,24 +480,15 @@ export function RecognitionForm({ mode, initial }: Props) {
         className={profile.class_name}
       />
       {/* Stepper */}
-      <div
-        className="mb-5"
-        style={{
-          backgroundColor: "var(--color-bg-card)",
-          border: "1px solid var(--color-border)",
-          borderRadius: "var(--radius-md)",
-          padding: "24px 32px",
-        }}
-      >
-        <div className="mx-auto flex items-center justify-between" style={{ maxWidth: 680 }}>
+      <div className="mb-5 rounded-md border border-line bg-surface px-3 py-4 md:px-8 md:py-6">
+        <div className="mx-auto flex items-start justify-between" style={{ maxWidth: 680 }}>
           {STEPS.map((label, i) => (
             <React.Fragment key={label}>
               {i > 0 && (
                 <div
-                  className="flex-1"
+                  className="mt-4 min-w-2 flex-1"
                   style={{
                     height: 2,
-                    margin: "0 8px 20px",
                     backgroundColor:
                       i <= step ? "var(--color-primary)" : "var(--color-border)",
                   }}
@@ -514,7 +497,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               <button
                 type="button"
                 onClick={() => handleSelectStep(i)}
-                className="flex min-w-20 flex-col items-center"
+                className="flex min-w-0 flex-1 flex-col items-center px-0.5"
               >
                 <span
                   className="flex items-center justify-center text-xs font-semibold"
@@ -536,7 +519,7 @@ export function RecognitionForm({ mode, initial }: Props) {
                   {i < step ? <Check size={16} /> : i + 1}
                 </span>
                 <span
-                  className="mt-1.5 text-xs font-medium"
+                  className="mt-1.5 max-w-full text-center text-[11px] leading-tight font-medium md:text-xs"
                   style={{
                     color:
                       i < step
@@ -799,7 +782,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               已选 {form.special_types.length} 项
             </span>
           </div>
-          <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
+          <div className="mb-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 md:grid-cols-3">
             {SPECIAL_GROUP_OPTIONS.map((o) => (
               <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
                 <input
@@ -821,7 +804,7 @@ export function RecognitionForm({ mode, initial }: Props) {
 
           <Label>其他情况说明</Label>
           <textarea
-            className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand-light"
+            className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-base text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand-light md:text-sm"
             rows={3}
             value={form.other_info}
             onChange={(e) => set("other_info", e.target.value)}
@@ -834,7 +817,7 @@ export function RecognitionForm({ mode, initial }: Props) {
       {step === 2 && (
         <SectionCard title="影响家庭经济状况">
           <div
-            className="mb-5 flex items-center gap-3 rounded-md px-4 py-3"
+            className="mb-5 flex flex-col items-start gap-1 rounded-md px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
             style={{ backgroundColor: "var(--color-bg-page)" }}
           >
             <span className="text-sm text-ink-soft">家庭人均年收入（自动计算）</span>
@@ -871,7 +854,7 @@ export function RecognitionForm({ mode, initial }: Props) {
               <div key={key}>
                 <Label>{label}</Label>
                 <textarea
-                  className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand-light"
+                  className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-base text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand-light md:text-sm"
                   rows={2}
                   value={form[key]}
                   onChange={(e) => set(key, e.target.value)}
@@ -941,27 +924,28 @@ export function RecognitionForm({ mode, initial }: Props) {
       )}
 
       {/* Bottom action bar */}
-      <div className="flex items-center justify-between pt-1 pb-2">
-        <Button variant="outline" onClick={handleSaveDraft} disabled={busy}>
+      <div className="sticky bottom-0 z-20 -mx-4 mt-4 flex flex-col gap-2 border-t border-line bg-page/95 px-4 py-3 backdrop-blur-sm sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-between sm:border-0 sm:bg-transparent sm:px-0 sm:py-1 sm:backdrop-blur-none">
+        <Button variant="outline" onClick={handleSaveDraft} disabled={busy} className="w-full sm:w-auto">
           <Save size={16} />
           {saving ? "保存中…" : "保存草稿"}
         </Button>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
           <Button
             variant="ghost"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0 || busy}
+            className="flex-1 sm:flex-none"
           >
             <ArrowLeft size={16} />
             上一步
           </Button>
           {step < STEPS.length - 1 ? (
-            <Button onClick={handleNext} disabled={busy}>
+            <Button onClick={handleNext} disabled={busy} className="flex-1 sm:flex-none">
               下一步
               <ArrowRight size={16} />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={busy}>
+            <Button onClick={handleSubmit} disabled={busy} className="flex-1 sm:flex-none">
               <Send size={16} />
               {submitting ? "提交中…" : "提交评审"}
             </Button>

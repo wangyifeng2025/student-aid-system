@@ -76,7 +76,7 @@ export function OrgSpreadsheetActions({
         label="导出"
       />
       <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-        <Upload size={16} />
+        <Upload size={14} />
         导入 Excel
       </Button>
 

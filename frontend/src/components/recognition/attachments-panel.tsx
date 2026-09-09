@@ -194,7 +194,7 @@ export function AttachmentsPanel({ recognitionId, editable, required, onCountCha
           {items.map((a) => (
             <div
               key={a.id}
-              className="flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors hover:bg-page"
+              className="flex flex-wrap items-center gap-2 rounded-sm px-2.5 py-2 text-sm transition-colors hover:bg-page"
             >
               {isImage(a.mime, a.file_name) ? (
                 <ImageIcon size={16} className="shrink-0" style={{ color: "var(--state-warning)" }} />

@@ -84,7 +84,7 @@ export function BatchDeleteButton({
   if (count === 0) {
     return (
       <Button variant="outline" size="sm" disabled>
-        <Trash2 size={16} />
+        <Trash2 size={14} />
         批量删除
       </Button>
     );
@@ -121,7 +121,7 @@ export function BatchDeleteButton({
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setConfirmOpen(true)}>
-        <Trash2 size={16} />
+        <Trash2 size={14} />
         批量删除（{count}）
       </Button>
       <ConfirmDialog

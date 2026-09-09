@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
@@ -13,6 +13,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "学工资助管理系统",
   description: "家庭经济困难学生认定与资助流程线上化管理系统",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

@@ -9,7 +9,15 @@ import { isNavHrefActive, type NavGroup, type NavLeaf } from "@/lib/nav";
 import { useAuthStore } from "@/store/auth";
 import { avatarInitial, roleLabel } from "@/lib/labels";
 
-function LeafLink({ item, active }: { item: NavLeaf; active: boolean }) {
+function LeafLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavLeaf;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
   const Icon = item.icon;
 
   if (item.disabled) {
@@ -28,6 +36,7 @@ function LeafLink({ item, active }: { item: NavLeaf; active: boolean }) {
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className="flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors duration-150"
       style={{
         color: active ? "var(--color-text-inverse)" : "var(--color-text-muted)",
@@ -43,9 +52,11 @@ function LeafLink({ item, active }: { item: NavLeaf; active: boolean }) {
 function GroupBlock({
   group,
   pathname,
+  onNavigate,
 }: {
   group: NavGroup;
   pathname: string;
+  onNavigate?: () => void;
 }) {
   const Icon = group.icon;
   const hasActiveChild = group.children.some((c) => isNavHrefActive(pathname, c.href));
@@ -75,7 +86,11 @@ function GroupBlock({
         <ul className="mt-0.5 flex flex-col gap-0.5 pl-3">
           {group.children.map((child) => (
             <li key={child.key}>
-              <LeafLink item={child} active={isNavHrefActive(pathname, child.href)} />
+              <LeafLink
+                item={child}
+                active={isNavHrefActive(pathname, child.href)}
+                onNavigate={onNavigate}
+              />
             </li>
           ))}
         </ul>
@@ -84,20 +99,39 @@ function GroupBlock({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const navItems = getNavForRole(user?.role);
 
   return (
-    <aside
-      className="fixed top-0 bottom-0 left-0 z-40 flex flex-col overflow-y-auto"
-      style={{
-        width: "var(--sidebar-width)",
-        backgroundColor: "var(--color-bg-sidebar)",
-      }}
-      aria-label="主导航"
-    >
+    <>
+      {open ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          aria-label="关闭导航"
+          onClick={onClose}
+        />
+      ) : null}
+      <aside
+        className={`fixed top-0 bottom-0 left-0 z-40 flex flex-col overflow-y-auto transition-transform duration-200 ${
+          open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+        style={{
+          width: "var(--sidebar-width)",
+          backgroundColor: "var(--color-bg-sidebar)",
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+        aria-label="主导航"
+      >
       <div
         className="flex shrink-0 items-center gap-2.5 px-5"
         style={{ height: 56, borderBottom: "1px solid rgba(255,255,255,0.08)" }}
@@ -118,10 +152,19 @@ export function Sidebar() {
         <ul className="flex flex-col gap-0.5">
           {navItems.map((item) =>
             item.type === "group" ? (
-              <GroupBlock key={item.key} group={item} pathname={pathname} />
+              <GroupBlock
+                key={item.key}
+                group={item}
+                pathname={pathname}
+                onNavigate={onClose}
+              />
             ) : (
               <li key={item.key}>
-                <LeafLink item={item} active={isNavHrefActive(pathname, item.href)} />
+                <LeafLink
+                  item={item}
+                  active={isNavHrefActive(pathname, item.href)}
+                  onNavigate={onClose}
+                />
               </li>
             ),
           )}
@@ -162,5 +205,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

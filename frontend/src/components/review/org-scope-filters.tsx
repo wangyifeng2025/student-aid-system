@@ -87,15 +87,16 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
   if (!showDept && !showClass) return null;
 
   return (
-    <div className={className ? `flex flex-wrap items-center gap-2 ${className}` : "flex flex-wrap items-center gap-2"}>
+    <div className={className ? `flex items-center gap-1.5 ${className}` : "flex items-center gap-1.5"}>
       {showDept && (
         <Select
+          compact
           value={value.deptId ? String(value.deptId) : ""}
           onChange={(e) => {
             const deptId = Number(e.target.value) || 0;
             onChange({ deptId, classId: 0 });
           }}
-          className="w-40"
+          className="w-28 shrink-0"
         >
           <option value="">全部院系</option>
           {depts.map((d) => (
@@ -107,12 +108,13 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
       )}
       {showClass && (
         <Select
+          compact
           value={value.classId ? String(value.classId) : ""}
           onChange={(e) => {
             const classId = Number(e.target.value) || 0;
             onChange({ deptId: value.deptId, classId });
           }}
-          className="w-44"
+          className="w-28 shrink-0"
           disabled={showDept && !value.deptId && classes.length === 0}
         >
           <option value="">全部班级</option>

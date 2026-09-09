@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   classApi,
   departmentApi,
@@ -21,7 +21,7 @@ import { Select } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
@@ -213,25 +213,22 @@ export default function ClassesPage() {
   return (
     <div>
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0 flex-1" style={{ maxWidth: 280 }}>
-            <Search size={16} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute" />
-            <Input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜索班级/班主任/教工号…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
-          <Select value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keyword}
+            onChange={setKeyword}
+            placeholder="班级 / 班主任 / 教工号"
+            widthClassName="w-52"
+          />
+          <Select compact value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-28 shrink-0">
             <option value="">全部院系</option>
             {depts.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </Select>
-        </div>
+        </ToolbarFilters>
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
+          <ToolbarActions>
             <BatchDeleteButton
               selectedIds={selected}
               deleteOne={(id) => classApi.remove(id)}
@@ -253,10 +250,10 @@ export default function ClassesPage() {
               })}
             />
             <Button size="sm" onClick={openCreate}>
-              <Plus size={16} />
+              <Plus size={14} />
               新增班级
             </Button>
-          </div>
+          </ToolbarActions>
         )}
       </Toolbar>
 

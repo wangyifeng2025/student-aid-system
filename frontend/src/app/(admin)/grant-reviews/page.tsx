@@ -3,14 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Eye, Download } from "lucide-react";
+import { Eye, Download } from "lucide-react";
 import { grantReviewApi, grantApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Toolbar } from "@/components/base-data/toolbar";
+import { Toolbar, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { Pagination } from "@/components/base-data/pagination";
 import { GrantStatusBadge } from "@/components/grant/grant-status-badge";
@@ -223,20 +223,14 @@ function GrantReviewsWorkbench() {
       {activeTabHint && <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>}
 
       <Toolbar>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="relative min-w-0" style={{ width: 240 }}>
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-mute"
-            />
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-              placeholder="搜索姓名 / 学号…"
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
+        <ToolbarFilters>
+          <ToolbarSearch
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
+            placeholder="姓名 / 学号"
+            widthClassName="w-36"
+          />
           <OrgScopeFilters
             value={orgScope}
             onChange={(next) => {
@@ -245,14 +239,15 @@ function GrantReviewsWorkbench() {
             }}
           />
           <Select
+            compact
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
-            className="w-36"
+            className="w-28 shrink-0"
           >
-            <option value="">{isTodo ? "全部待办状态" : "全部状态"}</option>
+            <option value="">{isTodo ? "全部待办" : "全部状态"}</option>
             {statusOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -260,16 +255,17 @@ function GrantReviewsWorkbench() {
             ))}
           </Select>
           <Input
+            compact
             value={yearInput}
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="h-9 w-24 text-sm"
+            className="w-16 shrink-0"
           />
-          <Button variant="outline" size="sm" onClick={submitSearch}>
-            <Search size={16} /> 查询
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
+            查询
           </Button>
-        </div>
+        </ToolbarFilters>
       </Toolbar>
 
       <DataTable

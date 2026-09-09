@@ -29,7 +29,8 @@ type UserUpdateRequest struct {
 }
 
 // ResetPasswordRequest 管理员重置指定用户密码（RESTful 形式）。
-// 班主任可将 new_password 留空，按 Adv+手机后 6 位重置。
+// 班主任 / 系管理员 / 学院管理员可将 new_password 留空，
+// 分别按 Adv / Dept / Aid + 手机后 6 位重置。
 type ResetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
