@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
+	"github.com/wangyifeng2025/student-aid-system/internal/repository"
 	"github.com/wangyifeng2025/student-aid-system/pkg/response"
 )
 
@@ -174,13 +177,28 @@ func (h *Handler) DeleteGrade(c *gin.Context) {
 // ===== 班级 Class =====
 
 func (h *Handler) ListClasses(c *gin.Context) {
-	items, err := h.Org.ListClasses(
-		parseUintQuery(c, "dept_id"),
-		parseUintQuery(c, "major_id"),
-		parseUintQuery(c, "grade_id"),
-	)
+	f := repository.ClassFilter{
+		DeptID:  parseUintQuery(c, "dept_id"),
+		MajorID: parseUintQuery(c, "major_id"),
+		GradeID: parseUintQuery(c, "grade_id"),
+		Keyword: strings.TrimSpace(c.Query("keyword")),
+	}
+	paged := c.Query("page") != "" || c.Query("page_size") != ""
+	if paged {
+		f.Page, f.PageSize = parsePagination(c)
+	}
+	items, total, err := h.Org.ListClasses(f)
 	if err != nil {
 		mapCommonError(c, err)
+		return
+	}
+	if paged {
+		response.OK(c, dto.PageResult[dto.ClassResponse]{
+			Items:    items,
+			Total:    total,
+			Page:     f.Page,
+			PageSize: f.PageSize,
+		})
 		return
 	}
 	response.OK(c, items)

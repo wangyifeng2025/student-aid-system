@@ -24,20 +24,27 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import { DataTable, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
+import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { OrgSpreadsheetActions } from "@/components/base-data/org-spreadsheet-actions";
+
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function ClassesPage() {
   const canWrite = useAuthStore((s) => s.user?.role === "admin");
 
   const [list, setList] = React.useState<Class[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [depts, setDepts] = React.useState<Department[]>([]);
   const [majors, setMajors] = React.useState<Major[]>([]);
   const [grades, setGrades] = React.useState<Grade[]>([]);
   const [advisors, setAdvisors] = React.useState<Advisor[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [keywordInput, setKeywordInput] = React.useState("");
   const [keyword, setKeyword] = React.useState("");
   const [filterDept, setFilterDept] = React.useState("");
 
@@ -66,47 +73,63 @@ export default function ClassesPage() {
     [grades],
   );
 
-  const filtered = list.filter((c) => {
-    const kw = keyword.trim();
-    const matchKeyword =
-      !kw ||
-      c.name.includes(kw) ||
-      (c.staff_no ?? "").includes(kw) ||
-      (c.advisor_name ?? "").includes(kw) ||
-      (c.advisor_phone ?? "").includes(kw);
-    const matchDept = !filterDept || c.dept_id === Number(filterDept);
-    return matchKeyword && matchDept;
-  });
+  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (c) => c.id);
 
-  const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(filtered, (c) => c.id);
+  React.useEffect(() => {
+    Promise.all([
+      departmentApi.list(),
+      majorApi.list(),
+      gradeApi.list(),
+      advisorApi.list({ page: 1, page_size: 100 }),
+    ])
+      .then(([departments, allMajors, allGrades, advisorPage]) => {
+        setDepts(departments);
+        setMajors(allMajors);
+        setGrades(allGrades);
+        setAdvisors(advisorPage.items);
+      })
+      .catch(() => {
+        setDepts([]);
+        setMajors([]);
+        setGrades([]);
+        setAdvisors([]);
+      });
+  }, []);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [classes, departments, allMajors, allGrades, advisorPage] = await Promise.all([
-        classApi.list(),
-        departmentApi.list(),
-        majorApi.list(),
-        gradeApi.list(),
-        advisorApi.list({ page: 1, page_size: 100 }),
-      ]);
-      setList(classes);
-      setDepts(departments);
-      setMajors(allMajors);
-      setGrades(allGrades);
-      setAdvisors(advisorPage.items);
+      const res = await classApi.page({
+        page,
+        page_size: pageSize,
+        keyword: keyword || undefined,
+        dept_id: filterDept ? Number(filterDept) : undefined,
+      });
+      setList(res.items ?? []);
+      setTotal(res.total ?? 0);
       clearSelection();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [clearSelection]);
+  }, [page, pageSize, keyword, filterDept, clearSelection]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const resetToFirst = () => setPage(1);
+  const submitSearch = () => {
+    setKeyword(keywordInput.trim());
+    resetToFirst();
+  };
+  const handlePageChange = (next: number) => setPage(next);
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
 
   // 表单内专业、班主任按所选院系联动
   const formMajors = deptId
@@ -194,9 +217,9 @@ export default function ClassesPage() {
       ? [checkboxColumn<Class>(selected, allSelected, toggleAll, toggleRow, (c) => c.id, (c) => c.name)]
       : []),
     { header: "ID", width: "80px", cell: (c) => <span className="text-ink-mute tabular-nums">{c.id}</span> },
-    { header: "班级名称", cell: (c) => <span className="text-ink">{c.name}</span> },
-    { header: "院系", cell: (c) => deptName(c.dept_id) },
-    { header: "专业", cell: (c) => majorName(c.major_id) },
+    { header: "班级名称", width: "240px", cell: (c) => <span className="text-ink">{c.name}</span> },
+    { header: "院系", width: "160px", cell: (c) => deptName(c.dept_id) },
+    { header: "专业", width: "160px", cell: (c) => majorName(c.major_id) },
     { header: "年级", cell: (c) => gradeName(c.grade_id) },
     { header: "班主任", width: "100px", cell: (c) => c.advisor_name || "—" },
     { header: "教工号", width: "120px", cell: (c) => <span className="font-mono">{c.staff_no || "—"}</span> },
@@ -215,17 +238,29 @@ export default function ClassesPage() {
       <Toolbar>
         <ToolbarFilters>
           <ToolbarSearch
-            value={keyword}
-            onChange={setKeyword}
+            value={keywordInput}
+            onChange={setKeywordInput}
+            onSubmit={submitSearch}
             placeholder="班级 / 班主任 / 教工号"
             widthClassName="w-52"
           />
-          <Select compact value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="w-28 shrink-0">
+          <Select
+            compact
+            value={filterDept}
+            onChange={(e) => {
+              setFilterDept(e.target.value);
+              resetToFirst();
+            }}
+            className="w-28 shrink-0"
+          >
             <option value="">全部院系</option>
             {depts.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </Select>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
+            查询
+          </Button>
         </ToolbarFilters>
         {canWrite && (
           <ToolbarActions>
@@ -259,13 +294,25 @@ export default function ClassesPage() {
 
       <DataTable
         columns={columns}
-        data={filtered}
+        data={list}
         rowKey={(c) => c.id}
         loading={loading}
         error={error}
         onRetry={load}
         emptyLabel={keyword || filterDept ? "无匹配班级" : "暂无班级。请先维护班主任信息，再新增或导入班级"}
+        pinStartCount={canWrite ? 3 : 2}
+        pinEndCount={1}
       />
+
+      {!loading && !error && total > 0 && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       <Modal
         open={formOpen}

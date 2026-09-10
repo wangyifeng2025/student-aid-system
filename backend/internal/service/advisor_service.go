@@ -428,7 +428,7 @@ func (s *AdvisorService) toResponses(items []model.Advisor) ([]dto.AdvisorRespon
 	}
 	classNames := map[uint]string{}
 	if len(allClassIDs) > 0 {
-		classes, err := s.org.ListClasses(repository.ClassFilter{})
+		classes, _, err := s.org.ListClasses(repository.ClassFilter{})
 		if err != nil {
 			return nil, err
 		}

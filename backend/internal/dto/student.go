@@ -59,12 +59,12 @@ type StudentResponse struct {
 	InitialPassword string `json:"initial_password,omitempty"`
 
 	// 指定学年的申报进度（列表/详情按 year 查询参数，默认当年）。
-	ProgressYear       int    `json:"progress_year"`
-	RecognitionStatus  string `json:"recognition_status"`
-	RecognitionID      uint   `json:"recognition_id,omitempty"`
-	DifficultyLevel    string `json:"difficulty_level,omitempty"`
-	GrantStatus        string `json:"grant_status"`
-	GrantID            uint   `json:"grant_id,omitempty"`
+	ProgressYear      int    `json:"progress_year"`
+	RecognitionStatus string `json:"recognition_status"`
+	RecognitionID     uint   `json:"recognition_id,omitempty"`
+	DifficultyLevel   string `json:"difficulty_level,omitempty"`
+	GrantStatus       string `json:"grant_status"`
+	GrantID           uint   `json:"grant_id,omitempty"`
 }
 
 func fmtDate(t *time.Time) string {
@@ -156,17 +156,20 @@ func ToSpecialGroupResponses(items []model.SpecialGroup) []SpecialGroupResponse 
 
 // ImportRowError 导入时单行的错误（定位到行/列）。
 type ImportRowError struct {
-	Row     int    `json:"row"`    // Excel 行号（含表头，从 1 计）
-	Column  string `json:"column"` // 列名（中文表头）
-	Message string `json:"message"`
+	Row     int      `json:"row"`    // Excel 行号（含表头，从 1 计）
+	Column  string   `json:"column"` // 列名（中文表头）
+	Message string   `json:"message"`
+	Values  []string `json:"-"` // 原行单元格，仅用于生成失败数据表，不回传前端
 }
 
 // ImportResult 导入结果汇总与错误回显。
 type ImportResult struct {
-	Total   int              `json:"total"`   // 数据行总数（不含表头）
-	Success int              `json:"success"` // 成功导入行数
-	Failed  int              `json:"failed"`  // 失败行数
-	Errors  []ImportRowError `json:"errors"`
+	Total         int              `json:"total"`   // 数据行总数（不含表头）
+	Success       int              `json:"success"` // 成功导入行数
+	Failed        int              `json:"failed"`  // 失败行数
+	Errors        []ImportRowError `json:"errors"`
+	ErrorFile     string           `json:"error_file,omitempty"`      // 失败行 xlsx 的 base64
+	ErrorFileName string           `json:"error_file_name,omitempty"` // 失败数据下载文件名
 }
 
 // Fail 记录一行导入失败。

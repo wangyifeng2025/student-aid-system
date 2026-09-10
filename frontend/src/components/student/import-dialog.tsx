@@ -42,6 +42,25 @@ async function runImport(kind: ImportKind, file: File): Promise<ImportResult> {
   }
 }
 
+function downloadBase64Xlsx(base64: string, filename: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function ImportDialog({
   open,
   kind,
@@ -177,41 +196,64 @@ export function ImportDialog({
         {/* 导入结果回显 */}
         {result && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Badge tone="neutral">总计 {result.total}</Badge>
-              <Badge tone="success">成功 {result.success}</Badge>
-              <Badge tone={result.failed > 0 ? "error" : "neutral"}>
-                失败 {result.failed}
-              </Badge>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge tone="neutral">总计 {result.total}</Badge>
+                <Badge tone="success">成功 {result.success}</Badge>
+                <Badge tone={result.failed > 0 ? "error" : "neutral"}>
+                  失败 {result.failed}
+                </Badge>
+              </div>
+              {result.error_file ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const file = result.error_file;
+                    if (!file) return;
+                    downloadBase64Xlsx(file, result.error_file_name || "导入失败数据.xlsx");
+                  }}
+                >
+                  <Download size={16} />
+                  下载失败数据
+                </Button>
+              ) : null}
             </div>
 
             {result.errors.length > 0 && (
-              <div className="overflow-hidden rounded-md border border-line">
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                        <th className="px-3 py-2 text-left font-medium text-ink-mute" style={{ width: 70 }}>
-                          行号
-                        </th>
-                        <th className="px-3 py-2 text-left font-medium text-ink-mute" style={{ width: 120 }}>
-                          列
-                        </th>
-                        <th className="px-3 py-2 text-left font-medium text-ink-mute">错误原因</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.errors.map((err, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
-                          <td className="px-3 py-2 tabular-nums text-ink-soft">{err.row}</td>
-                          <td className="px-3 py-2 text-ink-soft">{err.column || "—"}</td>
-                          <td className="px-3 py-2" style={{ color: "var(--state-error)" }}>
-                            {err.message}
-                          </td>
+              <div className="flex flex-col gap-2">
+                {result.error_file ? (
+                  <p className="text-xs text-ink-mute">
+                    失败行已生成电子表格，修订后可直接再导入（无需删除「错误原因」列）。
+                  </p>
+                ) : null}
+                <div className="overflow-hidden rounded-md border border-line">
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                          <th className="px-3 py-2 text-left font-medium text-ink-mute" style={{ width: 70 }}>
+                            行号
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium text-ink-mute" style={{ width: 120 }}>
+                            列
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium text-ink-mute">错误原因</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {result.errors.map((err, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
+                            <td className="px-3 py-2 tabular-nums text-ink-soft">{err.row}</td>
+                            <td className="px-3 py-2 text-ink-soft">{err.column || "—"}</td>
+                            <td className="px-3 py-2" style={{ color: "var(--state-error)" }}>
+                              {err.message}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}

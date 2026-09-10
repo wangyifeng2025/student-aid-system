@@ -2,12 +2,14 @@ package handler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,7 +129,8 @@ func TestStudentCRUDAndValidation(t *testing.T) {
 
 	studentNo := fmt.Sprintf("S%d", time.Now().UnixNano())
 	idCard := uniqueValidIDCard()
-	dept, major, class := seedStudentOrgRefs(t, db); deptID, majorID, classID := dept.ID, major.ID, class.ID
+	dept, major, class := seedStudentOrgRefs(t, db)
+	deptID, majorID, classID := dept.ID, major.ID, class.ID
 	t.Cleanup(func() {
 		db.Unscoped().Where("student_no = ?", studentNo).Delete(&model.Student{})
 	})
@@ -250,7 +253,8 @@ func TestSpecialGroupAutoMatch(t *testing.T) {
 
 	studentNo := fmt.Sprintf("S%d", time.Now().UnixNano())
 	idCard := uniqueValidIDCard()
-	dept, major, class := seedStudentOrgRefs(t, db); deptID, majorID, classID := dept.ID, major.ID, class.ID
+	dept, major, class := seedStudentOrgRefs(t, db)
+	deptID, majorID, classID := dept.ID, major.ID, class.ID
 	t.Cleanup(func() {
 		db.Unscoped().Where("student_no = ?", studentNo).Delete(&model.Student{})
 		db.Unscoped().Where("student_no = ?", studentNo).Delete(&model.SpecialGroup{})
@@ -404,6 +408,46 @@ func TestImportStudents(t *testing.T) {
 	if len(resp.Data.Errors) != 1 || resp.Data.Errors[0].Row != 3 {
 		t.Fatalf("expected one error on row 3, got %+v", resp.Data.Errors)
 	}
+	if resp.Data.ErrorFile == "" || resp.Data.ErrorFileName == "" {
+		t.Fatalf("expected downloadable error spreadsheet, got %+v", resp.Data)
+	}
+	raw, err := base64.StdEncoding.DecodeString(resp.Data.ErrorFile)
+	if err != nil {
+		t.Fatalf("decode error_file: %v", err)
+	}
+	xf, err := excelize.OpenReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("open error_file: %v", err)
+	}
+	defer xf.Close()
+	errRows, err := xf.GetRows("Sheet1")
+	if err != nil {
+		t.Fatalf("read error_file: %v", err)
+	}
+	if len(errRows) != 2 {
+		t.Fatalf("error spreadsheet should have header + 1 failed row, got %d", len(errRows))
+	}
+	if errRows[0][0] != "学号" || errRows[0][len(errRows[0])-1] != "错误原因" {
+		t.Fatalf("error spreadsheet header: %+v", errRows[0])
+	}
+	if errRows[1][1] != "缺学号" {
+		t.Fatalf("error spreadsheet should keep original failed row, got %+v", errRows[1])
+	}
+	if !strings.Contains(errRows[1][len(errRows[1])-1], "学号不能为空") {
+		t.Fatalf("error spreadsheet missing reason: %+v", errRows[1])
+	}
+
+	w = uploadXLSX(t, r, "/api/v1/import/students", token, raw)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-import error spreadsheet status %d, body %s", w.Code, w.Body.String())
+	}
+	resp = struct {
+		Data dto.ImportResult `json:"data"`
+	}{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Success != 0 || resp.Data.Failed != 1 {
+		t.Fatalf("re-importing unfixed error spreadsheet should fail the same row, got %+v", resp.Data)
+	}
 }
 
 func TestImportTemplateDownload(t *testing.T) {
@@ -427,7 +471,8 @@ func TestExportStudents(t *testing.T) {
 
 	studentNo := fmt.Sprintf("E%d", time.Now().UnixNano())
 	idCard := uniqueValidIDCard()
-	dept, major, class := seedStudentOrgRefs(t, db); deptID, majorID, classID := dept.ID, major.ID, class.ID
+	dept, major, class := seedStudentOrgRefs(t, db)
+	deptID, majorID, classID := dept.ID, major.ID, class.ID
 	t.Cleanup(func() {
 		db.Unscoped().Where("student_no = ?", studentNo).Delete(&model.Student{})
 	})

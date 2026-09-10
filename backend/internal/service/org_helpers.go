@@ -24,7 +24,7 @@ func buildOrgNameMaps(orgRepo *repository.OrgRepository) (map[uint]string, map[u
 	for i := range majors {
 		majorNames[majors[i].ID] = majors[i].Name
 	}
-	classes, err := orgRepo.ListClasses(repository.ClassFilter{})
+	classes, _, err := orgRepo.ListClasses(repository.ClassFilter{})
 	if err != nil {
 		return nil, nil, nil, err
 	}

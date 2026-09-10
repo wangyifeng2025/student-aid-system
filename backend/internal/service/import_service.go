@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -181,7 +182,8 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(studentColumns, "学生导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, studentColumns, result); err != nil {
 		return result, nil
 	}
@@ -210,26 +212,26 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 
 		studentNo := cell(row, 0)
 		if studentNo == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "学号", Message: "学号不能为空"})
+			sess.fail(excelRow, "学号", "学号不能为空", row)
 			continue
 		}
 		name := cell(row, 1)
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "姓名", Message: "姓名不能为空"})
+			sess.fail(excelRow, "姓名", "姓名不能为空", row)
 			continue
 		}
 		gender := cell(row, 2)
 		if gender == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "性别", Message: "性别不能为空"})
+			sess.fail(excelRow, "性别", "性别不能为空", row)
 			continue
 		}
 		if gender != "男" && gender != "女" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "性别", Message: "性别只能为“男”或“女”"})
+			sess.fail(excelRow, "性别", "性别只能为“男”或“女”", row)
 			continue
 		}
 		idCard := strings.ToUpper(strings.TrimSpace(cell(row, 3)))
 		if idCard == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "身份证号", Message: "身份证号不能为空"})
+			sess.fail(excelRow, "身份证号", "身份证号不能为空", row)
 			continue
 		}
 
@@ -239,7 +241,7 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 		if nationName != "" {
 			code, ok := nationMap[nationName]
 			if !ok {
-				result.Fail(dto.ImportRowError{Row: excelRow, Column: "民族", Message: "民族「" + nationName + "」不存在，请填写字典中的名称"})
+				sess.fail(excelRow, "民族", "民族「"+nationName+"」不存在，请填写字典中的名称", row)
 				continue
 			}
 			nationCode = code
@@ -250,7 +252,7 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 		if politicalName != "" {
 			code, ok := politicalMap[politicalName]
 			if !ok {
-				result.Fail(dto.ImportRowError{Row: excelRow, Column: "政治面貌", Message: "政治面貌「" + politicalName + "」不存在，请填写字典中的名称"})
+				sess.fail(excelRow, "政治面貌", "政治面貌「"+politicalName+"」不存在，请填写字典中的名称", row)
 				continue
 			}
 			politicalCode = code
@@ -259,32 +261,32 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 		// 院系/专业/班级：名称 -> ID（必填）
 		deptName := cell(row, 7)
 		if deptName == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "院系", Message: "院系不能为空"})
+			sess.fail(excelRow, "院系", "院系不能为空", row)
 			continue
 		}
 		dept, ok := deptByName[deptName]
 		if !ok {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "院系", Message: "院系「" + deptName + "」不存在"})
+			sess.fail(excelRow, "院系", "院系「"+deptName+"」不存在", row)
 			continue
 		}
 		majorName := cell(row, 8)
 		if majorName == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "专业", Message: "专业不能为空"})
+			sess.fail(excelRow, "专业", "专业不能为空", row)
 			continue
 		}
 		major, ok := majorByDept[dept.ID][majorName]
 		if !ok {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "专业", Message: "院系「" + deptName + "」下不存在专业「" + majorName + "」"})
+			sess.fail(excelRow, "专业", "院系「"+deptName+"」下不存在专业「"+majorName+"」", row)
 			continue
 		}
 		className := cell(row, 9)
 		if className == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "班级", Message: "班级不能为空"})
+			sess.fail(excelRow, "班级", "班级不能为空", row)
 			continue
 		}
 		class, ok := classByDept[dept.ID][className]
 		if !ok {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "班级", Message: "院系「" + deptName + "」下不存在班级「" + className + "」"})
+			sess.fail(excelRow, "班级", "院系「"+deptName+"」下不存在班级「"+className+"」", row)
 			continue
 		}
 
@@ -303,12 +305,12 @@ func (s *ImportService) ImportStudents(r io.Reader) (*dto.ImportResult, error) {
 			EnrollTime:      cell(row, 11),
 		}
 		if _, err := s.stu.Upsert(req); err != nil {
-			failRow(result, excelRow, "", err)
+			sess.failErr(excelRow, "", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // buildDictLabelToCode 构建「字典 label -> code」映射（用于导入名称转编码）。
@@ -363,7 +365,7 @@ func (s *ImportService) buildOrgNameMaps() (map[string]*model.Department, map[ui
 		}
 		dm[majors[i].Name] = &majors[i]
 	}
-	classes, err := s.orgRepo.ListClasses(repository.ClassFilter{})
+	classes, _, err := s.orgRepo.ListClasses(repository.ClassFilter{})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -393,7 +395,8 @@ func (s *ImportService) ImportSpecialGroups(r io.Reader) (*dto.ImportResult, err
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(specialGroupColumns, "重点人群导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, specialGroupColumns, result); err != nil {
 		return result, nil
 	}
@@ -407,17 +410,17 @@ func (s *ImportService) ImportSpecialGroups(r io.Reader) (*dto.ImportResult, err
 		studentNo := cell(row, 0)
 		idCard := cell(row, 1)
 		if studentNo == "" && idCard == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "学号", Message: "学号与身份证号至少填写一项"})
+			sess.fail(excelRow, "学号", "学号与身份证号至少填写一项", row)
 			continue
 		}
 		sgType := cell(row, 3)
 		if sgType == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "类型(编码)", Message: "类型(编码)不能为空"})
+			sess.fail(excelRow, "类型(编码)", "类型(编码)不能为空", row)
 			continue
 		}
 		year, yerr := parseIntCell(row, 6)
 		if yerr != nil || year <= 0 {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "年度", Message: "年度必须为正整数"})
+			sess.fail(excelRow, "年度", "年度必须为正整数", row)
 			continue
 		}
 		req := &dto.SpecialGroupRequest{
@@ -438,12 +441,12 @@ func (s *ImportService) ImportSpecialGroups(r io.Reader) (*dto.ImportResult, err
 			continue
 		}
 		if _, err := s.sg.Create(req); err != nil {
-			failRow(result, excelRow, "", err)
+			sess.failErr(excelRow, "", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // ImportDepartments 导入院系，按编码 upsert。
@@ -452,7 +455,8 @@ func (s *ImportService) ImportDepartments(r io.Reader) (*dto.ImportResult, error
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(departmentColumns, "院系导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, departmentColumns, result); err != nil {
 		return result, nil
 	}
@@ -464,17 +468,17 @@ func (s *ImportService) ImportDepartments(r io.Reader) (*dto.ImportResult, error
 		excelRow := i + 1
 		name := cell(row, 0)
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "院系名称", Message: "院系名称不能为空"})
+			sess.fail(excelRow, "院系名称", "院系名称不能为空", row)
 			continue
 		}
 		req := &dto.DepartmentRequest{Name: name, Code: cell(row, 1)}
 		if err := s.org.UpsertDepartment(req); err != nil {
-			failRow(result, excelRow, "院系名称", err)
+			sess.failErr(excelRow, "院系名称", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // ImportMajors 导入专业，按院系编码 + 专业编码/名称 upsert。
@@ -483,7 +487,8 @@ func (s *ImportService) ImportMajors(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(majorColumns, "专业导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, majorColumns, result); err != nil {
 		return result, nil
 	}
@@ -495,22 +500,22 @@ func (s *ImportService) ImportMajors(r io.Reader) (*dto.ImportResult, error) {
 		excelRow := i + 1
 		deptCode := cell(row, 0)
 		if deptCode == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "院系编码", Message: "院系编码不能为空"})
+			sess.fail(excelRow, "院系编码", "院系编码不能为空", row)
 			continue
 		}
 		name := cell(row, 1)
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "专业名称", Message: "专业名称不能为空"})
+			sess.fail(excelRow, "专业名称", "专业名称不能为空", row)
 			continue
 		}
 		req := &dto.MajorRequest{Name: name, Code: cell(row, 2)}
 		if err := s.org.UpsertMajor(deptCode, req); err != nil {
-			failRow(result, excelRow, "院系编码", err)
+			sess.failErr(excelRow, "院系编码", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // ImportGrades 导入年级，按入学年份 upsert。
@@ -519,7 +524,8 @@ func (s *ImportService) ImportGrades(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(gradeColumns, "年级导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, gradeColumns, result); err != nil {
 		return result, nil
 	}
@@ -531,22 +537,22 @@ func (s *ImportService) ImportGrades(r io.Reader) (*dto.ImportResult, error) {
 		excelRow := i + 1
 		name := cell(row, 0)
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "年级名称", Message: "年级名称不能为空"})
+			sess.fail(excelRow, "年级名称", "年级名称不能为空", row)
 			continue
 		}
 		year, yerr := parseIntCell(row, 1)
 		if yerr != nil || year <= 0 {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "入学年份", Message: "入学年份必须为正整数"})
+			sess.fail(excelRow, "入学年份", "入学年份必须为正整数", row)
 			continue
 		}
 		req := &dto.GradeRequest{Name: name, Year: year}
 		if err := s.org.UpsertGrade(req); err != nil {
-			failRow(result, excelRow, "入学年份", err)
+			sess.failErr(excelRow, "入学年份", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // ImportClasses 导入班级，按院系编码 + 班级名称 upsert。
@@ -555,7 +561,8 @@ func (s *ImportService) ImportClasses(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(classColumns, "班级导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, classColumns, result); err != nil {
 		return result, nil
 	}
@@ -567,12 +574,12 @@ func (s *ImportService) ImportClasses(r io.Reader) (*dto.ImportResult, error) {
 		excelRow := i + 1
 		deptCode := cell(row, 0)
 		if deptCode == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "院系编码", Message: "院系编码不能为空"})
+			sess.fail(excelRow, "院系编码", "院系编码不能为空", row)
 			continue
 		}
 		name := cell(row, 3)
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "班级名称", Message: "班级名称不能为空"})
+			sess.fail(excelRow, "班级名称", "班级名称不能为空", row)
 			continue
 		}
 		yearStr := cell(row, 2)
@@ -581,13 +588,13 @@ func (s *ImportService) ImportClasses(r io.Reader) (*dto.ImportResult, error) {
 			var yerr error
 			year, yerr = parseIntCell(row, 2)
 			if yerr != nil || year <= 0 {
-				result.Fail(dto.ImportRowError{Row: excelRow, Column: "入学年份", Message: "入学年份必须为正整数（可留空）"})
+				sess.fail(excelRow, "入学年份", "入学年份必须为正整数（可留空）", row)
 				continue
 			}
 		}
 		staffNo := cell(row, 4)
 		if staffNo == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "教工号", Message: "教工号不能为空"})
+			sess.fail(excelRow, "教工号", "教工号不能为空", row)
 			continue
 		}
 		in := &ClassImportInput{
@@ -598,12 +605,12 @@ func (s *ImportService) ImportClasses(r io.Reader) (*dto.ImportResult, error) {
 			StaffNo:   staffNo,
 		}
 		if err := s.org.UpsertClass(in); err != nil {
-			failRow(result, excelRow, "教工号", err)
+			sess.failErr(excelRow, "教工号", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // Export 导出 Excel 数据（组织机构或与导入模板列一致的业务数据）。
@@ -769,7 +776,7 @@ func (s *ImportService) exportClasses(ids []uint) ([]byte, string, error) {
 		gradeYear[grades[i].ID] = grades[i].Year
 	}
 
-	items, err := s.org.ListClasses(0, 0, 0)
+	items, _, err := s.org.ListClasses(repository.ClassFilter{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -816,7 +823,8 @@ func (s *ImportService) ImportAdvisors(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(advisorColumns, "班主任导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, advisorColumns, result); err != nil {
 		return result, nil
 	}
@@ -832,28 +840,28 @@ func (s *ImportService) ImportAdvisors(r io.Reader) (*dto.ImportResult, error) {
 		phone := normalizeExcelIdentifier(cell(row, 3))
 		classRaw := cell(row, 4)
 		if staffNo == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "教工号", Message: "教工号不能为空"})
+			sess.fail(excelRow, "教工号", "教工号不能为空", row)
 			continue
 		}
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "姓名", Message: "姓名不能为空"})
+			sess.fail(excelRow, "姓名", "姓名不能为空", row)
 			continue
 		}
 		dept, err := s.advisor.ResolveDepartment(deptKey)
 		if err != nil {
-			failRow(result, excelRow, "系部", err)
+			sess.failErr(excelRow, "系部", err, row)
 			continue
 		}
 		classNames := splitAdvisorClassNames(classRaw)
 		if classRaw != "" && len(classNames) == 0 {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "班级名称", Message: "班级名称无效"})
+			sess.fail(excelRow, "班级名称", "班级名称无效", row)
 			continue
 		}
 		var classIDs []uint
 		for _, cn := range classNames {
 			c, cerr := s.advisor.ResolveExistingClass(dept.ID, cn)
 			if cerr != nil {
-				failRow(result, excelRow, "班级名称", cerr)
+				sess.failErr(excelRow, "班级名称", cerr, row)
 				classIDs = nil
 				break
 			}
@@ -863,12 +871,12 @@ func (s *ImportService) ImportAdvisors(r io.Reader) (*dto.ImportResult, error) {
 			continue
 		}
 		if err := s.advisor.UpsertImported(dept.ID, staffNo, name, phone, classIDs); err != nil {
-			failRow(result, excelRow, "教工号", err)
+			sess.failErr(excelRow, "教工号", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 func splitAdvisorClassNames(raw string) []string {
@@ -901,7 +909,7 @@ func (s *ImportService) ExportAdvisors(f repository.AdvisorFilter) ([]byte, stri
 		return nil, "", err
 	}
 	classMeta := map[uint]model.Class{}
-	classes, err := s.orgRepo.ListClasses(repository.ClassFilter{})
+	classes, _, err := s.orgRepo.ListClasses(repository.ClassFilter{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -991,7 +999,8 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := newImportResult()
+	sess := newImportSession(userColumns, "用户导入失败.xlsx")
+	result := sess.result
 	if err := checkImportHeader(rows, userColumns, result); err != nil {
 		return result, nil
 	}
@@ -1017,15 +1026,15 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 		statusRaw := strings.TrimSpace(cell(row, 5))
 
 		if username == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "用户名", Message: "用户名不能为空"})
+			sess.fail(excelRow, "用户名", "用户名不能为空", row)
 			continue
 		}
 		if name == "" {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "姓名", Message: "姓名不能为空"})
+			sess.fail(excelRow, "姓名", "姓名不能为空", row)
 			continue
 		}
 		if !model.IsValidRole(role) {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "角色", Message: "角色取值无效"})
+			sess.fail(excelRow, "角色", "角色取值无效", row)
 			continue
 		}
 		status := 1
@@ -1035,7 +1044,7 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 			} else if statusRaw == "禁用" || statusRaw == "0" {
 				status = 0
 			} else {
-				result.Fail(dto.ImportRowError{Row: excelRow, Column: "状态", Message: "状态取值无效（启用/禁用）"})
+				sess.fail(excelRow, "状态", "状态取值无效（启用/禁用）", row)
 				continue
 			}
 		}
@@ -1043,7 +1052,7 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 		if deptCode != "" {
 			id, ok := deptByCode[deptCode]
 			if !ok {
-				result.Fail(dto.ImportRowError{Row: excelRow, Column: "所属院系编码", Message: "院系编码不存在"})
+				sess.fail(excelRow, "所属院系编码", "院系编码不存在", row)
 				continue
 			}
 			deptID = &id
@@ -1051,21 +1060,21 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 		// 已存在则跳过（不覆盖密码与角色）
 		exists, err := s.user.UsernameExists(username, 0)
 		if err != nil {
-			failRow(result, excelRow, "用户名", err)
+			sess.failErr(excelRow, "用户名", err, row)
 			continue
 		}
 		if exists {
-			result.Fail(dto.ImportRowError{Row: excelRow, Column: "用户名", Message: "用户名已存在，跳过"})
+			sess.fail(excelRow, "用户名", "用户名已存在，跳过", row)
 			continue
 		}
 		pwd, perr := initialImportUserPassword(model.Role(role), username, phone)
 		if perr != nil {
-			failRow(result, excelRow, "手机号", perr)
+			sess.failErr(excelRow, "手机号", perr, row)
 			continue
 		}
 		hash, err := password.Hash(pwd)
 		if err != nil {
-			failRow(result, excelRow, "用户名", err)
+			sess.failErr(excelRow, "用户名", err, row)
 			continue
 		}
 		u := &model.User{
@@ -1078,12 +1087,12 @@ func (s *ImportService) ImportUsers(r io.Reader) (*dto.ImportResult, error) {
 			Status:       status,
 		}
 		if err := s.user.Create(u); err != nil {
-			failRow(result, excelRow, "用户名", err)
+			sess.failErr(excelRow, "用户名", err, row)
 			continue
 		}
 		result.Success++
 	}
-	return result, nil
+	return sess.done(), nil
 }
 
 // initialImportUserPassword 导入用户初始密码。
@@ -1127,6 +1136,91 @@ func writeXlsx(columns []string, rows [][]any, filename string) ([]byte, string,
 
 // ===== 行解析辅助 =====
 
+const importErrorReasonColumn = "错误原因"
+
+type importSession struct {
+	result   *dto.ImportResult
+	columns  []string
+	filename string
+}
+
+func newImportSession(columns []string, filename string) *importSession {
+	return &importSession{
+		result:   newImportResult(),
+		columns:  columns,
+		filename: filename,
+	}
+}
+
+func (s *importSession) fail(excelRow int, column, message string, row []string) {
+	s.result.Fail(dto.ImportRowError{
+		Row:     excelRow,
+		Column:  column,
+		Message: message,
+		Values:  rowCells(row, len(s.columns)),
+	})
+}
+
+func (s *importSession) failErr(excelRow int, column string, err error, row []string) {
+	e := toRowError(excelRow, err)
+	if column != "" && e.Column == "" {
+		e.Column = column
+	}
+	s.fail(excelRow, e.Column, e.Message, row)
+}
+
+func (s *importSession) done() *dto.ImportResult {
+	attachImportErrorFile(s.result, s.columns, s.filename)
+	return s.result
+}
+
+func rowCells(row []string, n int) []string {
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = cell(row, i)
+	}
+	return out
+}
+
+// attachImportErrorFile 把失败数据行写成与导入模板同列的 xlsx（末列附错误原因），便于修订后再导入。
+func attachImportErrorFile(result *dto.ImportResult, columns []string, filename string) {
+	if result == nil || len(columns) == 0 {
+		return
+	}
+	rows := make([][]any, 0, len(result.Errors))
+	for _, e := range result.Errors {
+		if len(e.Values) == 0 {
+			continue
+		}
+		row := make([]any, 0, len(columns)+1)
+		for i := range columns {
+			v := ""
+			if i < len(e.Values) {
+				v = e.Values[i]
+			}
+			row = append(row, v)
+		}
+		reason := e.Message
+		if col := strings.TrimSpace(e.Column); col != "" && col != "表头" {
+			reason = col + "：" + e.Message
+		}
+		row = append(row, reason)
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		return
+	}
+	header := make([]string, 0, len(columns)+1)
+	header = append(header, columns...)
+	header = append(header, importErrorReasonColumn)
+	data, name, err := writeXlsx(header, rows, filename)
+	if err != nil {
+		return
+	}
+	result.ErrorFile = base64.StdEncoding.EncodeToString(data)
+	result.ErrorFileName = name
+}
+
 func newImportResult() *dto.ImportResult {
 	return &dto.ImportResult{Errors: []dto.ImportRowError{}}
 }
@@ -1151,14 +1245,6 @@ func checkImportHeader(rows [][]string, expected []string, result *dto.ImportRes
 		}
 	}
 	return nil
-}
-
-func failRow(result *dto.ImportResult, excelRow int, column string, err error) {
-	e := toRowError(excelRow, err)
-	if column != "" && e.Column == "" {
-		e.Column = column
-	}
-	result.Fail(e)
 }
 
 func isBlankRow(row []string) bool {

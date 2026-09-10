@@ -212,7 +212,7 @@ func (s *RecognitionSummaryExportService) classGradeNames() (map[uint]string, er
 	for i := range grades {
 		gradeNames[grades[i].ID] = grades[i].Name
 	}
-	classes, err := s.orgRepo.ListClasses(repository.ClassFilter{})
+	classes, _, err := s.orgRepo.ListClasses(repository.ClassFilter{})
 	if err != nil {
 		return nil, err
 	}

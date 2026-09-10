@@ -111,4 +111,6 @@ export interface ImportResult {
   success: number;
   failed: number;
   errors: ImportRowError[];
+  error_file?: string;
+  error_file_name?: string;
 }

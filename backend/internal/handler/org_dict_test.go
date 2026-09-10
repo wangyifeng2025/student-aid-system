@@ -525,3 +525,44 @@ func TestOrgImportExport(t *testing.T) {
 		db.Unscoped().Where("year = ?", year).Delete(&model.Grade{})
 	})
 }
+
+func TestListClassesPagination(t *testing.T) {
+	r, db := setupOrgDictRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	_, _, classA := seedStudentOrgRefs(t, db)
+	classB := model.Class{DeptID: classA.DeptID, MajorID: classA.MajorID, GradeID: classA.GradeID, Name: "分页班" + fmt.Sprintf("%d", time.Now().UnixNano()%10000)}
+	if err := db.Create(&classB).Error; err != nil {
+		t.Fatalf("create class B: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Unscoped().Where("id = ?", classB.ID).Delete(&model.Class{})
+	})
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/orgs/classes", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list all status %d, body %s", w.Code, w.Body.String())
+	}
+	var all struct {
+		Data []dto.ClassResponse `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &all)
+	if len(all.Data) < 2 {
+		t.Fatalf("unpaged list should return array with >=2 classes, got %d", len(all.Data))
+	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/orgs/classes?page=1&page_size=1", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("paged list status %d, body %s", w.Code, w.Body.String())
+	}
+	var paged struct {
+		Data dto.PageResult[dto.ClassResponse] `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &paged)
+	if paged.Data.PageSize != 1 || len(paged.Data.Items) != 1 {
+		t.Fatalf("paged list want 1 item, got %+v", paged.Data)
+	}
+	if paged.Data.Total < 2 {
+		t.Fatalf("paged total want >=2, got %d", paged.Data.Total)
+	}
+}

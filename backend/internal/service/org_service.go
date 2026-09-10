@@ -216,12 +216,16 @@ func (s *OrgService) DeleteGrade(id uint) error {
 
 // ===== 班级 =====
 
-func (s *OrgService) ListClasses(deptID, majorID, gradeID uint) ([]dto.ClassResponse, error) {
-	items, err := s.repo.ListClasses(repository.ClassFilter{DeptID: deptID, MajorID: majorID, GradeID: gradeID})
+func (s *OrgService) ListClasses(f repository.ClassFilter) ([]dto.ClassResponse, int64, error) {
+	items, total, err := s.repo.ListClasses(f)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return s.toClassResponses(items)
+	resps, err := s.toClassResponses(items)
+	if err != nil {
+		return nil, 0, err
+	}
+	return resps, total, nil
 }
 
 func (s *OrgService) CreateClass(req *dto.ClassRequest) (*dto.ClassResponse, error) {

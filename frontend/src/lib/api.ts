@@ -365,6 +365,24 @@ export const classApi = {
         grade_id: filter?.gradeId,
       })}`,
     ),
+  page: (filter: {
+    page: number;
+    page_size: number;
+    dept_id?: number;
+    major_id?: number;
+    grade_id?: number;
+    keyword?: string;
+  }) =>
+    apiFetch<PageResult<Class>>(
+      `/orgs/classes${buildParams({
+        page: filter.page,
+        page_size: filter.page_size,
+        dept_id: filter.dept_id,
+        major_id: filter.major_id,
+        grade_id: filter.grade_id,
+        keyword: filter.keyword,
+      })}`,
+    ),
   create: (body: ClassInput) =>
     apiFetch<Class>("/orgs/classes", { method: "POST", body }),
   update: (id: number, body: ClassInput) =>

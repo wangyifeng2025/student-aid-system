@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strings"
+
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"gorm.io/gorm"
 )
@@ -231,27 +233,62 @@ func (r *OrgRepository) CountClassesByGrade(gradeID uint) (int64, error) {
 
 // ===== 班级 Class =====
 
-// ClassFilter 班级列表过滤条件（0 值表示不过滤）。
+// ClassFilter 班级列表过滤条件（0 值表示不过滤；PageSize=0 表示不分页返回全部）。
 type ClassFilter struct {
-	DeptID  uint
-	MajorID uint
-	GradeID uint
+	DeptID   uint
+	MajorID  uint
+	GradeID  uint
+	Keyword  string // 班级名称 / 班主任姓名 / 教工号 / 电话
+	Page     int
+	PageSize int
 }
 
-func (r *OrgRepository) ListClasses(f ClassFilter) ([]model.Class, error) {
-	var items []model.Class
-	q := r.db.Order("id")
+func (r *OrgRepository) classQuery(f ClassFilter) *gorm.DB {
+	q := r.db.Model(&model.Class{})
 	if f.DeptID > 0 {
-		q = q.Where("dept_id = ?", f.DeptID)
+		q = q.Where("classes.dept_id = ?", f.DeptID)
 	}
 	if f.MajorID > 0 {
-		q = q.Where("major_id = ?", f.MajorID)
+		q = q.Where("classes.major_id = ?", f.MajorID)
 	}
 	if f.GradeID > 0 {
-		q = q.Where("grade_id = ?", f.GradeID)
+		q = q.Where("classes.grade_id = ?", f.GradeID)
 	}
-	err := q.Find(&items).Error
-	return items, err
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Joins("LEFT JOIN advisor_classes ac ON ac.class_id = classes.id").
+			Joins("LEFT JOIN advisors adv ON adv.id = ac.advisor_id AND adv.deleted_at IS NULL").
+			Where("classes.name LIKE ? OR adv.staff_no LIKE ? OR adv.name LIKE ? OR adv.phone LIKE ?", like, like, like, like)
+	}
+	return q
+}
+
+func (r *OrgRepository) ListClasses(f ClassFilter) ([]model.Class, int64, error) {
+	q := r.classQuery(f)
+	var total int64
+	countQ := q
+	if strings.TrimSpace(f.Keyword) != "" {
+		countQ = q.Distinct("classes.id")
+	}
+	if err := countQ.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []model.Class
+	listQ := r.classQuery(f).Select("classes.*").Order("classes.id")
+	if strings.TrimSpace(f.Keyword) != "" {
+		listQ = listQ.Distinct()
+	}
+	if f.PageSize > 0 {
+		page := f.Page
+		if page < 1 {
+			page = 1
+		}
+		listQ = listQ.Limit(f.PageSize).Offset((page - 1) * f.PageSize)
+	}
+	if err := listQ.Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (r *OrgRepository) FindClass(id uint) (*model.Class, error) {
