@@ -42,6 +42,8 @@ export default function ClassesPage() {
   const [majors, setMajors] = React.useState<Major[]>([]);
   const [grades, setGrades] = React.useState<Grade[]>([]);
   const [advisors, setAdvisors] = React.useState<Advisor[]>([]);
+  const [advisorsLoading, setAdvisorsLoading] = React.useState(false);
+  const [advisorsError, setAdvisorsError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [keywordInput, setKeywordInput] = React.useState("");
@@ -76,25 +78,47 @@ export default function ClassesPage() {
   const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (c) => c.id);
 
   React.useEffect(() => {
-    Promise.all([
-      departmentApi.list(),
-      majorApi.list(),
-      gradeApi.list(),
-      advisorApi.list({ page: 1, page_size: 100 }),
-    ])
-      .then(([departments, allMajors, allGrades, advisorPage]) => {
+    Promise.all([departmentApi.list(), majorApi.list(), gradeApi.list()])
+      .then(([departments, allMajors, allGrades]) => {
         setDepts(departments);
         setMajors(allMajors);
         setGrades(allGrades);
-        setAdvisors(advisorPage.items);
       })
       .catch(() => {
         setDepts([]);
         setMajors([]);
         setGrades([]);
-        setAdvisors([]);
       });
   }, []);
+
+  // 打开表单且选了院系后再拉该院系全部班主任，避免全校 page_size=100 截断。
+  React.useEffect(() => {
+    if (!formOpen || !deptId) {
+      setAdvisors([]);
+      setAdvisorsError(null);
+      setAdvisorsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAdvisorsLoading(true);
+    setAdvisorsError(null);
+    advisorApi
+      .list({ dept_id: Number(deptId) })
+      .then((res) => {
+        if (!cancelled) setAdvisors(res.items ?? []);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setAdvisors([]);
+        setAdvisorsError(e instanceof ApiError ? e.message : "加载班主任失败");
+      })
+      .finally(() => {
+        if (!cancelled) setAdvisorsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [formOpen, deptId]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -131,13 +155,10 @@ export default function ClassesPage() {
     setPage(1);
   };
 
-  // 表单内专业、班主任按所选院系联动
+  // 表单内专业按所选院系联动；班主任已按院系从接口拉取
   const formMajors = deptId
     ? majors.filter((m) => m.dept_id === Number(deptId))
     : majors;
-  const formAdvisors = deptId
-    ? advisors.filter((a) => a.dept_id === Number(deptId))
-    : [];
 
   const openCreate = () => {
     setEditing(null);
@@ -374,7 +395,11 @@ export default function ClassesPage() {
             <Label htmlFor="class-advisor">班主任 *</Label>
             {!deptId ? (
               <p className="mt-1 text-sm text-ink-mute">请先选择院系</p>
-            ) : formAdvisors.length === 0 ? (
+            ) : advisorsLoading ? (
+              <p className="mt-1 text-sm text-ink-mute">正在加载班主任…</p>
+            ) : advisorsError ? (
+              <p className="mt-1 text-sm text-error">{advisorsError}</p>
+            ) : advisors.length === 0 ? (
               <p className="mt-1 text-sm text-ink-mute">该院系暂无班主任，请先在「班主任信息」中维护</p>
             ) : (
               <Combobox
@@ -384,7 +409,7 @@ export default function ClassesPage() {
                 onChange={setAdvisorStaffNo}
                 placeholder="输入姓名或教工号搜索"
                 emptyText="无匹配班主任"
-                options={formAdvisors.map((a) => ({
+                options={advisors.map((a) => ({
                   value: a.staff_no,
                   label: `${a.name}（${a.staff_no}）`,
                   description: a.phone || undefined,

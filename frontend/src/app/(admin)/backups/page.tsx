@@ -86,6 +86,7 @@ export default function BackupsPage() {
 
   const handleDownload = async (item: BackupItem) => {
     try {
+      toast.info("正在准备下载，大文件可能需要较长时间…");
       await backupApi.download(item.name);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "下载失败");
@@ -197,10 +198,10 @@ export default function BackupsPage() {
     },
     {
       header: "操作",
-      width: "220px",
+      width: "260px",
       align: "right",
       cell: (b) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="relative z-10 flex shrink-0 items-center justify-end gap-1">
           <Button variant="ghost" size="sm" onClick={() => handleDownload(b)}>
             <Download size={15} />
             下载

@@ -8,12 +8,13 @@ import (
 )
 
 func (h *Handler) ListAdvisors(c *gin.Context) {
-	page, pageSize := parsePagination(c)
 	f := repository.AdvisorFilter{
-		DeptID:   parseUintQuery(c, "dept_id"),
-		Keyword:  c.Query("keyword"),
-		Page:     page,
-		PageSize: pageSize,
+		DeptID:  parseUintQuery(c, "dept_id"),
+		Keyword: c.Query("keyword"),
+	}
+	// 带 page/page_size 时分页（班主任信息页）；不带则返回筛选后的全量（班级表单下拉）。
+	if c.Query("page") != "" || c.Query("page_size") != "" {
+		f.Page, f.PageSize = parsePagination(c)
 	}
 	res, err := h.Advisor.List(f)
 	if err != nil {

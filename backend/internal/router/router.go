@@ -297,10 +297,11 @@ func registerBackupRoutes(g *gin.RouterGroup, h *handler.Handler) {
 	{
 		backups.GET("", h.ListBackups)
 		backups.POST("", h.CreateBackup)
-		backups.GET("/download/:name", h.DownloadBackup)
+		// *name 完整捕获含 .zip 的文件名（通配符带前导 /，handler 里去掉）
+		backups.GET("/download/*name", h.DownloadBackup)
 		backups.POST("/restore", h.RestoreBackupFromUpload)
-		backups.POST("/restore/:name", h.RestoreBackupFromServer)
-		backups.DELETE("/:name", h.DeleteBackup)
+		backups.POST("/restore/*name", h.RestoreBackupFromServer)
+		backups.DELETE("/*name", h.DeleteBackup)
 	}
 }
 

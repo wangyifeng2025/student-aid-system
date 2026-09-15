@@ -441,3 +441,57 @@ func TestImportAdvisorsResetsExistingLiveUserPassword(t *testing.T) {
 		t.Fatalf("login with Adv004444 expect 200, got %d body %s", w.Code, w.Body.String())
 	}
 }
+
+func TestListAdvisorsUnpagedByDept(t *testing.T) {
+	r, db := setupAdvisorRouter(t)
+	admin := seedUser(t, db, "pass123", model.RoleAdmin)
+	token := loginToken(t, r, admin.Username, "pass123")
+	dept, _, _ := seedStudentOrgRefs(t, db)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+
+	a1 := model.Advisor{DeptID: dept.ID, StaffNo: "U1" + suffix, Name: "不分页甲", Phone: "13900001001"}
+	a2 := model.Advisor{DeptID: dept.ID, StaffNo: "U2" + suffix, Name: "不分页乙", Phone: "13900001002"}
+	if err := db.Create(&a1).Error; err != nil {
+		t.Fatalf("create advisor 1: %v", err)
+	}
+	if err := db.Create(&a2).Error; err != nil {
+		t.Fatalf("create advisor 2: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Unscoped().Where("id IN ?", []uint{a1.ID, a2.ID}).Delete(&model.Advisor{})
+	})
+
+	w := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/advisors?dept_id=%d", dept.ID), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unpaged list status %d, body %s", w.Code, w.Body.String())
+	}
+	var all struct {
+		Data dto.PageResult[dto.AdvisorResponse] `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &all); err != nil {
+		t.Fatalf("decode unpaged: %v", err)
+	}
+	if all.Data.PageSize != 0 {
+		t.Fatalf("unpaged page_size want 0, got %d", all.Data.PageSize)
+	}
+	if all.Data.Total < 2 || len(all.Data.Items) < 2 {
+		t.Fatalf("unpaged should return all dept advisors, total=%d items=%d", all.Data.Total, len(all.Data.Items))
+	}
+
+	w = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/advisors?dept_id=%d&page=1&page_size=1", dept.ID), token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("paged list status %d, body %s", w.Code, w.Body.String())
+	}
+	var paged struct {
+		Data dto.PageResult[dto.AdvisorResponse] `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &paged); err != nil {
+		t.Fatalf("decode paged: %v", err)
+	}
+	if paged.Data.PageSize != 1 || len(paged.Data.Items) != 1 {
+		t.Fatalf("paged list want 1 item, got %+v", paged.Data)
+	}
+	if paged.Data.Total < 2 {
+		t.Fatalf("paged total want >=2, got %d", paged.Data.Total)
+	}
+}

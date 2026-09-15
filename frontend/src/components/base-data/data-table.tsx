@@ -74,16 +74,22 @@ function pinSide(
 }
 
 function pinClass(pinned: PinSide, isHead: boolean, isInnerEdge: boolean): string {
-  if (!pinned) return isHead ? "bg-surface" : "bg-inherit";
+  if (!pinned) {
+    // 中间列在横向滚动时会叠到冻结操作列底下；让空白区域把点击穿透给按钮
+    return cn(
+      isHead ? "bg-surface" : "bg-inherit",
+      "pointer-events-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto [&_select]:pointer-events-auto [&_label]:pointer-events-auto",
+    );
+  }
   return cn(
-    "sticky",
-    // 不透明底 + 高于中间列，避免后绘的单元格把左侧固定列盖住
+    // translateZ 让 td 的 z-index 在 table 布局里真正生效
+    "sticky isolate pointer-events-auto transform-[translateZ(0)]",
     "bg-surface",
     !isHead && "group-hover:bg-brand-subtle",
     pinned === "start" && isInnerEdge && "shadow-[4px_0_8px_-6px_rgba(15,23,42,0.18)]",
     pinned === "end" && isInnerEdge && "shadow-[-4px_0_8px_-6px_rgba(15,23,42,0.18)]",
     pinned === "start" && (isHead ? "z-30" : "z-20"),
-    pinned === "end" && (isHead ? "z-30" : "z-20"),
+    pinned === "end" && (isHead ? "z-40" : "z-30"),
   );
 }
 

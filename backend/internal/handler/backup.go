@@ -1,11 +1,18 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/internal/dto"
 	"github.com/wangyifeng2025/student-aid-system/internal/middleware"
 	"github.com/wangyifeng2025/student-aid-system/pkg/response"
 )
+
+// backupArchiveName 取出路径中的备份文件名。通配符 *name 会带前导斜杠。
+func backupArchiveName(c *gin.Context) string {
+	return strings.Trim(c.Param("name"), "/")
+}
 
 const zipContentType = "application/zip"
 
@@ -35,7 +42,7 @@ func (h *Handler) CreateBackup(c *gin.Context) {
 
 // DownloadBackup 下载备份归档，便于管理员保存到异地。
 func (h *Handler) DownloadBackup(c *gin.Context) {
-	name := c.Param("name")
+	name := backupArchiveName(c)
 	p, err := h.Backup.Locate(name)
 	if err != nil {
 		mapCommonError(c, err)
@@ -48,7 +55,7 @@ func (h *Handler) DownloadBackup(c *gin.Context) {
 
 // DeleteBackup 删除指定备份归档。
 func (h *Handler) DeleteBackup(c *gin.Context) {
-	if err := h.Backup.Delete(c.Param("name")); err != nil {
+	if err := h.Backup.Delete(backupArchiveName(c)); err != nil {
 		mapCommonError(c, err)
 		return
 	}
@@ -57,7 +64,7 @@ func (h *Handler) DeleteBackup(c *gin.Context) {
 
 // RestoreBackupFromServer 用服务器上已有的归档恢复全量数据。
 func (h *Handler) RestoreBackupFromServer(c *gin.Context) {
-	res, err := h.Backup.RestoreFromStored(currentOperator(c), c.Param("name"))
+	res, err := h.Backup.RestoreFromStored(currentOperator(c), backupArchiveName(c))
 	if err != nil {
 		mapCommonError(c, err)
 		return
