@@ -51,7 +51,7 @@ export function Modal({
       role="presentation"
     >
       <div
-        className={`max-h-[90vh] w-full ${sizeClass[size]} overflow-hidden rounded-lg border border-line bg-surface shadow-[var(--shadow-float)] max-md:max-h-[min(90vh,100dvh-2rem)]`}
+        className={`max-h-[90vh] w-full ${sizeClass[size]} overflow-hidden rounded-lg border border-line bg-surface shadow-(--shadow-float) max-md:max-h-[min(90vh,100dvh-2rem)]`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
