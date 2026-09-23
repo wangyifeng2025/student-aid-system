@@ -129,6 +129,7 @@ type RecognitionListItem struct {
 	DifficultyLevel       string   `json:"difficulty_level"`
 	PerCapitaAnnualIncome float64  `json:"per_capita_annual_income"`
 	SpecialTypes          []string `json:"special_types"`
+	IsKeyGroup            bool     `json:"is_key_group"`
 	// ProofCount 低收入证明材料份数（不含签字图）。
 	ProofCount int `json:"proof_count"`
 }

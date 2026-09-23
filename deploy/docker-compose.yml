@@ -52,7 +52,7 @@ services:
       SAS_UPLOAD_ALLOWED_EXTS: ".jpg,.jpeg,.png,.pdf"
       SAS_BACKUP_DIR: /app/backups
       SAS_BACKUP_MAX_KEEP: ${SAS_BACKUP_MAX_KEEP:-20}
-      SAS_BACKUP_MAX_UPLOAD_MB: ${SAS_BACKUP_MAX_UPLOAD_MB:-1024}
+      SAS_BACKUP_MAX_UPLOAD_MB: ${SAS_BACKUP_MAX_UPLOAD_MB:-8192}
       SAS_EXPORT_PDF_FONT_PATH: ${SAS_EXPORT_PDF_FONT_PATH:-/app/assets/fonts/NotoSansSC-Regular.ttf}
       SAS_EXPORT_RECOGNITION_TEMPLATE_PATH: /app/assets/templates/recognition_application.docx
       SAS_EXPORT_GRANT_TEMPLATE_PATH: /app/assets/templates/grant_national_aid.docx

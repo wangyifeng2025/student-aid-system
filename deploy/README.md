@@ -175,7 +175,7 @@ uploads/<相对路径>      # 学生上传的证明材料等附件
 |----------|--------|------|
 | `SAS_BACKUP_DIR` | `/app/backups` | 归档存放目录 |
 | `SAS_BACKUP_MAX_KEEP` | `20` | 保留份数，超出自动删除最旧的；`0` 不限制 |
-| `SAS_BACKUP_MAX_UPLOAD_MB` | `1024` | 恢复时允许上传的归档大小上限 |
+| `SAS_BACKUP_MAX_UPLOAD_MB` | `8192` | 恢复时允许上传的归档大小上限（MB）。Nginx 对同一接口的 `client_max_body_size` 需不小于该值 |
 
 生产环境建议把备份卷换成宿主机绑定挂载，便于用 `rsync`/对象存储做异地同步：
 

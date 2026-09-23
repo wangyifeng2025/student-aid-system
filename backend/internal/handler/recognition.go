@@ -175,6 +175,7 @@ func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
 		Year:            parseIntQuery(c, "year"),
 		Keyword:         c.Query("keyword"),
 		SpecialType:     c.Query("special_type"),
+		IsKeyGroup:      parseBoolQuery(c, "is_key_group"),
 		DifficultyLevel: c.Query("difficulty_level"),
 		DeptID:          parseUintQuery(c, "dept_id"),
 		ClassID:         parseUintQuery(c, "class_id"),

@@ -670,7 +670,7 @@ export const recognitionApi = {
   exportPdf: (id: number, fallbackName = `recognition_${id}.pdf`) =>
     downloadFile(`/recognitions/${id}/export`, fallbackName),
   exportSummary: (
-    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "difficulty_level" | "status" | "ids" | "scope">,
+    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "is_key_group" | "difficulty_level" | "status" | "ids" | "scope">,
   ) =>
     downloadFile(
       `/recognitions/summary-export${buildParams({
@@ -679,6 +679,7 @@ export const recognitionApi = {
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
         special_type: filter?.special_type,
+        is_key_group: filter?.is_key_group,
         difficulty_level: filter?.difficulty_level,
         status: filter?.status,
         ids: filter?.ids?.length ? filter.ids.join(",") : undefined,
@@ -733,6 +734,7 @@ export const reviewApi = {
         status: filter?.status,
         keyword: filter?.keyword,
         special_type: filter?.special_type,
+        is_key_group: filter?.is_key_group,
         difficulty_level: filter?.difficulty_level,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,
@@ -748,6 +750,7 @@ export const reviewApi = {
         status: filter?.status,
         keyword: filter?.keyword,
         special_type: filter?.special_type,
+        is_key_group: filter?.is_key_group,
         difficulty_level: filter?.difficulty_level,
         dept_id: filter?.dept_id,
         class_id: filter?.class_id,

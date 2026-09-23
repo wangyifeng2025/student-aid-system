@@ -49,6 +49,7 @@ import type {
 const DEFAULT_PAGE_SIZE = 20;
 
 type ReviewTab = "todo" | "done" | "all";
+type KeyFilter = "" | "true" | "false";
 
 const TAB_ITEMS: {
   value: ReviewTab;
@@ -107,6 +108,7 @@ function ReviewsWorkbench() {
   const [keyword, setKeyword] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("");
   const [filterSpecialType, setFilterSpecialType] = React.useState("");
+  const [filterKey, setFilterKey] = React.useState<KeyFilter>("");
   const [filterDifficulty, setFilterDifficulty] = React.useState("");
   const [yearInput, setYearInput] = React.useState("");
   const [filterYear, setFilterYear] = React.useState("");
@@ -154,6 +156,7 @@ function ReviewsWorkbench() {
         keyword,
         filterStatus,
         filterSpecialType,
+        filterKey,
         filterDifficulty,
         filterYear,
         orgScope,
@@ -166,6 +169,7 @@ function ReviewsWorkbench() {
       keyword,
       filterStatus,
       filterSpecialType,
+      filterKey,
       filterDifficulty,
       filterYear,
       orgScope,
@@ -178,11 +182,12 @@ function ReviewsWorkbench() {
       JSON.stringify({
         keyword,
         filterSpecialType,
+        filterKey,
         filterDifficulty,
         filterYear,
         orgScope,
       }),
-    [keyword, filterSpecialType, filterDifficulty, filterYear, orgScope],
+    [keyword, filterSpecialType, filterKey, filterDifficulty, filterYear, orgScope],
   );
   const countsLoading = countsSnapshotKey !== countsFilterKey;
 
@@ -193,6 +198,7 @@ function ReviewsWorkbench() {
       keyword: keyword || undefined,
       status: filterStatus || undefined,
       special_type: filterSpecialType || undefined,
+      is_key_group: filterKey === "" ? undefined : filterKey === "true",
       difficulty_level: filterDifficulty || undefined,
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
@@ -219,6 +225,7 @@ function ReviewsWorkbench() {
     keyword,
     filterStatus,
     filterSpecialType,
+    filterKey,
     filterDifficulty,
     filterYear,
     orgScope,
@@ -232,6 +239,7 @@ function ReviewsWorkbench() {
       keyword: keyword || undefined,
       status: filterStatus || undefined,
       special_type: filterSpecialType || undefined,
+      is_key_group: filterKey === "" ? undefined : filterKey === "true",
       difficulty_level: filterDifficulty || undefined,
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
@@ -256,7 +264,7 @@ function ReviewsWorkbench() {
     return () => {
       cancelled = true;
     };
-  }, [listQueryKey, isTodo, tab, page, pageSize, keyword, filterStatus, filterSpecialType, filterDifficulty, filterYear, orgScope]);
+  }, [listQueryKey, isTodo, tab, page, pageSize, keyword, filterStatus, filterSpecialType, filterKey, filterDifficulty, filterYear, orgScope]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -265,6 +273,7 @@ function ReviewsWorkbench() {
       page_size: 1,
       keyword: keyword || undefined,
       special_type: filterSpecialType || undefined,
+      is_key_group: filterKey === "" ? undefined : filterKey === "true",
       difficulty_level: filterDifficulty || undefined,
       year: filterYear ? Number(filterYear) : undefined,
       ...orgScopeParams(orgScope),
@@ -292,7 +301,7 @@ function ReviewsWorkbench() {
     return () => {
       cancelled = true;
     };
-  }, [countsFilterKey, keyword, filterSpecialType, filterDifficulty, filterYear, orgScope]);
+  }, [countsFilterKey, keyword, filterSpecialType, filterKey, filterDifficulty, filterYear, orgScope]);
 
   const submitSearch = () => {
     setKeyword(keywordInput.trim());
@@ -317,6 +326,7 @@ function ReviewsWorkbench() {
         keyword: keyword || undefined,
         year: filterYear ? Number(filterYear) : undefined,
         special_type: filterSpecialType || undefined,
+        is_key_group: filterKey === "" ? undefined : filterKey === "true",
         difficulty_level: filterDifficulty || undefined,
         status: filterStatus || undefined,
         ids: ids.length ? ids : undefined,
@@ -444,6 +454,16 @@ function ReviewsWorkbench() {
         ),
     },
     {
+      header: "重点人群",
+      width: "96px",
+      cell: (r) =>
+        r.is_key_group ? (
+          <Badge tone="warning">重点</Badge>
+        ) : (
+          <span className="text-ink-mute">否</span>
+        ),
+    },
+    {
       header: "状态",
       width: "112px",
       cell: (r) => <StatusBadge status={r.status} />,
@@ -547,12 +567,12 @@ function ReviewsWorkbench() {
           />
           <Select
             compact
+            fitContent
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
               setPage(1);
             }}
-            className="w-24 shrink-0"
           >
             <option value="">{isTodo ? "全部待办" : "全部状态"}</option>
             {statusOptions.map((o) => (
@@ -563,12 +583,12 @@ function ReviewsWorkbench() {
           </Select>
           <Select
             compact
+            fitContent
             value={filterSpecialType}
             onChange={(e) => {
               setFilterSpecialType(e.target.value);
               setPage(1);
             }}
-            className="w-28 shrink-0"
           >
             <option value="">全部特殊群体</option>
             {SPECIAL_GROUP_OPTIONS.map((o) => (
@@ -579,12 +599,25 @@ function ReviewsWorkbench() {
           </Select>
           <Select
             compact
+            fitContent
+            value={filterKey}
+            onChange={(e) => {
+              setFilterKey(e.target.value as KeyFilter);
+              setPage(1);
+            }}
+          >
+            <option value="">全部人群</option>
+            <option value="true">仅重点人群</option>
+            <option value="false">非重点人群</option>
+          </Select>
+          <Select
+            compact
+            fitContent
             value={filterDifficulty}
             onChange={(e) => {
               setFilterDifficulty(e.target.value);
               setPage(1);
             }}
-            className="w-24 shrink-0"
           >
             <option value="">困难等级</option>
             {DIFFICULTY_OPTIONS.map((o) => (
@@ -600,7 +633,7 @@ function ReviewsWorkbench() {
             onChange={(e) => setYearInput(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
             placeholder="年度"
-            className="w-16 shrink-0"
+            className="w-20 shrink-0"
           />
           <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
             查询

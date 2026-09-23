@@ -146,6 +146,8 @@ export interface RecognitionListItem {
   difficulty_level: DifficultyLevel;
   per_capita_annual_income: number;
   special_types: string[];
+  /** 是否重点人群（学籍档案匹配标记）。 */
+  is_key_group: boolean;
   /** 低收入证明材料份数（不含签字图）。 */
   proof_count: number;
 }
@@ -175,6 +177,7 @@ export interface RecognitionFilter {
   status?: string;
   keyword?: string;
   special_type?: string;
+  is_key_group?: boolean;
   difficulty_level?: string;
   dept_id?: number;
   class_id?: number;

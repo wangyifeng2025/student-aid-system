@@ -91,12 +91,12 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
       {showDept && (
         <Select
           compact
+          fitContent
           value={value.deptId ? String(value.deptId) : ""}
           onChange={(e) => {
             const deptId = Number(e.target.value) || 0;
             onChange({ deptId, classId: 0 });
           }}
-          className="w-28 shrink-0"
         >
           <option value="">全部院系</option>
           {depts.map((d) => (
@@ -109,12 +109,12 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
       {showClass && (
         <Select
           compact
+          fitContent
           value={value.classId ? String(value.classId) : ""}
           onChange={(e) => {
             const classId = Number(e.target.value) || 0;
             onChange({ deptId: value.deptId, classId });
           }}
-          className="w-28 shrink-0"
           disabled={showDept && !value.deptId && classes.length === 0}
         >
           <option value="">全部班级</option>

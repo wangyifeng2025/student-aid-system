@@ -249,6 +249,7 @@ func (s *ReviewService) buildRecognitionListItems(items []model.RecognitionAppli
 			DifficultyLevel:       string(a.DifficultyLevel),
 			PerCapitaAnnualIncome: a.PerCapitaAnnualIncome,
 			SpecialTypes:          dto.SplitSpecialTypes(a.SpecialTypes),
+			IsKeyGroup:            stu.IsKeyGroup,
 		})
 	}
 	if err := fillRecognitionProofCounts(s.attRepo, list); err != nil {

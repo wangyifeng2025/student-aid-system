@@ -174,5 +174,5 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("backup.dir", "./backups")
 	v.SetDefault("backup.max_keep", 20)
-	v.SetDefault("backup.max_upload_mb", 1024)
+	v.SetDefault("backup.max_upload_mb", 8192)
 }

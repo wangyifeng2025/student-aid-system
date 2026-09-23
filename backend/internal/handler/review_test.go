@@ -639,3 +639,78 @@ func TestReviewWithdrawReject(t *testing.T) {
 }
 
 func ptrInt(v int) *int { return &v }
+
+func TestReviewTodoFilterByKeyGroup(t *testing.T) {
+	r, db := setupReviewRouter(t)
+	seedRecognitionDicts(db)
+
+	base := uint(time.Now().UnixNano() % 1000000)
+	classID, deptID := base+31, base+32
+
+	keyUser := seedUser(t, db, "pass123", model.RoleStudent)
+	keyStu := seedScopedStudent(t, db, keyUser.ID, classID, deptID)
+	if err := db.Model(keyStu).Update("is_key_group", true).Error; err != nil {
+		t.Fatalf("mark key group: %v", err)
+	}
+	otherUser := seedUser(t, db, "pass123", model.RoleStudent)
+	otherStu := seedScopedStudent(t, db, otherUser.ID, classID, deptID)
+
+	advisor := seedReviewer(t, db, model.RoleClassAdvisor, classID, deptID)
+	advisorToken := loginToken(t, r, advisor.Username, "pass123")
+
+	year := int(time.Now().UnixNano() % 100000)
+	keyApp := model.RecognitionApplication{
+		StudentID: keyStu.ID, Year: year,
+		Status: model.StatusPendingClass, CurrentLevel: model.LevelClass,
+	}
+	otherApp := model.RecognitionApplication{
+		StudentID: otherStu.ID, Year: year,
+		Status: model.StatusPendingClass, CurrentLevel: model.LevelClass,
+	}
+	if err := db.Create(&keyApp).Error; err != nil {
+		t.Fatalf("create key application: %v", err)
+	}
+	if err := db.Create(&otherApp).Error; err != nil {
+		t.Fatalf("create other application: %v", err)
+	}
+	keyID, otherID := keyApp.ID, otherApp.ID
+
+	list := func(query string) []dto.RecognitionListItem {
+		t.Helper()
+		w := doJSON(t, r, http.MethodGet, "/api/v1/reviews/todo?"+query, advisorToken, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("todo status %d, body %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data dto.PageResult[dto.RecognitionListItem] `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode todo: %v", err)
+		}
+		return resp.Data.Items
+	}
+	idsOf := func(items []dto.RecognitionListItem) map[uint]bool {
+		out := make(map[uint]bool, len(items))
+		for _, item := range items {
+			out[item.ID] = item.IsKeyGroup
+		}
+		return out
+	}
+
+	all := idsOf(list(""))
+	if key, ok := all[keyID]; !ok || !key {
+		t.Fatalf("unfiltered todo should include key application with is_key_group=true, got %#v", all)
+	}
+	if key, ok := all[otherID]; !ok || key {
+		t.Fatalf("unfiltered todo should include non-key application with is_key_group=false, got %#v", all)
+	}
+
+	onlyKey := idsOf(list("is_key_group=true"))
+	if v, ok := onlyKey[keyID]; len(onlyKey) != 1 || !ok || !v {
+		t.Fatalf("is_key_group=true want only %d, got %#v", keyID, onlyKey)
+	}
+	onlyOther := idsOf(list("is_key_group=false"))
+	if v, ok := onlyOther[otherID]; len(onlyOther) != 1 || !ok || v {
+		t.Fatalf("is_key_group=false want only %d as non-key, got %#v", otherID, onlyOther)
+	}
+}

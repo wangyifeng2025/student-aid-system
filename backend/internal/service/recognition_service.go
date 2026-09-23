@@ -91,6 +91,7 @@ func (s *RecognitionService) List(actor rbac.Actor, f repository.RecognitionFilt
 			DifficultyLevel:       string(a.DifficultyLevel),
 			PerCapitaAnnualIncome: a.PerCapitaAnnualIncome,
 			SpecialTypes:          dto.SplitSpecialTypes(a.SpecialTypes),
+			IsKeyGroup:            stu.IsKeyGroup,
 		})
 	}
 	return &dto.PageResult[dto.RecognitionListItem]{

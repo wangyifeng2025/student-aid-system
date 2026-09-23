@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type ModalSize = "md" | "lg" | "xl";
@@ -42,7 +43,7 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  const dialog = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(15, 23, 42, 0.45)" }}
@@ -80,4 +81,8 @@ export function Modal({
       </div>
     </div>
   );
+
+  // 钉住列使用 transform，会把内部 fixed 弹层困在单元格里并被表格裁切。
+  if (typeof document === "undefined") return dialog;
+  return createPortal(dialog, document.body);
 }
