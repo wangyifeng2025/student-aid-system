@@ -614,6 +614,19 @@ export const exportApi = {
       })}`,
       "students_export.xlsx",
     ),
+  specialGroups: (
+    filter?: Pick<SpecialGroupFilter, "keyword" | "type" | "year">,
+    ids?: number[],
+  ) =>
+    downloadFile(
+      `/export/special-groups${buildParams({
+        keyword: filter?.keyword,
+        type: filter?.type,
+        year: filter?.year,
+        ids: ids && ids.length ? idsQuery(ids) : undefined,
+      })}`,
+      "special_groups_export.xlsx",
+    ),
   advisors: (
     filter?: { keyword?: string; dept_id?: number },
     ids?: number[],

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Eye, Download } from "lucide-react";
 import { grantReviewApi, grantApi, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -67,10 +67,11 @@ export default function GrantReviewsPage() {
 }
 
 function GrantReviewsWorkbench() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const role = useAuthStore((s) => s.user?.role);
-  const tab = parseTab(searchParams.get("tab"));
+  const [tab, setTabState] = React.useState<ReviewTab>(() =>
+    parseTab(searchParams.get("tab")),
+  );
   const isTodo = tab === "todo";
 
   const [list, setList] = React.useState<GrantListItem[]>([]);
@@ -96,7 +97,15 @@ function GrantReviewsWorkbench() {
   const statusOptions = isTodo ? grantTodoStatusOptionsForRole(role) : GRANT_STATUS_OPTIONS;
 
   const setTab = (next: ReviewTab) => {
-    router.replace(`/grant-reviews?tab=${next}`);
+    setTabState(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", next);
+    const current = window.history.state;
+    window.history.replaceState(
+      current?.__NA ? current : { ...current, __NA: true },
+      "",
+      `/grant-reviews?${params.toString()}`,
+    );
     setPage(1);
     setFilterStatus("");
   };

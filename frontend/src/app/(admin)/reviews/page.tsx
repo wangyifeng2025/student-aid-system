@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Eye, Check, Undo2, Download } from "lucide-react";
 import { reviewApi, recognitionApi, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -91,10 +91,13 @@ export default function ReviewsPage() {
 }
 
 function ReviewsWorkbench() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const role = useAuthStore((s) => s.user?.role);
-  const tab = parseTab(searchParams.get("tab"));
+  // 刷新后 router.replace 往往不更新 useSearchParams，页签会停在原值。
+  // 选中项以本地状态为准，地址栏只作同步。
+  const [tab, setTabState] = React.useState<ReviewTab>(() =>
+    parseTab(searchParams.get("tab")),
+  );
   const isTodo = tab === "todo";
 
   const [list, setList] = React.useState<RecognitionListItem[]>([]);
@@ -140,7 +143,16 @@ function ReviewsWorkbench() {
   );
 
   const setTab = (next: ReviewTab) => {
-    router.replace(`/reviews?tab=${next}`);
+    setTabState(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", next);
+    // 带上现有 history.state（含 __NA），只改地址栏，避免被路由当成整页跳转。
+    const current = window.history.state;
+    window.history.replaceState(
+      current?.__NA ? current : { ...current, __NA: true },
+      "",
+      `/reviews?${params.toString()}`,
+    );
     setPage(1);
     setFilterStatus("");
     setSelected(new Set());

@@ -129,6 +129,9 @@ type SpecialGroupResponse struct {
 	Source    string `json:"source"`
 	Batch     string `json:"batch"`
 	Year      int    `json:"year"`
+	// 按学号或身份证匹配到的学籍；未匹配时为空。
+	MajorName string `json:"major_name"`
+	ClassName string `json:"class_name"`
 }
 
 func ToSpecialGroupResponse(s *model.SpecialGroup) SpecialGroupResponse {

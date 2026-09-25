@@ -78,6 +78,10 @@ export interface SpecialGroup {
   source: string;
   batch: string;
   year: number;
+  /** 按学号或身份证匹配到的专业；未匹配时为空。 */
+  major_name?: string;
+  /** 按学号或身份证匹配到的班级；未匹配时为空。 */
+  class_name?: string;
 }
 
 export interface SpecialGroupInput {

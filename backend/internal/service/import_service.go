@@ -672,6 +672,42 @@ func (s *ImportService) ExportStudents(f repository.StudentFilter, actor rbac.Ac
 	return writeXlsx(studentColumns, rows, "students_export.xlsx")
 }
 
+// specialGroupExportColumns 前 7 列与导入模板一致，后面补充类型名称和匹配到的学籍。
+var specialGroupExportColumns = []string{
+	"学号", "身份证号", "姓名", "类型(编码)", "来源", "批次", "年度", "类型", "专业", "班级",
+}
+
+// ExportSpecialGroups 导出重点人群名单（支持列表同款筛选与勾选，不分页）。
+func (s *ImportService) ExportSpecialGroups(f repository.SpecialGroupFilter) ([]byte, string, error) {
+	f.Page = 1
+	f.PageSize = 0
+	res, err := s.sg.List(f)
+	if err != nil {
+		return nil, "", err
+	}
+	typeLabels, err := s.buildDictCodeToLabel("special_group_type")
+	if err != nil {
+		return nil, "", err
+	}
+	rows := make([][]any, 0, len(res.Items))
+	for i := range res.Items {
+		sg := res.Items[i]
+		rows = append(rows, []any{
+			sg.StudentNo,
+			sg.IDCard,
+			sg.Name,
+			sg.Type,
+			sg.Source,
+			sg.Batch,
+			sg.Year,
+			labelOrCode(typeLabels, sg.Type),
+			sg.MajorName,
+			sg.ClassName,
+		})
+	}
+	return writeXlsx(specialGroupExportColumns, rows, "special_groups_export.xlsx")
+}
+
 // labelOrCode 字典 code -> label，未命中时回退原值，避免丢失数据。
 func labelOrCode(m map[string]string, code string) string {
 	code = strings.TrimSpace(code)

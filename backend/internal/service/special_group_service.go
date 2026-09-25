@@ -15,12 +15,14 @@ import (
 type SpecialGroupService struct {
 	repo    *repository.SpecialGroupRepository
 	stuRepo *repository.StudentRepository
+	orgRepo *repository.OrgRepository
 }
 
 func NewSpecialGroupService(db *gorm.DB) *SpecialGroupService {
 	return &SpecialGroupService{
 		repo:    repository.NewSpecialGroupRepository(db),
 		stuRepo: repository.NewStudentRepository(db),
+		orgRepo: repository.NewOrgRepository(db),
 	}
 }
 
@@ -29,8 +31,12 @@ func (s *SpecialGroupService) List(f repository.SpecialGroupFilter) (*dto.PageRe
 	if err != nil {
 		return nil, err
 	}
+	out := dto.ToSpecialGroupResponses(items)
+	if err := s.attachOrg(items, out); err != nil {
+		return nil, err
+	}
 	return &dto.PageResult[dto.SpecialGroupResponse]{
-		Items:    dto.ToSpecialGroupResponses(items),
+		Items:    out,
 		Total:    total,
 		Page:     f.Page,
 		PageSize: f.PageSize,
@@ -103,6 +109,77 @@ func (s *SpecialGroupService) Delete(id uint) error {
 		return err
 	}
 	return s.recompute(sg.StudentNo, sg.IDCard)
+}
+
+// attachOrg 用学号或身份证匹配学籍，回填专业名与班级名。对不上的记录留空。
+func (s *SpecialGroupService) attachOrg(items []model.SpecialGroup, out []dto.SpecialGroupResponse) error {
+	if len(items) == 0 {
+		return nil
+	}
+	nos := make([]string, 0, len(items))
+	cards := make([]string, 0, len(items))
+	seenNo := map[string]struct{}{}
+	seenCard := map[string]struct{}{}
+	for i := range items {
+		if no := strings.TrimSpace(items[i].StudentNo); no != "" {
+			if _, ok := seenNo[no]; !ok {
+				seenNo[no] = struct{}{}
+				nos = append(nos, no)
+			}
+		}
+		if card := strings.TrimSpace(items[i].IDCard); card != "" {
+			if _, ok := seenCard[card]; !ok {
+				seenCard[card] = struct{}{}
+				cards = append(cards, card)
+			}
+		}
+	}
+	students, err := s.stuRepo.FindByIdentities(nos, cards)
+	if err != nil {
+		return err
+	}
+	byNo := make(map[string]model.Student, len(students))
+	byCard := make(map[string]model.Student, len(students))
+	for i := range students {
+		stu := students[i]
+		if stu.StudentNo != "" {
+			if _, ok := byNo[stu.StudentNo]; !ok {
+				byNo[stu.StudentNo] = stu
+			}
+		}
+		if stu.IDCard != "" {
+			if _, ok := byCard[stu.IDCard]; !ok {
+				byCard[stu.IDCard] = stu
+			}
+		}
+	}
+	_, majorNames, classNames, err := buildOrgNameMaps(s.orgRepo)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		stu, ok := matchSpecialGroupStudent(items[i], byNo, byCard)
+		if !ok {
+			continue
+		}
+		out[i].MajorName = majorNames[stu.MajorID]
+		out[i].ClassName = classNames[stu.ClassID]
+	}
+	return nil
+}
+
+func matchSpecialGroupStudent(sg model.SpecialGroup, byNo, byCard map[string]model.Student) (model.Student, bool) {
+	if no := strings.TrimSpace(sg.StudentNo); no != "" {
+		if stu, ok := byNo[no]; ok {
+			return stu, true
+		}
+	}
+	if card := strings.TrimSpace(sg.IDCard); card != "" {
+		if stu, ok := byCard[card]; ok {
+			return stu, true
+		}
+	}
+	return model.Student{}, false
 }
 
 // recompute 依据名单现状重算指定身份学生的 is_key_group。

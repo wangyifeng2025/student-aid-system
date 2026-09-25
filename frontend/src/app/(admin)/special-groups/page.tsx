@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Plus, Upload } from "lucide-react";
-import { specialGroupApi, dictApi, ApiError } from "@/lib/api";
+import { specialGroupApi, dictApi, exportApi, ApiError } from "@/lib/api";
 import type { SpecialGroup, SpecialGroupInput } from "@/types/student";
 import type { DictItem } from "@/types/dict";
 import { useAuthStore } from "@/store/auth";
@@ -15,12 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
-import { DataTable, type Column } from "@/components/base-data/data-table";
+import { DataTable, CellText, type Column } from "@/components/base-data/data-table";
 import { RowActions } from "@/components/base-data/row-actions";
 import { Pagination } from "@/components/base-data/pagination";
 import { BatchDeleteButton, checkboxColumn } from "@/components/base-data/batch-delete-button";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { ImportDialog } from "@/components/student/import-dialog";
+import { ExportButtons, type ExportScope } from "@/components/base-data/export-menu";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -50,6 +51,7 @@ export default function SpecialGroupsPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<SpecialGroup | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   const { selected, toggleRow, toggleAll, allSelected, clearSelection } = useRowSelection(list, (s) => s.id);
 
@@ -188,12 +190,50 @@ export default function SpecialGroupsPage() {
     }
   };
 
+  const handleExport = async (scope: ExportScope) => {
+    if (scope === "selected" && selected.size === 0) {
+      toast.info("请先勾选要导出的名单");
+      return;
+    }
+    setExporting(true);
+    try {
+      if (scope === "all") {
+        await exportApi.specialGroups();
+      } else if (scope === "filtered") {
+        await exportApi.specialGroups({
+          keyword: keyword || undefined,
+          type: filterType || undefined,
+          year: filterYear ? Number(filterYear) : undefined,
+        });
+      } else {
+        await exportApi.specialGroups(undefined, Array.from(selected));
+      }
+      toast.success("重点人群名单已导出");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const hasFilter = Boolean(keyword || filterType || filterYear);
+
   const columns: Column<SpecialGroup>[] = [
     ...(canWrite
       ? [checkboxColumn<SpecialGroup>(selected, allSelected, toggleAll, toggleRow, (s) => s.id, (s) => s.name || s.student_no || String(s.id))]
       : []),
     { header: "姓名", width: "100px", cell: (s) => <span className="text-ink">{s.name || "—"}</span> },
     { header: "学号", cell: (s) => <span className="font-mono">{s.student_no || "—"}</span> },
+    {
+      header: "专业",
+      width: "160px",
+      cell: (s) => <CellText>{s.major_name || "—"}</CellText>,
+    },
+    {
+      header: "班级",
+      width: "200px",
+      cell: (s) => <CellText>{s.class_name || "—"}</CellText>,
+    },
     { header: "身份证号", cell: (s) => <span className="font-mono text-ink-soft">{s.id_card || "—"}</span> },
     { header: "类型", cell: (s) => <Badge tone="brand">{typeLabel(s.type)}</Badge> },
     { header: "来源", width: "120px", cell: (s) => s.source || "—" },
@@ -253,6 +293,12 @@ export default function SpecialGroupsPage() {
               entityLabel="名单记录"
               canWrite={canWrite}
               hint={`确定删除选中的 ${selected.size} 条名单记录吗？删除后将重算关联学生的重点人群标记，此操作不可撤销。`}
+            />
+            <ExportButtons
+              onExport={handleExport}
+              exporting={exporting}
+              selectedCount={selected.size}
+              hasFilter={hasFilter}
             />
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload size={14} />

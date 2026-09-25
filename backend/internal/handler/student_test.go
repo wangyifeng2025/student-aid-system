@@ -280,6 +280,45 @@ func TestSpecialGroupAutoMatch(t *testing.T) {
 	if !resp.Data.IsKeyGroup {
 		t.Fatalf("expected is_key_group=true after matching special group")
 	}
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/special-groups?keyword="+studentNo, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list special groups status %d, body %s", w.Code, w.Body.String())
+	}
+	var listed struct {
+		Data dto.PageResult[dto.SpecialGroupResponse] `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode special groups: %v", err)
+	}
+	if len(listed.Data.Items) == 0 {
+		t.Fatal("expected special group in list")
+	}
+	got := listed.Data.Items[0]
+	if got.MajorName != major.Name || got.ClassName != class.Name {
+		t.Fatalf("org names want major %q class %q, got major %q class %q", major.Name, class.Name, got.MajorName, got.ClassName)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/export/special-groups?keyword="+studentNo, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("export special groups status %d, body %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != xlsxContentType {
+		t.Fatalf("export content-type want %s, got %s", xlsxContentType, ct)
+	}
+	xf, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open exported xlsx: %v", err)
+	}
+	defer xf.Close()
+	majorCell, _ := xf.GetCellValue("Sheet1", "I2")
+	classCell, _ := xf.GetCellValue("Sheet1", "J2")
+	if majorCell != major.Name || classCell != class.Name {
+		t.Fatalf("export org want major %q class %q, got major %q class %q", major.Name, class.Name, majorCell, classCell)
+	}
 }
 
 func TestImportStudentsRestoresDeleted(t *testing.T) {

@@ -19,6 +19,7 @@ type SpecialGroupFilter struct {
 	Type     string
 	Year     int
 	Keyword  string // 姓名/学号/身份证模糊匹配
+	IDs      []uint // 按记录 ID 限定（导出勾选）
 	Page     int
 	PageSize int
 }
@@ -34,6 +35,9 @@ func (r *SpecialGroupRepository) query(f SpecialGroupFilter) *gorm.DB {
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		q = q.Where("name LIKE ? OR student_no LIKE ? OR id_card LIKE ?", kw, kw, kw)
+	}
+	if len(f.IDs) > 0 {
+		q = q.Where("id IN ?", f.IDs)
 	}
 	return q
 }

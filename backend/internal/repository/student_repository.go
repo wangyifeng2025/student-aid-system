@@ -145,6 +145,28 @@ func (r *StudentRepository) FindStudentUnscoped(id uint) (*model.Student, error)
 	return &s, nil
 }
 
+// FindByIdentities 按学号或身份证批量查找在籍学生，供重点人群名单回填专业、班级。
+// 空切片不参与条件，避免 IN () 误匹配。
+func (r *StudentRepository) FindByIdentities(studentNos, idCards []string) ([]model.Student, error) {
+	if len(studentNos) == 0 && len(idCards) == 0 {
+		return nil, nil
+	}
+	q := r.db.Model(&model.Student{})
+	switch {
+	case len(studentNos) > 0 && len(idCards) > 0:
+		q = q.Where("student_no IN ? OR id_card IN ?", studentNos, idCards)
+	case len(studentNos) > 0:
+		q = q.Where("student_no IN ?", studentNos)
+	default:
+		q = q.Where("id_card IN ?", idCards)
+	}
+	var items []model.Student
+	if err := q.Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *StudentRepository) FindByStudentNo(no string) (*model.Student, error) {
 	var s model.Student
 	if err := r.db.Where("student_no = ?", no).First(&s).Error; err != nil {

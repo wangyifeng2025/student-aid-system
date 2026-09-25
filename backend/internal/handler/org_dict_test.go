@@ -130,6 +130,7 @@ func setupOrgDictRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 
 	exp := admin.Group("/export")
 	exp.GET("/students", h.ExportStudents)
+	exp.GET("/special-groups", h.ExportSpecialGroups)
 	exp.GET("/:type", h.ExportOrg)
 
 	return r, db

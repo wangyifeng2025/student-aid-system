@@ -160,6 +160,23 @@ func (h *Handler) ExportOrg(c *gin.Context) {
 	c.Data(http.StatusOK, xlsxContentType, data)
 }
 
+// ExportSpecialGroups 导出重点人群名单 Excel（支持与列表相同的筛选与勾选，不分页）。
+func (h *Handler) ExportSpecialGroups(c *gin.Context) {
+	f := repository.SpecialGroupFilter{
+		Type:    c.Query("type"),
+		Year:    parseIntQuery(c, "year"),
+		Keyword: c.Query("keyword"),
+		IDs:     parseUintListQuery(c, "ids"),
+	}
+	data, filename, err := h.Import.ExportSpecialGroups(f)
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, xlsxContentType, data)
+}
+
 // ExportStudents 导出学生信息 Excel（支持与列表相同的筛选条件，不分页）。
 func (h *Handler) ExportStudents(c *gin.Context) {
 	actor, ok := currentActor(c)

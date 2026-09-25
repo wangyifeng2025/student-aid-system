@@ -284,6 +284,7 @@ func registerImportRoutes(g *gin.RouterGroup, h *handler.Handler) {
 	exp := g.Group("/export")
 	{
 		exp.GET("/students", h.ExportStudents)
+		exp.GET("/special-groups", h.ExportSpecialGroups)
 		exp.GET("/advisors", h.ExportAdvisors)
 		exp.GET("/users", h.ExportUsers)
 		exp.GET("/:type", h.ExportOrg)
