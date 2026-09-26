@@ -34,6 +34,7 @@ import {
   todoStatusOptionsForRole,
   RECORDS_STATUS_OPTIONS,
   canExportRecognitionSummary,
+  canExportRecognitionApplications,
   SPECIAL_GROUP_OPTIONS,
   DIFFICULTY_OPTIONS,
   specialTypesText,
@@ -82,6 +83,11 @@ function parseTab(v: string | null): ReviewTab {
   return "todo";
 }
 
+function positiveParam(v: string | null): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export default function ReviewsPage() {
   return (
     <React.Suspense fallback={<LoadingState />}>
@@ -109,18 +115,38 @@ function ReviewsWorkbench() {
 
   const [keywordInput, setKeywordInput] = React.useState("");
   const [keyword, setKeyword] = React.useState("");
-  const [filterStatus, setFilterStatus] = React.useState("");
+  const [filterStatus, setFilterStatus] = React.useState(
+    () => searchParams.get("status") ?? "",
+  );
   const [filterSpecialType, setFilterSpecialType] = React.useState("");
   const [filterKey, setFilterKey] = React.useState<KeyFilter>("");
   const [filterDifficulty, setFilterDifficulty] = React.useState("");
-  const [yearInput, setYearInput] = React.useState("");
-  const [filterYear, setFilterYear] = React.useState("");
+  const [yearInput, setYearInput] = React.useState(
+    () => searchParams.get("year") ?? "",
+  );
+  const [filterYear, setFilterYear] = React.useState(
+    () => searchParams.get("year") ?? "",
+  );
   const [orgScope, setOrgScope] = React.useState<OrgScopeValue>({
-    deptId: 0,
-    classId: 0,
+    deptId: positiveParam(searchParams.get("dept_id")),
+    classId: positiveParam(searchParams.get("class_id")),
   });
   const [exportingSummary, setExportingSummary] = React.useState(false);
+  const [exportingApplications, setExportingApplications] = React.useState(false);
   const canExportSummary = canExportRecognitionSummary(role);
+  const canExportApplications = canExportRecognitionApplications(role);
+  const applicationExportFiltered =
+    tab !== "all" ||
+    Boolean(
+      keyword ||
+        filterYear ||
+        filterStatus ||
+        filterSpecialType ||
+        filterKey ||
+        filterDifficulty ||
+        orgScope.deptId ||
+        orgScope.classId,
+    );
 
   const [tabCounts, setTabCounts] = React.useState<Record<ReviewTab, number>>({
     todo: 0,
@@ -356,6 +382,33 @@ function ReviewsWorkbench() {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     } finally {
       setExportingSummary(false);
+    }
+  };
+
+  const handleExportApplications = async () => {
+    const ids = Array.from(selected);
+    setExportingApplications(true);
+    try {
+      await recognitionApi.exportApplications({
+        keyword: keyword || undefined,
+        year: filterYear ? Number(filterYear) : undefined,
+        special_type: filterSpecialType || undefined,
+        is_key_group: filterKey === "" ? undefined : filterKey === "true",
+        difficulty_level: filterDifficulty || undefined,
+        status: ids.length ? undefined : filterStatus || undefined,
+        ids: ids.length ? ids : undefined,
+        scope: ids.length ? undefined : tab,
+        ...orgScopeParams(orgScope),
+      });
+      toast.success(
+        ids.length
+          ? `已导出选中的 ${ids.length} 份申请`
+          : "筛选结果已导出",
+      );
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "导出失败");
+    } finally {
+      setExportingApplications(false);
     }
   };
 
@@ -651,31 +704,56 @@ function ReviewsWorkbench() {
             查询
           </Button>
         </ToolbarFilters>
-        {canExportSummary && (
+        {(canExportSummary || canExportApplications) && (
           <ToolbarActions>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={exportingSummary}
-              onClick={() => void handleExportSummary()}
-              title={
-                selected.size > 0
-                  ? "导出勾选的记录"
-                  : isTodo
-                    ? "导出当前筛选下本级待审申请"
-                    : "导出当前筛选范围内已认定通过的学生汇总表"
-              }
-            >
-              <Download size={14} />
-              {exportingSummary
-                ? "导出中…"
-                : selected.size > 0
-                  ? `导出已选（${selected.size}）`
-                  : isTodo
-                    ? "导出本级待审"
-                    : "导出已通过"}
-            </Button>
+            {canExportSummary && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={exportingSummary}
+                onClick={() => void handleExportSummary()}
+                title={
+                  selected.size > 0
+                    ? "导出勾选的记录"
+                    : isTodo
+                      ? "导出当前筛选下本级待审申请"
+                      : "导出当前筛选范围内已认定通过的学生汇总表"
+                }
+              >
+                <Download size={14} />
+                {exportingSummary
+                  ? "导出中…"
+                  : selected.size > 0
+                    ? `导出已选（${selected.size}）`
+                    : isTodo
+                      ? "导出本级待审"
+                      : "导出已通过"}
+              </Button>
+            )}
+            {canExportApplications && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={exportingApplications}
+                onClick={() => void handleExportApplications()}
+                title={
+                  selected.size > 0
+                    ? "导出勾选学生的全部申请字段、家庭成员和评审记录"
+                    : "导出当前页签和筛选条件下的申请明细（不含草稿，含全部页）"
+                }
+              >
+                <Download size={14} />
+                {exportingApplications
+                  ? "导出中…"
+                  : selected.size > 0
+                    ? `导出已选申请（${selected.size}）`
+                    : applicationExportFiltered
+                      ? "导出筛选"
+                      : "导出全部申请"}
+              </Button>
+            )}
           </ToolbarActions>
         )}
       </Toolbar>
@@ -712,6 +790,17 @@ function ReviewsWorkbench() {
               >
                 <Download size={14} />
                 {exportingSummary ? "导出中…" : "导出已选"}
+              </Button>
+            )}
+            {canExportApplications && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exportingApplications}
+                onClick={() => void handleExportApplications()}
+              >
+                <Download size={14} />
+                {exportingApplications ? "导出中…" : "导出已选申请"}
               </Button>
             )}
             <Button

@@ -313,6 +313,8 @@ export function login(payload: LoginRequest): Promise<TokenResponse> {
 export const dashboardApi = {
   overview: (year?: number) =>
     apiFetch<DashboardOverview>(`/dashboard${buildParams({ year })}`),
+  exportReviewProgress: (year?: number) =>
+    downloadFile(`/dashboard/review-progress-export${buildParams({ year })}`, "review_progress.xlsx"),
 };
 
 // ===== 组织机构 · 院系 =====
@@ -699,6 +701,26 @@ export const recognitionApi = {
         scope: filter?.scope,
       })}`,
       "recognition_summary.xlsx",
+    ),
+  exportApplications: (
+    filter?: Pick<RecognitionFilter, "year" | "keyword" | "dept_id" | "class_id" | "special_type" | "is_key_group" | "difficulty_level" | "status" | "ids"> & {
+      scope?: "todo" | "done" | "all";
+    },
+  ) =>
+    downloadFile(
+      `/recognitions/applications-export${buildParams({
+        year: filter?.year,
+        keyword: filter?.keyword,
+        dept_id: filter?.dept_id,
+        class_id: filter?.class_id,
+        special_type: filter?.special_type,
+        is_key_group: filter?.is_key_group,
+        difficulty_level: filter?.difficulty_level,
+        status: filter?.status,
+        ids: filter?.ids?.length ? filter.ids.join(",") : undefined,
+        scope: filter?.scope,
+      })}`,
+      "college_applications.xlsx",
     ),
   // 附件
   listAttachments: (id: number) =>

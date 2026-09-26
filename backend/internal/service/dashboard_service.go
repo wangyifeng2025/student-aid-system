@@ -22,6 +22,7 @@ type DashboardService struct {
 	grantRev *GrantReviewService
 	orgRepo  *repository.OrgRepository
 	stuRepo  *repository.StudentRepository
+	recRepo  *repository.RecognitionRepository
 }
 
 func NewDashboardService(db *gorm.DB) *DashboardService {
@@ -32,6 +33,7 @@ func NewDashboardService(db *gorm.DB) *DashboardService {
 		grantRev: NewGrantReviewService(db),
 		orgRepo:  repository.NewOrgRepository(db),
 		stuRepo:  repository.NewStudentRepository(db),
+		recRepo:  repository.NewRecognitionRepository(db),
 	}
 }
 
@@ -104,7 +106,18 @@ func (s *DashboardService) Overview(actor rbac.Actor, year int) (*dto.DashboardO
 	if actor.Role == model.RoleStudent {
 		return s.fillStudent(actor, year, hint, recPage, approvedPage, grantPage, out)
 	}
-	return s.fillReviewer(actor, recFilter, grantFilter, hint, recPage, approvedPage, out)
+	out, err = s.fillReviewer(actor, recFilter, grantFilter, hint, recPage, approvedPage, out)
+	if err != nil {
+		return nil, err
+	}
+	if actor.Role == model.RoleAidCenter || actor.Role == model.RoleAdmin {
+		progress, err := s.reviewProgress(year)
+		if err != nil {
+			return nil, err
+		}
+		out.ReviewProgress = progress
+	}
+	return out, nil
 }
 
 // applyAffiliation 解析当前用户所属院系/班级名称（学生取学籍，其他角色取账号关联）。

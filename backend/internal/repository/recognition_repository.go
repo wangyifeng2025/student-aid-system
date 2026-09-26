@@ -308,6 +308,58 @@ func (r *RecognitionRepository) Delete(id uint) error {
 	})
 }
 
+// RecognitionOrgStatusCount 按学生院系、班级和申请状态汇总的条数。
+type RecognitionOrgStatusCount struct {
+	DeptID  uint
+	ClassID uint
+	Status  string
+	Count   int64
+}
+
+// CountPendingByOrg 统计已提交且仍在审核中的认定申请，按院系、班级、状态分组。
+// 含待班级、待教学系、待院级，以及历史待院级（pending_final）。不含草稿、已通过、已退回。
+func (r *RecognitionRepository) CountPendingByOrg(year int) ([]RecognitionOrgStatusCount, error) {
+	q := r.db.Model(&model.RecognitionApplication{}).
+		Select("students.dept_id AS dept_id, students.class_id AS class_id, recognition_applications.status AS status, COUNT(*) AS count").
+		Joins("JOIN students ON students.id = recognition_applications.student_id AND students.deleted_at IS NULL").
+		Where("recognition_applications.status IN ?", []string{
+			string(model.StatusPendingClass),
+			string(model.StatusPendingDept),
+			string(model.StatusPendingCollege),
+			string(model.StatusPendingFinal),
+		})
+	if year > 0 {
+		q = q.Where("recognition_applications.year = ?", year)
+	}
+	var rows []RecognitionOrgStatusCount
+	err := q.Group("students.dept_id, students.class_id, recognition_applications.status").Scan(&rows).Error
+	return rows, err
+}
+
+// ListFamilyMembers 按申请 ID 批量读取家庭成员，按申请、成员 ID 升序。
+func (r *RecognitionRepository) ListFamilyMembers(applicationIDs []uint) ([]model.FamilyMember, error) {
+	if len(applicationIDs) == 0 {
+		return nil, nil
+	}
+	var rows []model.FamilyMember
+	err := r.db.Where("application_id IN ?", applicationIDs).
+		Order("application_id ASC, id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+// ListReviewRecords 按申请 ID 批量读取评审记录，按申请、记录 ID 升序。
+func (r *RecognitionRepository) ListReviewRecords(applicationIDs []uint) ([]model.ReviewRecord, error) {
+	if len(applicationIDs) == 0 {
+		return nil, nil
+	}
+	var rows []model.ReviewRecord
+	err := r.db.Where("application_id IN ?", applicationIDs).
+		Order("application_id ASC, id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 // UpdateStatusFields 仅更新流程相关字段（提交/退回等）。
 func (r *RecognitionRepository) UpdateStatusFields(a *model.RecognitionApplication) error {
 	return r.db.Model(a).Select(

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/wangyifeng2025/student-aid-system/pkg/response"
 )
@@ -17,4 +19,19 @@ func (h *Handler) DashboardOverview(c *gin.Context) {
 		return
 	}
 	response.OK(c, res)
+}
+
+// ExportDashboardReviewProgress 导出各系、各班认定待审人数（资助中心与管理员）。
+func (h *Handler) ExportDashboardReviewProgress(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	data, filename, asciiName, err := h.Dashboard.ExportReviewProgress(actor, parseIntQuery(c, "year"))
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", attachmentDisposition(asciiName, filename))
+	c.Data(http.StatusOK, xlsxContentType, data)
 }

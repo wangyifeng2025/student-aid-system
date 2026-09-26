@@ -190,3 +190,29 @@ func (h *Handler) ExportRecognitionSummary(c *gin.Context) {
 	c.Header("Content-Disposition", attachmentDisposition(asciiName, filename))
 	c.Data(http.StatusOK, xlsxContentType, data)
 }
+
+// ExportRecognitionApplications 导出院级数据范围内已提交认定申请的完整数据（不含草稿）。
+func (h *Handler) ExportRecognitionApplications(c *gin.Context) {
+	actor, ok := currentActor(c)
+	if !ok {
+		return
+	}
+	f := repository.RecognitionFilter{
+		Year:            parseIntQuery(c, "year"),
+		Keyword:         c.Query("keyword"),
+		SpecialType:     c.Query("special_type"),
+		IsKeyGroup:      parseBoolQuery(c, "is_key_group"),
+		DifficultyLevel: c.Query("difficulty_level"),
+		DeptID:          parseUintQuery(c, "dept_id"),
+		ClassID:         parseUintQuery(c, "class_id"),
+		Status:          c.Query("status"),
+		IDs:             parseUintListQuery(c, "ids"),
+	}
+	data, filename, asciiName, err := h.RecognitionSummary.ExportApplications(actor, f, c.Query("scope"))
+	if err != nil {
+		mapCommonError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", attachmentDisposition(asciiName, filename))
+	c.Data(http.StatusOK, xlsxContentType, data)
+}

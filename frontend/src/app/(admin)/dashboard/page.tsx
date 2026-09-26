@@ -26,6 +26,7 @@ import type { Role } from "@/types/auth";
 import type { ApplicationStatus } from "@/types/recognition";
 import type { GrantStatus } from "@/types/grant";
 import type { DashboardItem, DashboardKPI, DashboardOverview } from "@/types/dashboard";
+import { ReviewProgressCard } from "@/components/dashboard/review-progress";
 
 const cardStyle: React.CSSProperties = {
   backgroundColor: "var(--color-bg-card)",
@@ -227,6 +228,10 @@ export default function DashboardPage() {
               <KpiCard key={k.key} kpi={k} />
             ))}
           </div>
+
+          {(user?.role === "aidcenter" || user?.role === "admin") && (
+            <ReviewProgressCard year={data?.year ?? year} depts={data?.review_progress ?? []} />
+          )}
 
           <div className="mb-6 grid grid-cols-1 items-stretch gap-6 xl:grid-cols-5">
             <div className="flex min-h-80 flex-col p-5 xl:col-span-3" style={cardStyle}>

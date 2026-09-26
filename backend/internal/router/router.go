@@ -45,6 +45,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		{
 			secured.GET("/me", h.Me)
 			secured.GET("/dashboard", h.DashboardOverview)
+			secured.GET("/dashboard/review-progress-export", h.ExportDashboardReviewProgress)
 			secured.GET("/students/me", h.GetMyStudent)
 
 			authSecured := secured.Group("/auth")
@@ -223,6 +224,7 @@ func registerRecognitionRoutes(g *gin.RouterGroup, h *handler.Handler) {
 		recs.GET("", h.ListRecognitions)
 		recs.POST("", h.CreateRecognition)
 		recs.GET("/summary-export", h.ExportRecognitionSummary)
+		recs.GET("/applications-export", h.ExportRecognitionApplications)
 		recs.GET("/:id", h.GetRecognition)
 		recs.PUT("/:id", h.UpdateRecognition)
 		recs.DELETE("/:id", h.DeleteRecognition)

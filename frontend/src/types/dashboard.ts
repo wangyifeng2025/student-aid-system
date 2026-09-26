@@ -17,6 +17,25 @@ export interface DashboardItem {
   title: string;
 }
 
+export interface DashboardClassProgress {
+  class_id: number;
+  class_name: string;
+  pending_class: number;
+  pending_dept: number;
+  pending_college: number;
+  total: number;
+}
+
+export interface DashboardDeptProgress {
+  dept_id: number;
+  dept_name: string;
+  pending_class: number;
+  pending_dept: number;
+  pending_college: number;
+  total: number;
+  classes: DashboardClassProgress[];
+}
+
 export interface DashboardOverview {
   year: number;
   role: string;
@@ -27,4 +46,5 @@ export interface DashboardOverview {
   kpis: DashboardKPI[];
   todos: DashboardItem[];
   recents: DashboardItem[];
+  review_progress?: DashboardDeptProgress[];
 }

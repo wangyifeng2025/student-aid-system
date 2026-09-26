@@ -60,6 +60,7 @@ func setupRecognitionRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	recs.GET("", h.ListRecognitions)
 	recs.POST("", h.CreateRecognition)
 	recs.GET("/summary-export", h.ExportRecognitionSummary)
+	recs.GET("/applications-export", h.ExportRecognitionApplications)
 	recs.GET("/:id", h.GetRecognition)
 	recs.PUT("/:id", h.UpdateRecognition)
 	recs.DELETE("/:id", h.DeleteRecognition)
@@ -571,5 +572,225 @@ func TestListRecognitionsBySpecialType(t *testing.T) {
 	generalIDs := listIDs("difficulty_level=general")
 	if !contains(generalIDs, povertyResp.Data.ID) || contains(generalIDs, relocResp.Data.ID) {
 		t.Fatalf("difficulty_level=general want only poverty app, got %v", generalIDs)
+	}
+}
+
+func TestExportRecognitionApplications(t *testing.T) {
+	r, db := setupRecognitionRouter(t)
+	seedRecognitionDicts(db)
+
+	dept, major, class := seedStudentOrgRefs(t, db)
+	year := int(time.Now().UnixNano()%100000) + 300000
+
+	stuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	stu := seedScopedStudent(t, db, stuUser.ID, class.ID, dept.ID)
+	if err := db.Model(stu).Updates(map[string]any{
+		"name": "明细学生", "gender": "男", "nation": "han", "major_id": major.ID, "is_key_group": true,
+	}).Error; err != nil {
+		t.Fatalf("update student: %v", err)
+	}
+	app := model.RecognitionApplication{
+		StudentID:        stu.ID,
+		Year:             year,
+		Nation:           "han",
+		NativePlace:      "贵州省兴义市",
+		IDCard:           stu.IDCard,
+		Phone:            "13800002222",
+		Address:          "兴义市明细路8号",
+		HouseholdType:    model.HouseholdRural,
+		IncomeSource:     "farming",
+		SpecialTypes:     "poverty,orphan",
+		OtherInfo:        "家庭收入低",
+		Status:           model.StatusPendingCollege,
+		CurrentLevel:     model.LevelCollege,
+		DifficultyLevel:  model.DifficultySpecial,
+		CommitmentAgreed: true,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	member := model.FamilyMember{
+		ApplicationID: app.ID,
+		Name:          "父",
+		Age:           50,
+		Relation:      "father",
+		Occupation:    "farmer",
+		AnnualIncome:  12000,
+		Health:        "good",
+	}
+	if err := db.Create(&member).Error; err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	center := seedReviewer(t, db, model.RoleAidCenter, 0, 0)
+	record := model.ReviewRecord{
+		ApplicationID:   app.ID,
+		Level:           model.LevelDepartment,
+		ReviewerID:      center.ID,
+		Action:          model.ActionPass,
+		Opinion:         "同意认定",
+		DifficultyLevel: model.DifficultySpecial,
+	}
+	if err := db.Create(&record).Error; err != nil {
+		t.Fatalf("create review: %v", err)
+	}
+
+	draftUser := seedUser(t, db, "pass123", model.RoleStudent)
+	draftStu := seedScopedStudent(t, db, draftUser.ID, class.ID, dept.ID)
+	if err := db.Model(draftStu).Update("name", "草稿学生").Error; err != nil {
+		t.Fatalf("update draft student: %v", err)
+	}
+	draft := model.RecognitionApplication{
+		StudentID: draftStu.ID,
+		Year:      year,
+		Status:    model.StatusDraft,
+		Address:   "不应导出",
+	}
+	if err := db.Create(&draft).Error; err != nil {
+		t.Fatalf("create draft: %v", err)
+	}
+	deptStuUser := seedUser(t, db, "pass123", model.RoleStudent)
+	deptStu := seedScopedStudent(t, db, deptStuUser.ID, class.ID, dept.ID)
+	if err := db.Model(deptStu).Update("name", "系级学生").Error; err != nil {
+		t.Fatalf("update dept student: %v", err)
+	}
+	if err := db.Create(&model.RecognitionApplication{
+		StudentID: deptStu.ID,
+		Year:      year,
+		Status:    model.StatusPendingDept,
+	}).Error; err != nil {
+		t.Fatalf("create dept app: %v", err)
+	}
+
+	deptUser := seedReviewer(t, db, model.RoleDepartment, 0, dept.ID)
+	deptToken := loginToken(t, r, deptUser.Username, "pass123")
+	w := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/v1/recognitions/applications-export?year=%d", year), deptToken, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("department export expect 403, got %d body %s", w.Code, w.Body.String())
+	}
+
+	token := loginToken(t, r, center.Username, "pass123")
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/recognitions/applications-export?year=%d", year), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("aidcenter export status %d, body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Header().Get("Content-Disposition"), url.PathEscape("学院困难认定申请明细.xlsx")) {
+		t.Fatalf("filename missing, disposition %s", w.Header().Get("Content-Disposition"))
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer f.Close()
+
+	apps, err := f.GetRows("申请明细")
+	if err != nil {
+		t.Fatalf("申请明细: %v", err)
+	}
+	var found bool
+	for _, row := range apps {
+		if len(row) > 1 && row[1] == "草稿学生" {
+			t.Fatal("draft application must not be exported")
+		}
+		if len(row) > 16 && row[1] == "明细学生" {
+			found = true
+			if row[8] != "待院级评审" || row[10] != "特别困难" || row[11] != "是" || row[16] != "兴义市明细路8号" {
+				t.Fatalf("application row = %#v", row)
+			}
+			if row[23] != "脱贫家庭学生、孤儿" {
+				t.Fatalf("special types = %q", row[23])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("approved-or-pending student row missing")
+	}
+
+	members, err := f.GetRows("家庭成员")
+	if err != nil {
+		t.Fatalf("家庭成员: %v", err)
+	}
+	var memberFound bool
+	for _, row := range members {
+		if len(row) > 3 && row[1] == "明细学生" && row[3] == "父" {
+			memberFound = true
+			if row[5] != "父亲" || row[7] != "务农" || row[9] != "良好" {
+				t.Fatalf("member row = %#v", row)
+			}
+		}
+	}
+	if !memberFound {
+		t.Fatal("family member row missing")
+	}
+
+	reviews, err := f.GetRows("评审记录")
+	if err != nil {
+		t.Fatalf("评审记录: %v", err)
+	}
+	var reviewFound bool
+	for _, row := range reviews {
+		if len(row) > 6 && row[1] == "明细学生" && row[6] == "同意认定" {
+			reviewFound = true
+			if row[3] != "教学系评审" || row[5] != "通过" || row[7] != "特别困难" {
+				t.Fatalf("review row = %#v", row)
+			}
+		}
+	}
+	if !reviewFound {
+		t.Fatal("review row missing")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/recognitions/applications-export?year=%d&scope=todo", year), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("todo export status %d, body %s", w.Code, w.Body.String())
+	}
+	todoFile, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open todo xlsx: %v", err)
+	}
+	defer todoFile.Close()
+	todoRows, err := todoFile.GetRows("申请明细")
+	if err != nil {
+		t.Fatalf("todo rows: %v", err)
+	}
+	var todoHasCollege, todoHasDept bool
+	for _, row := range todoRows {
+		if len(row) < 2 {
+			continue
+		}
+		if row[1] == "明细学生" {
+			todoHasCollege = true
+		}
+		if row[1] == "系级学生" {
+			todoHasDept = true
+		}
+	}
+	if !todoHasCollege || todoHasDept {
+		t.Fatalf("todo scope want only college pending, college=%v dept=%v", todoHasCollege, todoHasDept)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/recognitions/applications-export?year=%d&scope=all&status=pending_dept&dept_id=%d", year, dept.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("filtered export status %d, body %s", w.Code, w.Body.String())
+	}
+	filtered, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open filtered xlsx: %v", err)
+	}
+	defer filtered.Close()
+	filteredRows, err := filtered.GetRows("申请明细")
+	if err != nil {
+		t.Fatalf("filtered rows: %v", err)
+	}
+	if len(filteredRows) != 2 || filteredRows[1][1] != "系级学生" {
+		t.Fatalf("filtered rows = %#v", filteredRows)
 	}
 }

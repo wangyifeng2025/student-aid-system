@@ -212,6 +212,11 @@ export function canExportRecognitionSummary(role: Role | undefined): boolean {
   return role === "classadvisor" || role === "department" || role === "aidcenter" || role === "admin";
 }
 
+/** 资助中心（院级）与管理员可导出学生全部认定申请明细。 */
+export function canExportRecognitionApplications(role: Role | undefined): boolean {
+  return role === "aidcenter" || role === "admin";
+}
+
 // 角色待办状态筛选项（与后端 todoStatusesForRole 对齐，用于待办审核页）。
 export function todoStatusOptionsForRole(role: Role | undefined): { value: ApplicationStatus; label: string }[] {
   switch (role) {
