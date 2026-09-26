@@ -7,7 +7,7 @@ import { Eye, Check, Undo2, Download } from "lucide-react";
 import { reviewApi, recognitionApi, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { FilterCombobox } from "@/components/ui/filter-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Toolbar, ToolbarActions, ToolbarFilters, ToolbarSearch } from "@/components/base-data/toolbar";
 import {
@@ -55,28 +55,19 @@ type KeyFilter = "" | "true" | "false";
 const TAB_ITEMS: {
   value: ReviewTab;
   label: string;
-  hint: string;
-  accentColor: string;
 }[] = [
-  {
-    value: "todo",
-    label: "待办",
-    hint: "轮到您本级处理的申请，可逐条审核、勾选后批量通过 / 退回，或导出本级待审 / 已选记录。",
-    accentColor: "var(--state-info)",
-  },
-  {
-    value: "done",
-    label: "已办理",
-    hint: "您本人已审核过的申请，便于查询与导出。",
-    accentColor: "var(--state-success)",
-  },
-  {
-    value: "all",
-    label: "全部",
-    hint: "数据范围内所有已提交的认定申请（不含草稿）。院系 / 中心可在此查看下级尚未审核的申请。",
-    accentColor: "var(--color-primary)",
-  },
+  { value: "todo", label: "待办" },
+  { value: "done", label: "已办理" },
+  { value: "all", label: "全部" },
 ];
+
+function CountNum({ value, loading }: { value: number; loading: boolean }) {
+  return (
+    <strong className="mx-0.5 text-base font-semibold tabular-nums text-brand">
+      {loading ? "—" : value.toLocaleString()}
+    </strong>
+  );
+}
 
 function parseTab(v: string | null): ReviewTab {
   if (v === "todo" || v === "done" || v === "all") return v;
@@ -152,6 +143,14 @@ function ReviewsWorkbench() {
     todo: 0,
     done: 0,
     all: 0,
+  });
+  const [statusCounts, setStatusCounts] = React.useState({
+    total: 0,
+    pendingClass: 0,
+    pendingDept: 0,
+    pendingCollege: 0,
+    rejected: 0,
+    approved: 0,
   });
   const [countsSnapshotKey, setCountsSnapshotKey] = React.useState<string | null>(
     null,
@@ -318,20 +317,43 @@ function ReviewsWorkbench() {
     };
     void (async () => {
       try {
-        const [todoRes, doneRes, allRes] = await Promise.all([
-          reviewApi.todo(base),
-          reviewApi.records({ ...base, tab: "done" }),
-          reviewApi.records({ ...base, tab: "all" }),
-        ]);
+        const [todoRes, doneRes, allRes, classRes, deptRes, collegeRes, finalRes, rejectedRes, approvedRes] =
+          await Promise.all([
+            reviewApi.todo(base),
+            reviewApi.records({ ...base, tab: "done" }),
+            reviewApi.records({ ...base, tab: "all" }),
+            reviewApi.records({ ...base, tab: "all", status: "pending_class" }),
+            reviewApi.records({ ...base, tab: "all", status: "pending_dept" }),
+            reviewApi.records({ ...base, tab: "all", status: "pending_college" }),
+            reviewApi.records({ ...base, tab: "all", status: "pending_final" }),
+            reviewApi.records({ ...base, tab: "all", status: "rejected" }),
+            reviewApi.records({ ...base, tab: "all", status: "approved" }),
+          ]);
         if (cancelled) return;
         setTabCounts({
           todo: todoRes.total,
           done: doneRes.total,
           all: allRes.total,
         });
+        setStatusCounts({
+          total: allRes.total,
+          pendingClass: classRes.total,
+          pendingDept: deptRes.total,
+          pendingCollege: collegeRes.total + finalRes.total,
+          rejected: rejectedRes.total,
+          approved: approvedRes.total,
+        });
       } catch {
         if (cancelled) return;
         setTabCounts({ todo: 0, done: 0, all: 0 });
+        setStatusCounts({
+          total: 0,
+          pendingClass: 0,
+          pendingDept: 0,
+          pendingCollege: 0,
+          rejected: 0,
+          approved: 0,
+        });
       } finally {
         if (!cancelled) setCountsSnapshotKey(countsFilterKey);
       }
@@ -352,9 +374,10 @@ function ReviewsWorkbench() {
     setPage(1);
   };
 
-  const handleExportSummary = async () => {
-    const ids = Array.from(selected);
-    if (ids.length === 0 && isTodo && total === 0) {
+  const handleExportSummary = async (onlySelected = false) => {
+    const ids = onlySelected ? Array.from(selected) : [];
+    if (onlySelected && ids.length === 0) return;
+    if (!onlySelected && isTodo && total === 0) {
       toast.info("暂无本级待审记录");
       return;
     }
@@ -366,13 +389,13 @@ function ReviewsWorkbench() {
         special_type: filterSpecialType || undefined,
         is_key_group: filterKey === "" ? undefined : filterKey === "true",
         difficulty_level: filterDifficulty || undefined,
-        status: filterStatus || undefined,
+        status: onlySelected ? undefined : filterStatus || undefined,
         ids: ids.length ? ids : undefined,
-        scope: ids.length ? undefined : isTodo ? "todo" : "approved",
+        scope: onlySelected ? undefined : isTodo ? "todo" : "approved",
         ...orgScopeParams(orgScope),
       });
       toast.success(
-        ids.length
+        onlySelected
           ? `已导出选中的 ${ids.length} 条`
           : isTodo
             ? "本级待审名单已导出"
@@ -385,8 +408,9 @@ function ReviewsWorkbench() {
     }
   };
 
-  const handleExportApplications = async () => {
-    const ids = Array.from(selected);
+  const handleExportApplications = async (onlySelected = false) => {
+    const ids = onlySelected ? Array.from(selected) : [];
+    if (onlySelected && ids.length === 0) return;
     setExportingApplications(true);
     try {
       await recognitionApi.exportApplications({
@@ -395,13 +419,13 @@ function ReviewsWorkbench() {
         special_type: filterSpecialType || undefined,
         is_key_group: filterKey === "" ? undefined : filterKey === "true",
         difficulty_level: filterDifficulty || undefined,
-        status: ids.length ? undefined : filterStatus || undefined,
+        status: onlySelected ? undefined : filterStatus || undefined,
         ids: ids.length ? ids : undefined,
-        scope: ids.length ? undefined : tab,
+        scope: onlySelected ? undefined : tab,
         ...orgScopeParams(orgScope),
       });
       toast.success(
-        ids.length
+        onlySelected
           ? `已导出选中的 ${ids.length} 份申请`
           : "筛选结果已导出",
       );
@@ -481,6 +505,11 @@ function ReviewsWorkbench() {
       ),
     },
     {
+      header: "状态",
+      width: "112px",
+      cell: (r) => <StatusBadge status={r.status} />,
+    },
+    {
       header: "专业",
       width: "220px",
       cell: (r) => <CellText>{r.major_name || "—"}</CellText>,
@@ -527,11 +556,6 @@ function ReviewsWorkbench() {
         ) : (
           <span className="text-ink-mute">否</span>
         ),
-    },
-    {
-      header: "状态",
-      width: "112px",
-      cell: (r) => <StatusBadge status={r.status} />,
     },
     {
       header: "当前级别",
@@ -594,7 +618,7 @@ function ReviewsWorkbench() {
     },
   ];
 
-  const activeTabHint = TAB_ITEMS.find((t) => t.value === tab)?.hint ?? "";
+  const activeTabLabel = TAB_ITEMS.find((t) => t.value === tab)?.label ?? "";
 
   return (
     <div>
@@ -603,19 +627,54 @@ function ReviewsWorkbench() {
           value: item.value,
           label: item.label,
           count: tabCounts[item.value],
-          accentColor: item.accentColor,
         }))}
         active={tab}
         onChange={(v) => setTab(v as ReviewTab)}
         loading={countsLoading}
       />
 
-      {activeTabHint && (
-        <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>
-      )}
+      <p
+        className="mb-4 px-4 py-3 text-sm leading-7 text-ink"
+        style={{
+          backgroundColor: "var(--color-primary-subtle)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)",
+        }}
+      >
+        <span className="mr-2 font-semibold text-brand">{activeTabLabel}</span>
+        {tab === "todo" ? (
+          <>
+            当前正在处理本级待审，共
+            <CountNum value={tabCounts.todo} loading={countsLoading} />
+            条，可逐条审核、勾选后批量通过或退回。
+          </>
+        ) : tab === "done" ? (
+          <>
+            当前查看你已审核过的记录，共
+            <CountNum value={tabCounts.done} loading={countsLoading} />
+            条。
+          </>
+        ) : (
+          <>
+            当前查看全部已提交申请。提交申请总人数
+            <CountNum value={statusCounts.total} loading={countsLoading} />
+            人，其中待班级审核
+            <CountNum value={statusCounts.pendingClass} loading={countsLoading} />
+            人，系级审核
+            <CountNum value={statusCounts.pendingDept} loading={countsLoading} />
+            人，院级审核
+            <CountNum value={statusCounts.pendingCollege} loading={countsLoading} />
+            人，退回
+            <CountNum value={statusCounts.rejected} loading={countsLoading} />
+            人，通过
+            <CountNum value={statusCounts.approved} loading={countsLoading} />
+            人。
+          </>
+        )}
+      </p>
 
       <Toolbar>
-        <ToolbarFilters>
+        <ToolbarFilters className="flex-wrap overflow-visible">
           <ToolbarSearch
             value={keywordInput}
             onChange={setKeywordInput}
@@ -630,68 +689,53 @@ function ReviewsWorkbench() {
               setPage(1);
             }}
           />
-          <Select
-            compact
-            fitContent
+          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
+            查询
+          </Button>
+        </ToolbarFilters>
+        <ToolbarFilters className="flex-wrap overflow-visible">
+          <FilterCombobox
             value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
+            placeholder={isTodo ? "全部待办" : "全部状态"}
+            options={statusOptions}
+            onValueChange={(next) => {
+              setFilterStatus(next);
               setPage(1);
             }}
-          >
-            <option value="">{isTodo ? "全部待办" : "全部状态"}</option>
-            {statusOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            compact
-            fitContent
+          />
+          <FilterCombobox
             value={filterSpecialType}
-            onChange={(e) => {
-              setFilterSpecialType(e.target.value);
+            placeholder="全部特殊群体"
+            options={SPECIAL_GROUP_OPTIONS}
+            onValueChange={(next) => {
+              setFilterSpecialType(next);
               setPage(1);
             }}
-          >
-            <option value="">全部特殊群体</option>
-            {SPECIAL_GROUP_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            compact
-            fitContent
+          />
+          <FilterCombobox
             value={filterKey}
-            onChange={(e) => {
-              setFilterKey(e.target.value as KeyFilter);
+            placeholder="全部人群"
+            options={[
+              { value: "true", label: "仅重点人群" },
+              { value: "false", label: "非重点人群" },
+            ]}
+            onValueChange={(next) => {
+              setFilterKey(next as KeyFilter);
               setPage(1);
             }}
-          >
-            <option value="">全部人群</option>
-            <option value="true">仅重点人群</option>
-            <option value="false">非重点人群</option>
-          </Select>
-          <Select
-            compact
-            fitContent
+          />
+          <FilterCombobox
             value={filterDifficulty}
-            onChange={(e) => {
-              setFilterDifficulty(e.target.value);
+            placeholder="困难等级"
+            options={[
+              ...DIFFICULTY_OPTIONS,
+              { value: "none", label: "未评定" },
+            ]}
+            onValueChange={(next) => {
+              setFilterDifficulty(next);
               setPage(1);
             }}
-          >
-            <option value="">困难等级</option>
-            {DIFFICULTY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-            <option value="none">未评定</option>
-          </Select>
+          />
           <Input
             compact
             value={yearInput}
@@ -700,119 +744,105 @@ function ReviewsWorkbench() {
             placeholder="年度"
             className="w-20 shrink-0"
           />
-          <Button variant="outline" size="sm" className="shrink-0" onClick={submitSearch}>
-            查询
-          </Button>
         </ToolbarFilters>
-        {(canExportSummary || canExportApplications) && (
-          <ToolbarActions>
-            {canExportSummary && (
+        <ToolbarActions className="flex-nowrap overflow-x-auto">
+          <span className="shrink-0 text-sm text-ink">已选择 {selected.size} 条</span>
+          {isTodo && (
+            <>
               <Button
-                variant="outline"
                 size="sm"
                 className="shrink-0"
-                disabled={exportingSummary}
-                onClick={() => void handleExportSummary()}
-                title={
-                  selected.size > 0
-                    ? "导出勾选的记录"
-                    : isTodo
-                      ? "导出当前筛选下本级待审申请"
-                      : "导出当前筛选范围内已认定通过的学生汇总表"
-                }
+                disabled={selected.size === 0 || batching}
+                onClick={() => setBatchDialog("pass")}
               >
-                <Download size={14} />
-                {exportingSummary
-                  ? "导出中…"
-                  : selected.size > 0
-                    ? `导出已选（${selected.size}）`
-                    : isTodo
-                      ? "导出本级待审"
-                      : "导出已通过"}
+                <Check size={14} />
+                批量通过
               </Button>
-            )}
-            {canExportApplications && (
+              <Button
+                size="sm"
+                variant="danger"
+                className="shrink-0"
+                disabled={selected.size === 0 || batching}
+                onClick={() => setBatchDialog("reject")}
+              >
+                <Undo2 size={14} />
+                批量退回
+              </Button>
+            </>
+          )}
+          {canExportSummary && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={exportingSummary}
+              onClick={() => void handleExportSummary(false)}
+              title={
+                isTodo
+                  ? "导出当前筛选下本级待审申请"
+                  : "导出当前筛选范围内已认定通过的学生汇总表"
+              }
+            >
+              <Download size={14} />
+              {exportingSummary
+                ? "导出中…"
+                : isTodo
+                  ? "导出本级待审"
+                  : "导出已通过"}
+            </Button>
+          )}
+          {canExportApplications && (
+            <>
               <Button
                 variant="outline"
                 size="sm"
                 className="shrink-0"
                 disabled={exportingApplications}
-                onClick={() => void handleExportApplications()}
-                title={
-                  selected.size > 0
-                    ? "导出勾选学生的全部申请字段、家庭成员和评审记录"
-                    : "导出当前页签和筛选条件下的申请明细（不含草稿，含全部页）"
-                }
+                onClick={() => void handleExportApplications(false)}
+                title="导出当前页签和筛选条件下的申请明细（不含草稿，含全部页）"
               >
                 <Download size={14} />
                 {exportingApplications
                   ? "导出中…"
-                  : selected.size > 0
-                    ? `导出已选申请（${selected.size}）`
-                    : applicationExportFiltered
-                      ? "导出筛选"
-                      : "导出全部申请"}
+                  : applicationExportFiltered
+                    ? "导出筛选"
+                    : "导出全部申请"}
               </Button>
-            )}
-          </ToolbarActions>
-        )}
-      </Toolbar>
-
-      {selected.size > 0 && (
-        <div
-          className="mb-3 flex flex-wrap items-center gap-3 rounded-md px-4 py-2.5"
-          style={{ backgroundColor: "var(--color-primary-subtle)" }}
-        >
-          <span className="text-sm text-ink">已选择 {selected.size} 条</span>
-          <div className="flex items-center gap-1.5">
-            {isTodo && (
-              <>
-                <Button size="sm" onClick={() => setBatchDialog("pass")}>
-                  <Check size={14} />
-                  批量通过
-                </Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => setBatchDialog("reject")}
-                >
-                  <Undo2 size={14} />
-                  批量退回
-                </Button>
-              </>
-            )}
-            {canExportSummary && (
               <Button
                 size="sm"
                 variant="outline"
-                disabled={exportingSummary}
-                onClick={() => void handleExportSummary()}
-              >
-                <Download size={14} />
-                {exportingSummary ? "导出中…" : "导出已选"}
-              </Button>
-            )}
-            {canExportApplications && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={exportingApplications}
-                onClick={() => void handleExportApplications()}
+                className="shrink-0"
+                disabled={selected.size === 0 || exportingApplications}
+                onClick={() => void handleExportApplications(true)}
               >
                 <Download size={14} />
                 {exportingApplications ? "导出中…" : "导出已选申请"}
               </Button>
-            )}
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="shrink-0"
+            disabled={selected.size === 0}
+            onClick={() => setSelected(new Set())}
+          >
+            取消选择
+          </Button>
+          {canExportSummary && (
             <Button
               size="sm"
-              variant="ghost"
-              onClick={() => setSelected(new Set())}
+              variant="outline"
+              className="shrink-0"
+              disabled={selected.size === 0 || exportingSummary}
+              onClick={() => void handleExportSummary(true)}
             >
-              取消选择
+              <Download size={14} />
+              {exportingSummary ? "导出中…" : "导出已选的认定汇总表"}
             </Button>
-          </div>
-        </div>
-      )}
+          )}
+        </ToolbarActions>
+      </Toolbar>
 
       <DataTable
         columns={columns}

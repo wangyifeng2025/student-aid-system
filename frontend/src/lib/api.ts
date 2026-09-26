@@ -825,8 +825,27 @@ export const grantApi = {
     apiFetch<{ message: string }>(`/grants/${id}`, { method: "DELETE" }),
   submit: (id: number) =>
     apiFetch<Grant>(`/grants/${id}/submit`, { method: "POST" }),
-  exportDocx: (id: number, fallbackName = `grant_${id}.docx`) =>
+  exportPdf: (id: number, fallbackName = `grant_${id}.pdf`) =>
     downloadFile(`/grants/${id}/export`, fallbackName),
+  /** 标准证件照。接口未部署时 available 为 false，不阻断其余表单操作。 */
+  getStandardPhoto: async (
+    id: number,
+  ): Promise<{ attachment: Attachment | null; available: boolean }> => {
+    try {
+      const data = await apiFetch<Attachment | null>(`/grants/${id}/photo`);
+      return { attachment: data ?? null, available: true };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        if (e.code === -1) return { attachment: null, available: false };
+        return { attachment: null, available: true };
+      }
+      throw e;
+    }
+  },
+  uploadStandardPhoto: (id: number, file: File) =>
+    apiUpload<Attachment>(`/grants/${id}/photo`, file),
+  removeStandardPhoto: (id: number) =>
+    apiFetch<{ message: string }>(`/grants/${id}/photo`, { method: "DELETE" }),
 };
 
 export const grantReviewApi = {

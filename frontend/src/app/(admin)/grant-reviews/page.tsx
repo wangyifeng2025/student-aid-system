@@ -32,25 +32,10 @@ const DEFAULT_PAGE_SIZE = 20;
 
 type ReviewTab = "todo" | "done" | "all";
 
-const TAB_ITEMS: { value: ReviewTab; label: string; hint: string; accentColor: string }[] = [
-  {
-    value: "todo",
-    label: "待办",
-    hint: "轮到您本级处理的助学金申请，点开即可审核。",
-    accentColor: "var(--state-info)",
-  },
-  {
-    value: "done",
-    label: "已办理",
-    hint: "您本人已审核过的申请，便于查询与导出。",
-    accentColor: "var(--state-success)",
-  },
-  {
-    value: "all",
-    label: "全部",
-    hint: "数据范围内全部已提交申请（不含草稿）。院系 / 中心可在此查看下级尚未审核的申请。",
-    accentColor: "var(--color-primary)",
-  },
+const TAB_ITEMS: { value: ReviewTab; label: string }[] = [
+  { value: "todo", label: "待办" },
+  { value: "done", label: "已办理" },
+  { value: "all", label: "全部" },
 ];
 
 function parseTab(v: string | null): ReviewTab {
@@ -198,7 +183,7 @@ function GrantReviewsWorkbench() {
             <button
               type="button"
               onClick={() => {
-                void grantApi.exportDocx(r.id).catch((e) => {
+                void grantApi.exportPdf(r.id).catch((e) => {
                   toast.error(e instanceof ApiError ? e.message : "导出失败");
                 });
               }}
@@ -213,7 +198,7 @@ function GrantReviewsWorkbench() {
     },
   ];
 
-  const activeTabHint = TAB_ITEMS.find((t) => t.value === tab)?.hint ?? "";
+  const activeTabLabel = TAB_ITEMS.find((t) => t.value === tab)?.label ?? "";
 
   return (
     <div>
@@ -222,14 +207,27 @@ function GrantReviewsWorkbench() {
           value: t.value,
           label: t.label,
           count: counts[t.value],
-          accentColor: t.accentColor,
         }))}
         active={tab}
         onChange={(v) => setTab(v as ReviewTab)}
         loading={countsLoading}
       />
 
-      {activeTabHint && <p className="mb-4 text-xs text-ink-mute">{activeTabHint}</p>}
+      <p
+        className="mb-4 px-4 py-3 text-sm text-ink"
+        style={{
+          backgroundColor: "var(--color-primary-subtle)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)",
+        }}
+      >
+        <span className="mr-2 font-semibold text-brand">{activeTabLabel}</span>
+        {tab === "todo"
+          ? `当前正在处理本级待审，共 ${countsLoading ? "—" : counts.todo.toLocaleString()} 条，点开即可审核。`
+          : tab === "done"
+            ? `当前查看你已审核过的记录，共 ${countsLoading ? "—" : counts.done.toLocaleString()} 条。`
+            : `当前查看全部已提交申请，共 ${countsLoading ? "—" : counts.all.toLocaleString()} 条。`}
+      </p>
 
       <Toolbar>
         <ToolbarFilters>

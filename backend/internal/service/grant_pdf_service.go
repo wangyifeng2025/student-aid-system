@@ -1,9 +1,11 @@
 package service
 
 import (
-	"fmt"
+	"bytes"
+	"os"
 	"strings"
 
+	"github.com/go-pdf/fpdf"
 	"github.com/wangyifeng2025/student-aid-system/internal/config"
 	"github.com/wangyifeng2025/student-aid-system/internal/model"
 	"github.com/wangyifeng2025/student-aid-system/internal/rbac"
@@ -11,8 +13,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// GrantPDFService 国家助学金申请表 Word 导出（审批通过后可导出）。
-// 基于 Word 模板填数，直接返回 docx，无需外部依赖。
+// GrantPDFService 国家助学金申请表 PDF 导出（审批通过后可导出）。
+// 版式对齐《贵州省高等学校国家助学金申请表》，需配置中文字体。
 type GrantPDFService struct {
 	cfg      *config.Config
 	repo     *repository.GrantRepository
@@ -50,19 +52,36 @@ func (s *GrantPDFService) Export(actor rbac.Actor, id uint) ([]byte, string, err
 		return nil, "", NewValidationError("仅审批通过的助学金申请可导出申请表")
 	}
 
+	fontPath := resolvePDFFontPath(s.cfg)
+	fontBytes, err := os.ReadFile(fontPath)
+	if err != nil || len(fontBytes) == 0 {
+		return nil, "", NewValidationError("服务端未配置中文字体（export.pdf_font_path），无法导出 PDF，请联系管理员")
+	}
+
 	stu, _ := s.stuRepo.FindStudentUnscoped(a.StudentID)
 	schoolUnit, gradeName := resolveGrantSchoolUnit(s.orgRepo, stu)
 	labels := s.loadLabelMaps()
-	replacements := buildGrantDocxReplacements(s.cfg, a, stu, schoolUnit, gradeName, labels)
+	form := buildGrantFormData(a, stu, grantSchoolUnitText(s.cfg, schoolUnit), gradeName, labels)
 
-	docxBytes, err := exportGrantDocx(s.cfg, replacements)
-	if err != nil {
-		return nil, "", err
+	pdf := fpdf.New("P", "mm", "A4", "")
+	const fontName = "zh"
+	pdf.AddUTF8FontFromBytes(fontName, "", fontBytes)
+	if pdf.Err() {
+		return nil, "", NewValidationError("加载中文字体失败，请检查 export.pdf_font_path 指向的 TTF 字体文件")
+	}
+	pdf.SetMargins(grantPdfMarginL, grantPdfMarginT, grantPdfMarginL)
+	pdf.SetAutoPageBreak(false, grantPdfMarginB)
+	pdf.AddPage()
+	renderOfficialGrantForm(pdf, fontName, form)
+	if pdf.Err() {
+		return nil, "", pdf.Error()
 	}
 
-	studentNo := studentNo(stu)
-	filename := fmt.Sprintf("grant_national_aid_%d_%s.docx", a.Year, studentNo)
-	return docxBytes, filename, nil
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), grantPDFFilename(stu), nil
 }
 
 func (s *GrantPDFService) loadLabelMaps() labelMaps {

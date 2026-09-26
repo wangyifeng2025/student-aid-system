@@ -10,6 +10,7 @@ import { toast } from "@/store/toast";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/ui/states";
 import { GrantStatusBadge } from "@/components/grant/grant-status-badge";
+import { GrantStandardPhoto } from "@/components/grant/grant-standard-photo";
 import { ReviewLog } from "@/components/review/review-log";
 import { canEditGrant, grantTypeLabel } from "@/lib/grant-options";
 import { householdLabel, incomeSourceLabel, relationLabel, nationLabel } from "@/lib/recognition-options";
@@ -43,7 +44,7 @@ export default function GrantDetailPage() {
 
   const handleExport = async () => {
     try {
-      await grantApi.exportDocx(id);
+      await grantApi.exportPdf(id);
       toast.success("PDF 已开始下载");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
@@ -67,7 +68,7 @@ export default function GrantDetailPage() {
             </Link>
           )}
           {data.status === "approved" && (
-            <Button size="sm" onClick={handleExport}><Download size={16} /> 导出 Word</Button>
+            <Button size="sm" onClick={handleExport}><Download size={16} /> 导出 PDF</Button>
           )}
         </div>
       </div>
@@ -86,7 +87,8 @@ export default function GrantDetailPage() {
       <div className="space-y-4">
         <section className="rounded-md border border-line bg-surface p-5">
           <h3 className="mb-3 font-semibold text-ink">本人情况</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-3 text-sm md:grid-cols-3">
             <div>姓名：{data.student_name}</div>
             <div>学号：{data.student_no}</div>
             <div>性别：{data.gender === "male" ? "男" : data.gender === "female" ? "女" : data.gender}</div>
@@ -95,6 +97,11 @@ export default function GrantDetailPage() {
             <div>类型：{grantTypeLabel(data.grant_type)}</div>
             <div className="col-span-full">院系专业班级：{data.school_unit}</div>
             <div>联系电话：{data.phone}</div>
+          </div>
+          <GrantStandardPhoto
+            grantId={data.id}
+            editable={isStudent && canEditGrant(data.status)}
+          />
           </div>
         </section>
 

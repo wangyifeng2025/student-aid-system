@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { HOUSEHOLD_OPTIONS, INCOME_SOURCE_OPTIONS, nationLabel } from "@/lib/recognition-options";
 import { GrantFamilyEditor } from "@/components/grant/grant-family-editor";
+import { GrantStandardPhoto, type GrantPhotoState } from "@/components/grant/grant-standard-photo";
 import type { Grant, GrantInput } from "@/types/grant";
 
 function emptyForm(): GrantInput {
@@ -65,6 +66,11 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
   const [saving, setSaving] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [creating, setCreating] = React.useState(mode === "create");
+  const [photoState, setPhotoState] = React.useState<GrantPhotoState>({
+    available: false,
+    hasPhoto: false,
+    loading: true,
+  });
 
   React.useEffect(() => {
     if (mode !== "create" || !recognitionId || initial) return;
@@ -109,6 +115,10 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
   const submit = async () => {
     if (!grantId && !preview?.id) return;
     const id = grantId ?? preview!.id;
+    if (photoState.available && !photoState.loading && !photoState.hasPhoto) {
+      toast.error("请先上传标准照片");
+      return;
+    }
     setSubmitting(true);
     try {
       await grantApi.update(id, form);
@@ -151,7 +161,8 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
 
       <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">本人情况（学籍信息，只读）</h3>
-        <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-4 text-sm md:grid-cols-3">
           <div><span className="text-ink-soft">姓名</span><div>{readonly?.student_name || "—"}</div></div>
           <div><span className="text-ink-soft">性别</span><div>{readonly?.gender === "male" ? "男" : readonly?.gender === "female" ? "女" : readonly?.gender || "—"}</div></div>
           <div><span className="text-ink-soft">出生年月</span><div>{readonly?.birth || "—"}</div></div>
@@ -162,6 +173,14 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
           <div><span className="text-ink-soft">所在年级</span><div>{readonly?.grade_name || "—"}</div></div>
           <div><span className="text-ink-soft">身份证号</span><div>{readonly?.id_card || "—"}</div></div>
           <div className="col-span-full"><span className="text-ink-soft">院系专业班级</span><div>{readonly?.school_unit || "—"}</div></div>
+        </div>
+        {(grantId ?? preview?.id) != null && (
+          <GrantStandardPhoto
+            grantId={(grantId ?? preview!.id)}
+            editable
+            onStateChange={setPhotoState}
+          />
+        )}
         </div>
       </section>
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { classApi, departmentApi, ApiError } from "@/lib/api";
-import { Select } from "@/components/ui/select";
+import { FilterCombobox } from "@/components/ui/filter-combobox";
 import { useAuthStore } from "@/store/auth";
 import type { Class, Department } from "@/types/org";
 import type { Role } from "@/types/auth";
@@ -89,41 +89,23 @@ export function OrgScopeFilters({ value, onChange, className }: Props) {
   return (
     <div className={className ? `flex items-center gap-1.5 ${className}` : "flex items-center gap-1.5"}>
       {showDept && (
-        <Select
-          compact
-          fitContent
+        <FilterCombobox
+          size="wide"
           value={value.deptId ? String(value.deptId) : ""}
-          onChange={(e) => {
-            const deptId = Number(e.target.value) || 0;
-            onChange({ deptId, classId: 0 });
-          }}
-        >
-          <option value="">全部院系</option>
-          {depts.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </Select>
+          placeholder="全部院系"
+          options={depts.map((d) => ({ value: String(d.id), label: d.name }))}
+          onValueChange={(next) => onChange({ deptId: Number(next) || 0, classId: 0 })}
+        />
       )}
       {showClass && (
-        <Select
-          compact
-          fitContent
+        <FilterCombobox
+          size="wide"
           value={value.classId ? String(value.classId) : ""}
-          onChange={(e) => {
-            const classId = Number(e.target.value) || 0;
-            onChange({ deptId: value.deptId, classId });
-          }}
+          placeholder="全部班级"
           disabled={showDept && !value.deptId && classes.length === 0}
-        >
-          <option value="">全部班级</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+          options={classes.map((c) => ({ value: String(c.id), label: c.name }))}
+          onValueChange={(next) => onChange({ deptId: value.deptId, classId: Number(next) || 0 })}
+        />
       )}
     </div>
   );

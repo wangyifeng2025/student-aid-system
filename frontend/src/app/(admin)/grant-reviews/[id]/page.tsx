@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoadingState, ErrorState } from "@/components/ui/states";
 import { GrantStatusBadge } from "@/components/grant/grant-status-badge";
+import { GrantStandardPhoto } from "@/components/grant/grant-standard-photo";
 import { ReviewLog } from "@/components/review/review-log";
 import { ReviewActionDialog } from "@/components/review/review-action-dialog";
 import {
@@ -67,8 +68,8 @@ export default function GrantReviewDetailPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      await grantApi.exportDocx(id);
-      toast.success("助学金申请表已开始下载");
+      await grantApi.exportPdf(id);
+      toast.success("PDF 已开始下载");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "导出失败");
     } finally {
@@ -129,12 +130,15 @@ export default function GrantReviewDetailPage() {
         <div className="space-y-4">
           <section className="rounded-md border border-line bg-surface p-5 text-sm">
             <h3 className="mb-3 font-semibold">本人情况</h3>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-3">
               <div>学号：{data.student_no}</div>
               <div>民族：{nationLabel(data.nation)}</div>
               <div>年级：{data.grade_name}</div>
               <div className="col-span-full">院系专业班级：{data.school_unit}</div>
               <div>电话：{data.phone}</div>
+            </div>
+            <GrantStandardPhoto grantId={data.id} editable={false} />
             </div>
           </section>
           <section className="rounded-md border border-line bg-surface p-5 text-sm">
@@ -184,7 +188,7 @@ export default function GrantReviewDetailPage() {
             <section className="rounded-md border border-line bg-surface p-5">
               <Button variant="outline" onClick={handleExport} disabled={exporting} className="w-full">
                 <Download size={16} />
-                {exporting ? "下载中…" : "下载助学金申请表（Word）"}
+                {exporting ? "下载中…" : "下载助学金申请表（PDF）"}
               </Button>
             </section>
           )}

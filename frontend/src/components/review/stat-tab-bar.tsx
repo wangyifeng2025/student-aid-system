@@ -4,8 +4,6 @@ export interface StatTabItem {
   value: string;
   label: string;
   count?: number;
-  /** 左侧色条，如 var(--color-primary) */
-  accentColor: string;
 }
 
 interface StatTabBarProps {
@@ -16,35 +14,46 @@ interface StatTabBarProps {
 }
 
 /**
- * 统计标签栏：借鉴待办审核页设计，左侧色条 + 标签 + 数量，可点击切换。
+ * 审核页签：连成一条，选中项实心主色，数字为小徽章。
  */
 export function StatTabBar({ items, active, onChange, loading }: StatTabBarProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
-      {items.map((item) => {
+    <div
+      role="tablist"
+      className="mb-3 inline-flex max-w-full flex-wrap overflow-hidden"
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-md)",
+        backgroundColor: "var(--color-bg-card)",
+      }}
+    >
+      {items.map((item, index) => {
         const isActive = active === item.value;
         return (
           <button
             key={item.value}
             type="button"
+            role="tab"
+            aria-selected={isActive}
             onClick={() => onChange(item.value)}
-            className="flex items-center gap-2 px-3 py-2 text-sm transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm"
             style={{
-              backgroundColor: isActive ? "var(--color-primary-subtle)" : "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              borderLeft: `3px solid ${item.accentColor}`,
-              borderRadius: "var(--radius-md)",
+              backgroundColor: isActive ? "var(--color-primary)" : "transparent",
+              color: isActive ? "#fff" : "var(--color-text-secondary)",
+              fontWeight: isActive ? 600 : 500,
+              borderLeft: index === 0 ? "none" : "1px solid var(--color-border)",
               cursor: "pointer",
             }}
           >
-            <span style={{ color: isActive ? "var(--color-primary)" : "var(--color-text-secondary)" }}>
-              {item.label}
-            </span>
+            <span>{item.label}</span>
             <span
-              className="font-semibold tabular-nums"
-              style={{ color: "var(--color-text-primary)" }}
+              className="min-w-5 rounded-full px-1.5 text-center text-xs font-semibold tabular-nums"
+              style={{
+                backgroundColor: isActive ? "rgba(255,255,255,0.22)" : "var(--color-bg-page)",
+                color: isActive ? "#fff" : "var(--color-text-primary)",
+              }}
             >
-              {loading ? "—" : (item.count ?? 0)}
+              {loading ? "—" : (item.count ?? 0).toLocaleString()}
             </span>
           </button>
         );

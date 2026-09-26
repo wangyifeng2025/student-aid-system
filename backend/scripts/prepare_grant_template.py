@@ -102,10 +102,16 @@ def inject_member_placeholders(xml: str) -> str:
                     count=1,
                 )
             new_cells.append(new_cell)
-        new_rows.append((row_idx, row, "".join(new_cells)))
+        # 只替换单元格内容，保留 <w:tr> 外壳。整行换成单元格会让数据脱离表格，Word 中不显示。
+        rebuilt = row
+        for old_cell, new_cell in zip(cells, new_cells):
+            if old_cell == new_cell:
+                continue
+            rebuilt = rebuilt.replace(old_cell, new_cell, 1)
+        new_rows.append((row, rebuilt))
 
     out = xml
-    for row_idx, old_row, new_row in reversed(new_rows):
+    for old_row, new_row in reversed(new_rows):
         out = out.replace(old_row, new_row, 1)
     return out
 

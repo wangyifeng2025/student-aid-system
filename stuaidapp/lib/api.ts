@@ -489,10 +489,10 @@ export const grantApi = {
   exportDocx: (id: number) =>
     downloadAndShareFile(
       `/grants/${id}/export`,
-      `grant_${id}.docx`,
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      `grant_${id}.pdf`,
+      'application/pdf',
       '下载助学金申请表',
-      'org.openxmlformats.wordprocessingml.document',
+      'com.adobe.pdf',
     ),
 };
 

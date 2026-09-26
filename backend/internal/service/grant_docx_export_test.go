@@ -40,7 +40,7 @@ func TestFillGrantDocxTemplate(t *testing.T) {
 		"reason":            "家庭经济困难，申请国家助学金。",
 		"dept_opinion":      "同意",
 		"college_opinion":   "同意",
-		"M1_NAME": "父亲", "M1_AGE": "50", "M1_RELATION": "父子", "M1_WORK": "务农",
+		"M1_NAME":           "父亲", "M1_AGE": "50", "M1_RELATION": "父子", "M1_WORK": "务农",
 		"M2_NAME": " ", "M2_AGE": " ", "M2_RELATION": " ", "M2_WORK": " ",
 		"M3_NAME": " ", "M3_AGE": " ", "M3_RELATION": " ", "M3_WORK": " ",
 		"M4_NAME": " ", "M4_AGE": " ", "M4_RELATION": " ", "M4_WORK": " ",
@@ -70,6 +70,29 @@ func TestFillGrantDocxTemplate(t *testing.T) {
 	}
 	if !strings.Contains(xml, "家庭经济困难，申请国家助学金。") {
 		t.Fatal("document.xml 中应包含申请理由")
+	}
+	if !grantDocxTextInRow(xml, "父亲") {
+		t.Fatal("家庭成员姓名应写在表格行内，否则 Word 不会显示")
+	}
+}
+
+func grantDocxTextInRow(xml, text string) bool {
+	rest := xml
+	for {
+		start := strings.Index(rest, "<w:tr")
+		if start < 0 {
+			return false
+		}
+		rest = rest[start:]
+		end := strings.Index(rest, "</w:tr>")
+		if end < 0 {
+			return false
+		}
+		row := rest[:end]
+		if strings.Contains(row, text) {
+			return true
+		}
+		rest = rest[end+len("</w:tr>"):]
 	}
 }
 
