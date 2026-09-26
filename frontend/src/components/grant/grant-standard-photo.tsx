@@ -33,29 +33,41 @@ export function GrantStandardPhoto({ grantId, editable, onStateChange }: Props) 
   const [available, setAvailable] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [preview, setPreview] = React.useState<{ photoId: number; url: string } | null>(null);
+  const [loadedGrantId, setLoadedGrantId] = React.useState(grantId);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const onStateChangeRef = React.useRef(onStateChange);
-  onStateChangeRef.current = onStateChange;
+  React.useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
 
-  const load = React.useCallback(async () => {
+  if (loadedGrantId !== grantId) {
+    setLoadedGrantId(grantId);
     setLoading(true);
-    try {
-      const res = await grantApi.getStandardPhoto(grantId);
-      setAvailable(res.available);
-      setPhoto(res.attachment);
-    } catch (e) {
-      setAvailable(false);
-      setPhoto(null);
-      toast.error(e instanceof ApiError ? e.message : "加载标准照片失败");
-    } finally {
-      setLoading(false);
-    }
-  }, [grantId]);
+    setPhoto(null);
+  }
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await grantApi.getStandardPhoto(grantId);
+        if (cancelled) return;
+        setAvailable(res.available);
+        setPhoto(res.attachment);
+      } catch (e) {
+        if (cancelled) return;
+        setAvailable(false);
+        setPhoto(null);
+        toast.error(e instanceof ApiError ? e.message : "加载标准照片失败");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [grantId]);
 
   React.useEffect(() => {
     onStateChangeRef.current?.({
@@ -65,22 +77,25 @@ export function GrantStandardPhoto({ grantId, editable, onStateChange }: Props) 
     });
   }, [available, photo, loading]);
 
+  if (preview && preview.photoId !== photo?.id) {
+    setPreview(null);
+  }
+  const previewUrl = preview?.url ?? null;
+
   React.useEffect(() => {
-    if (!photo) {
-      setPreviewUrl(null);
-      return;
-    }
+    if (!photo) return;
+    const photoId = photo.id;
     let revoked = false;
     let url: string | null = null;
     void attachmentApi
-      .fetchBlob(photo.id)
+      .fetchBlob(photoId)
       .then((blob) => {
         if (revoked) return;
         url = URL.createObjectURL(blob);
-        setPreviewUrl(url);
+        setPreview({ photoId, url });
       })
       .catch(() => {
-        if (!revoked) setPreviewUrl(null);
+        if (!revoked) setPreview(null);
       });
     return () => {
       revoked = true;
@@ -126,7 +141,7 @@ export function GrantStandardPhoto({ grantId, editable, onStateChange }: Props) 
 
   return (
     <div className="flex shrink-0 flex-col items-center gap-2">
-      <div className="relative flex h-[168px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-page">
+      <div className="relative flex h-42 w-30 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-page">
         {loading || busy ? (
           <Loader2 size={18} className="animate-spin text-ink-mute" />
         ) : previewUrl ? (
@@ -139,7 +154,7 @@ export function GrantStandardPhoto({ grantId, editable, onStateChange }: Props) 
           </div>
         )}
       </div>
-      <p className="max-w-[148px] text-center text-[11px] leading-4 text-ink-mute">
+      <p className="max-w-37 text-center text-[11px] leading-4 text-ink-mute">
         免冠证件照，白底或蓝底，JPG/PNG，不超过 2MB
       </p>
       {editable && (

@@ -238,7 +238,7 @@ export function GrantForm({ mode, grantId, recognitionId, initial }: Props) {
       <section className="mb-6 rounded-md border border-line bg-surface p-4 md:p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink">申请理由（建议 150 字左右）</h3>
         <textarea
-          className="min-h-[120px] w-full rounded-md border border-line bg-surface px-3 py-2 text-base md:text-sm"
+          className="min-h-30 w-full rounded-md border border-line bg-surface px-3 py-2 text-base md:text-sm"
           value={form.reason}
           onChange={(e) => patch({ reason: e.target.value })}
           placeholder="请简要说明家庭经济困难情况及申请助学金的理由…"

@@ -103,7 +103,7 @@ export function ReviewProgressCard({
         <p className="py-8 text-center text-sm text-ink-mute">当前学年各系均无待审申请</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <table className="w-full min-w-xl border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-mute">
                 <th className="px-2 py-2 font-medium">院系 / 班级</th>
